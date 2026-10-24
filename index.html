@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>RiskCart - Point Of Sale</title>
+    <meta name="description" content="Next-gen Anti-Fraud POS and Client PWA with AI anomaly detection, smart restocking advisor, typo-tolerant natural language ordering, and financial asset dashboard." />
+    <meta property="og:title" content="RiskCart - Anti-Fraud POS &amp; Client PWA" />
+    <meta property="og:description" content="Next-gen Anti-Fraud POS and Client PWA with AI anomaly detection, smart restocking advisor, typo-tolerant natural language ordering, and financial asset dashboard." />
+    <meta property="og:type" content="website" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="theme-color" content="#08090B" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="RiskCart" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="icon" type="image/svg+xml" href="/icon.svg" />
+    <link rel="manifest" href="/manifest.json" />
+    <script>
+      // Patch Node.prototype.removeChild & insertBefore so Google Translate DOM mutations never crash React Virtual DOM
+      (function () {
+        if (typeof Node === 'function' && Node.prototype) {
+          var originalRemoveChild = Node.prototype.removeChild;
+          Node.prototype.removeChild = function (child) {
+            if (child && child.parentNode !== this) {
+              return child;
+            }
+            return originalRemoveChild.apply(this, arguments);
+          };
+
+          var originalInsertBefore = Node.prototype.insertBefore;
+          Node.prototype.insertBefore = function (newNode, referenceNode) {
+            if (referenceNode && referenceNode.parentNode !== this) {
+              return newNode;
+            }
+            return originalInsertBefore.apply(this, arguments);
+          };
+        }
+
+        window.googleTranslateElementInit = function () {
+          try {
+            if (window.google && window.google.translate && window.google.translate.TranslateElement) {
+              var targetId = document.getElementById('google_translate_element')
+                ? 'google_translate_element'
+                : 'google_translate_fallback';
+              var container = document.getElementById(targetId);
+              if (container && container.childElementCount === 0) {
+                new window.google.translate.TranslateElement(
+                  {
+                    pageLanguage: 'auto',
+                    includedLanguages: 'id,en,zh-CN,ja,ko,ar,ms,es',
+                    autoDisplay: false,
+                  },
+                  targetId
+                );
+              }
+            }
+          } catch (e) {}
+        };
+      })();
+    </script>
+    <style>
+      iframe.goog-te-banner-frame,
+      .goog-te-banner-frame,
+      .goog-te-banner-frame.skiptranslate,
+      #goog-gt-tt,
+      .goog-te-balloon-frame,
+      .VIpgJd-ZVi9od-ORHb-OEVmcd,
+      .VIpgJd-ZVi9od-aZ2wEe-wOHMyf {
+        display: none !important;
+        visibility: hidden !important;
+        height: 0 !important;
+        width: 0 !important;
+        opacity: 0 !important;
+        pointer-events: none !important;
+      }
+      html, body {
+        top: 0px !important;
+        position: static !important;
+        margin-top: 0px !important;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <div id="google_translate_fallback" style="display:none;"></div>
+    <script type="module" src="/src/main.tsx"></script>
+    <script src="https://translate.google.com/translate_a/element.js?cb=googleTranslateElementInit" async defer></script>
+  </body>
+</html>

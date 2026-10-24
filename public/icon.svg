@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
+  <defs>
+    <linearGradient id="goldLeft" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FFF0B8"/>
+      <stop offset="45%" stop-color="#F4CC74"/>
+      <stop offset="100%" stop-color="#B8924E"/>
+    </linearGradient>
+    <linearGradient id="goldRight" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#E6BE6A"/>
+      <stop offset="100%" stop-color="#8E6C32"/>
+    </linearGradient>
+    <linearGradient id="goldBottom" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#9C7A3C"/>
+      <stop offset="50%" stop-color="#D8B265"/>
+      <stop offset="100%" stop-color="#F4CC74"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="#08090B"/>
+  <path d="M248 64 L76 142 L76 260 C76 346 144 414 248 456 L248 398 C168 362 126 312 126 250 L126 176 L248 118 Z" fill="url(#goldLeft)"/>
+  <path d="M248 64 L396 130 L358 174 L248 118 Z" fill="url(#goldRight)"/>
+  <path d="M362 330 C326 386 288 426 248 456 L248 398 C278 376 304 350 318 320 Z" fill="url(#goldBottom)"/>
+  <text x="272" y="294" text-anchor="middle" fill="#FFFFFF" font-family="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-weight="900" font-size="140" letter-spacing="4">POS</text>
+</svg>

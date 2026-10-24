@@ -1,0 +1,30 @@
+node_modules/
+build/
+dist/
+dev-dist/
+coverage/
+.DS_Store
+*.log
+
+# Environment Variables & Secrets (Strict Block for Public GitHub)
+.env
+.env.local
+.env.development
+.env.production
+.env.*
+!.env.example
+
+# Service Accounts, Private Keys & Firebase Admin Credentials
+*serviceAccount*.json
+*firebase-adminsdk*.json
+firebase-adminsdk*.json
+*-firebase-adminsdk-*.json
+*.pem
+*.key
+
+# AI Studio Artifacts, Internal Blueprints & Local Metadata
+.aistudio/
+public/assets/aistudio/
+*.blueprint.json
+firebase-blueprint.json
+

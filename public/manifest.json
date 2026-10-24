@@ -1,0 +1,37 @@
+{
+  "id": "/client-pwa",
+  "name": "RiskCart - Anti-Fraud POS & Client PWA",
+  "short_name": "RiskCart",
+  "description": "Next-gen Anti-Fraud POS and Client PWA with AI anomaly detection, smart restocking advisor, and typo-tolerant ordering.",
+  "start_url": "/client-pwa",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#08090B",
+  "theme_color": "#08090B",
+  "icons": [
+    {
+      "src": "/pwa-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/pwa-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/pwa-maskable-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

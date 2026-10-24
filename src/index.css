@@ -1,0 +1,602 @@
+@import "tailwindcss";
+
+@theme {
+  --color-ink-950: #070604;
+  --color-ink-900: #0d0b07;
+  --color-ink-850: #110f0a;
+  --color-ink-800: #18140c;
+  --color-ink-700: #262013;
+  --color-ink-600: #3d331f;
+
+  --color-gold-100: #FFF8DC;
+  --color-gold-200: #FDE68A;
+  --color-gold-300: #FCD34D;
+  --color-gold-400: #FBBF24;
+  --color-gold-500: #F59E0B;
+  --color-gold-600: #D97706;
+  --color-gold-700: #B45309;
+  --color-gold-800: #78350F;
+  --color-gold-900: #451A03;
+  --color-gold-950: #1C0D02;
+
+  --color-fg: #FFFBEB;
+  --color-fg-primary: #FFFBEB;
+  --color-fg-secondary: #D6CEBF;
+  --color-fg-muted: #9C8F7A;
+  --color-fg-subtle: #6E624F;
+}
+
+/* ==========================================================================
+   RiskCart Executive Dark Obsidian & Luxury Gold Global Theme System
+   Applies uniformly across Landing, POS, Admin Dashboard, AI Hub, Modals & PWA
+   ========================================================================== */
+:root {
+  --rc-bg-primary: #070604;
+  --rc-bg-secondary: #0e0c08;
+  --rc-bg-surface: #110f0a;
+  --rc-bg-elevated: #18140c;
+  --rc-bg-input: #0b0906;
+  --rc-bg-glass: rgba(17, 15, 10, 0.95);
+  --rc-gold-border: rgba(245, 158, 11, 0.4);
+  --rc-gold-border-soft: rgba(245, 158, 11, 0.24);
+  --rc-gold-glow: 0 0 18px rgba(245, 158, 11, 0.12);
+  --rc-gold-btn-glow: 0 0 15px rgba(245, 158, 11, 0.35);
+}
+
+html,
+body,
+#root {
+  background-color: #070604 !important;
+  background-image:
+    radial-gradient(circle at top left, rgba(212, 175, 55, 0.08), transparent 45%),
+    radial-gradient(circle at bottom right, rgba(245, 158, 11, 0.05), transparent 50%) !important;
+  color: #fffbeb;
+  min-height: 100vh;
+}
+
+/* Signature Gold Glow Reusable Classes */
+.rc-bg {
+  background-color: #070604 !important;
+  background-image:
+    radial-gradient(circle at top left, rgba(212, 175, 55, 0.08), transparent 45%),
+    radial-gradient(circle at bottom right, rgba(245, 158, 11, 0.05), transparent 50%) !important;
+}
+
+.rc-gold-panel,
+.rc-gold-card {
+  background-color: rgba(17, 15, 10, 0.95) !important;
+  border: 1px solid rgba(245, 158, 11, 0.4) !important;
+  box-shadow: 0 0 18px rgba(245, 158, 11, 0.12) !important;
+}
+
+.rc-gold-btn {
+  background: linear-gradient(90deg, #f59e0b 0%, #fbbf24 50%, #d97706 100%) !important;
+  color: #070604 !important;
+  font-weight: 700 !important;
+  border: 1px solid rgba(252, 211, 77, 0.55) !important;
+  box-shadow: 0 0 15px rgba(245, 158, 11, 0.35) !important;
+}
+
+.rc-gold-btn:hover {
+  filter: brightness(1.1);
+}
+
+.rc-gold-pill {
+  background-color: rgba(245, 158, 11, 0.15) !important;
+  border: 1px solid rgba(245, 158, 11, 0.45) !important;
+  color: #fcd34d !important;
+}
+
+.rc-gold-pill:hover {
+  background-color: rgba(245, 158, 11, 0.25) !important;
+}
+
+.rc-gold-total-box {
+  background: linear-gradient(90deg, rgba(120, 53, 15, 0.45) 0%, rgba(113, 63, 18, 0.3) 50%, rgba(69, 26, 3, 0.5) 100%) !important;
+  border: 1px solid rgba(245, 158, 11, 0.45) !important;
+  color: #fef3c7 !important;
+  box-shadow: 0 0 18px rgba(245, 158, 11, 0.14) !important;
+}
+
+.rc-gold-input {
+  background-color: #0b0906 !important;
+  border: 1px solid rgba(245, 158, 11, 0.35) !important;
+  color: #fffbeb !important;
+}
+
+.rc-gold-input::placeholder {
+  color: rgba(253, 230, 138, 0.35) !important;
+}
+
+.rc-gold-input:focus {
+  border-color: #fbbf24 !important;
+  box-shadow: 0 0 12px rgba(245, 158, 11, 0.25) !important;
+  outline: none !important;
+}
+
+/* ==========================================================================
+   1. Global Dark Obsidian Surface Overrides (zinc / slate / arbitrary navy -> obsidian)
+   ========================================================================== */
+:not([data-pwa-root]):not([data-pwa-root] *) {
+  &.bg-\[\#0f172a\],
+  &.bg-\[\#0f172a\]\/80,
+  &.bg-\[\#0f172a\]\/90,
+  &.bg-\[\#0b132b\],
+  &.bg-\[\#0c111d\],
+  &.bg-\[\#0f1422\] {
+    background-color: #110e08 !important;
+  }
+
+  &.bg-\[\#0a0f1d\],
+  &.bg-\[\#0a0f1d\]\/60,
+  &.bg-\[\#0a0f1d\]\/80,
+  &.bg-\[\#050814\],
+  &.bg-\[\#070a10\],
+  &.bg-\[\#0b0f19\] {
+    background-color: #080705 !important;
+  }
+}
+
+.bg-zinc-950,
+.bg-slate-950,
+.bg-zinc-950\/90,
+.bg-zinc-950\/80,
+.bg-zinc-950\/70,
+.bg-slate-950\/90,
+.bg-slate-950\/80 {
+  background-color: #080705 !important;
+}
+
+.bg-zinc-900,
+.bg-zinc-900\/95,
+.bg-zinc-900\/90,
+.bg-zinc-900\/80,
+.bg-zinc-900\/70,
+.bg-zinc-900\/60,
+.bg-slate-900,
+.bg-slate-900\/95,
+.bg-slate-900\/90,
+.bg-slate-900\/80,
+.bg-slate-900\/70 {
+  background-color: #110e08 !important;
+}
+
+.bg-zinc-850,
+.bg-zinc-800,
+.bg-zinc-800\/90,
+.bg-zinc-800\/80,
+.bg-zinc-800\/60,
+.bg-zinc-800\/50,
+.bg-slate-800,
+.bg-slate-800\/90,
+.bg-slate-800\/80,
+.bg-slate-800\/60 {
+  background-color: #16120b !important;
+}
+
+/* ==========================================================================
+   2. Signature Gold Glow Borders (Replaces zinc/slate/blue/indigo/purple/emerald borders)
+   ========================================================================== */
+.border-zinc-800,
+.border-zinc-800\/90,
+.border-zinc-800\/80,
+.border-zinc-800\/70,
+.border-zinc-800\/60,
+.border-zinc-850,
+.border-zinc-700,
+.border-zinc-700\/80,
+.border-zinc-700\/60,
+.border-slate-800,
+.border-slate-800\/80,
+.border-slate-700,
+.border-slate-700\/80,
+.border-blue-500\/20,
+.border-blue-500\/30,
+.border-blue-500\/40,
+.border-blue-500\/50,
+.border-blue-600\/30,
+.border-blue-800,
+.border-blue-800\/50,
+.border-blue-800\/60,
+.border-blue-900\/50,
+.border-blue-900\/60,
+.border-indigo-500\/20,
+.border-indigo-500\/30,
+.border-indigo-500\/40,
+.border-indigo-500\/50,
+.border-purple-500\/20,
+.border-purple-500\/30,
+.border-purple-500\/40,
+.border-purple-500\/50,
+.border-purple-600,
+.border-purple-700\/80,
+.border-purple-800,
+.border-purple-800\/60,
+.border-violet-500\/30,
+.border-violet-500\/40,
+.border-cyan-500,
+.border-cyan-500\/20,
+.border-cyan-500\/30,
+.border-cyan-500\/40,
+.border-cyan-800\/60,
+.border-cyan-900\/60,
+.border-emerald-500\/20,
+.border-emerald-500\/30,
+.border-emerald-500\/40,
+.border-emerald-500\/50,
+.border-emerald-600\/30,
+.border-emerald-700,
+.border-emerald-700\/80,
+.border-emerald-800,
+.border-emerald-800\/60,
+.border-green-500\/30,
+.border-green-500\/40,
+.border-teal-500\/30,
+.border-teal-500\/40 {
+  border-color: rgba(245, 158, 11, 0.4) !important;
+}
+
+/* Signature Gold Glow on Primary Rounded Panels & Cards */
+.rounded-2xl.border,
+.rounded-3xl.border,
+aside.border-r,
+aside.border-l,
+header.border-b {
+  border-color: rgba(245, 158, 11, 0.4) !important;
+  box-shadow: 0 0 18px rgba(245, 158, 11, 0.12);
+}
+
+/* ==========================================================================
+   3. Automatic Blue / Indigo / Purple / Violet / Emerald / Green / Teal -> Metallic Gold
+   ========================================================================== */
+.bg-blue-600,
+.bg-blue-500,
+.bg-indigo-600,
+.bg-indigo-500,
+.bg-purple-600,
+.bg-purple-500,
+.bg-violet-600,
+.bg-violet-500,
+.bg-cyan-600,
+.bg-emerald-600,
+.bg-emerald-500,
+.bg-green-600,
+.bg-green-500,
+.bg-teal-600,
+.bg-teal-500 {
+  background: linear-gradient(90deg, #f59e0b 0%, #fbbf24 50%, #d97706 100%) !important;
+  color: #080705 !important;
+  font-weight: 800 !important;
+  border: 1px solid rgba(252, 211, 77, 0.55) !important;
+  box-shadow: 0 0 15px rgba(245, 158, 11, 0.32) !important;
+}
+
+.bg-blue-600:hover,
+.bg-blue-500:hover,
+.bg-indigo-600:hover,
+.bg-purple-600:hover,
+.bg-violet-600:hover,
+.bg-cyan-600:hover,
+.bg-emerald-600:hover,
+.bg-emerald-500:hover,
+.bg-green-600:hover,
+.bg-teal-600:hover {
+  filter: brightness(1.08);
+}
+
+/* Ensure icons & text inside solid gold buttons are crisp dark obsidian */
+.bg-blue-600 > svg,
+.bg-blue-600 > span,
+.bg-indigo-600 > svg,
+.bg-indigo-600 > span,
+.bg-purple-600 > svg,
+.bg-purple-600 > span,
+.bg-violet-600 > svg,
+.bg-violet-600 > span,
+.bg-emerald-600 > svg,
+.bg-emerald-600 > span,
+.bg-green-600 > svg,
+.bg-green-600 > span {
+  color: #080705 !important;
+}
+
+/* Gradient Buttons & Banners (from-blue-*, from-indigo-*, from-purple-*, from-emerald-*) */
+.from-blue-600,
+.from-indigo-600,
+.from-purple-600,
+.from-violet-600,
+.from-emerald-600,
+.from-emerald-500,
+.from-green-600,
+.from-teal-600 {
+  --tw-gradient-from: #f59e0b !important;
+  --tw-gradient-via: #fbbf24 !important;
+  --tw-gradient-to: #d97706 !important;
+  color: #080705 !important;
+}
+
+.from-blue-950\/40,
+.from-blue-950\/70,
+.from-blue-900\/95,
+.from-blue-900\/40,
+.from-indigo-950\/90,
+.from-indigo-950\/40,
+.from-purple-950\/40,
+.from-emerald-950\/40,
+.from-emerald-950\/60,
+.from-emerald-900\/40,
+.from-\[\#0b0f19\] {
+  --tw-gradient-from: #110e08 !important;
+  --tw-gradient-via: #16120b !important;
+  --tw-gradient-to: #080705 !important;
+}
+
+/* Translucent Pills, Badges & Soft Containers (bg-blue-*, bg-emerald-*, bg-cyan-*, etc.) */
+.bg-blue-500\/10,
+.bg-blue-500\/15,
+.bg-blue-500\/20,
+.bg-blue-600\/10,
+.bg-blue-600\/15,
+.bg-blue-600\/20,
+.bg-blue-900\/20,
+.bg-blue-900\/30,
+.bg-blue-900\/40,
+.bg-blue-950,
+.bg-blue-950\/30,
+.bg-blue-950\/40,
+.bg-blue-950\/50,
+.bg-blue-950\/60,
+.bg-blue-950\/90,
+.bg-indigo-500\/10,
+.bg-indigo-500\/15,
+.bg-indigo-500\/20,
+.bg-indigo-600\/15,
+.bg-indigo-600\/20,
+.bg-indigo-900\/30,
+.bg-indigo-950\/30,
+.bg-indigo-950\/40,
+.bg-indigo-950\/50,
+.bg-purple-500\/10,
+.bg-purple-500\/15,
+.bg-purple-500\/20,
+.bg-purple-600\/15,
+.bg-purple-600\/20,
+.bg-purple-600\/30,
+.bg-purple-900\/40,
+.bg-purple-900\/60,
+.bg-purple-950\/30,
+.bg-purple-950\/40,
+.bg-purple-950\/50,
+.bg-purple-950\/60,
+.bg-purple-950\/80,
+.bg-violet-500\/10,
+.bg-violet-500\/15,
+.bg-violet-500\/20,
+.bg-cyan-500\/10,
+.bg-cyan-500\/15,
+.bg-cyan-500\/20,
+.bg-cyan-950,
+.bg-cyan-950\/40,
+.bg-cyan-950\/60,
+.bg-emerald-400\/20,
+.bg-emerald-500\/10,
+.bg-emerald-500\/15,
+.bg-emerald-500\/20,
+.bg-emerald-600\/10,
+.bg-emerald-600\/15,
+.bg-emerald-600\/20,
+.bg-emerald-900\/30,
+.bg-emerald-900\/40,
+.bg-emerald-950,
+.bg-emerald-950\/30,
+.bg-emerald-950\/40,
+.bg-emerald-950\/50,
+.bg-emerald-950\/60,
+.bg-emerald-950\/80,
+.bg-emerald-950\/90,
+.bg-green-500\/10,
+.bg-green-500\/15,
+.bg-green-500\/20,
+.bg-green-950\/50,
+.bg-teal-500\/10,
+.bg-teal-500\/15,
+.bg-teal-500\/20 {
+  background-color: rgba(245, 158, 11, 0.15) !important;
+  border-color: rgba(245, 158, 11, 0.42) !important;
+}
+
+/* Text Accents (text-blue-*, text-indigo-*, text-purple-*, text-cyan-*, text-emerald-*, text-green-*, text-teal-*) -> Luxury Gold */
+.text-blue-200,
+.text-blue-300,
+.text-blue-400,
+.text-blue-500,
+.text-indigo-200,
+.text-indigo-300,
+.text-indigo-400,
+.text-indigo-500,
+.text-purple-200,
+.text-purple-300,
+.text-purple-400,
+.text-purple-500,
+.text-violet-300,
+.text-violet-400,
+.text-cyan-200,
+.text-cyan-300,
+.text-cyan-400,
+.text-cyan-500,
+.text-emerald-200,
+.text-emerald-300,
+.text-emerald-400,
+.text-emerald-500,
+.text-green-300,
+.text-green-400,
+.text-green-500,
+.text-teal-300,
+.text-teal-400 {
+  color: #fbbf24 !important;
+}
+
+/* Pulse dots that were bg-emerald-400 -> Gold */
+.bg-emerald-400,
+.bg-green-400,
+.bg-cyan-400,
+.bg-blue-400 {
+  background-color: #fbbf24 !important;
+}
+
+/* Border left / active indicator bars */
+.border-blue-500,
+.border-blue-400,
+.border-indigo-500,
+.border-purple-500,
+.border-purple-400,
+.border-violet-500,
+.border-cyan-500,
+.border-emerald-500,
+.border-emerald-400,
+.border-green-500,
+.border-teal-500 {
+  border-color: #f59e0b !important;
+}
+
+/* ==========================================================================
+   4. Search Bars, Inputs, Dropdowns & Calendar Pickers (Obsidian & Gold)
+   ========================================================================== */
+input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+select,
+textarea {
+  background-color: #080705 !important;
+  border-color: rgba(245, 158, 11, 0.38) !important;
+  color: #fffbeb !important;
+}
+
+input:not([type="checkbox"]):not([type="radio"]):not([type="range"])::placeholder,
+textarea::placeholder {
+  color: rgba(253, 230, 138, 0.35) !important;
+}
+
+input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):focus,
+select:focus,
+textarea:focus {
+  border-color: #fbbf24 !important;
+  box-shadow: 0 0 12px rgba(245, 158, 11, 0.25) !important;
+  outline: none !important;
+}
+
+/* ==========================================================================
+   5. Universal Data Tables Styling (Headers & Rows across all modules)
+   ========================================================================== */
+table thead,
+table thead tr {
+  background-color: #16120b !important;
+  color: #fbbf24 !important;
+  border-bottom: 1px solid rgba(245, 158, 11, 0.38) !important;
+}
+
+table thead th {
+  color: #fbbf24 !important;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+table tbody tr {
+  border-bottom: 1px solid rgba(245, 158, 11, 0.12) !important;
+  transition: background-color 0.15s ease;
+}
+
+table tbody tr:hover {
+  background-color: rgba(245, 158, 11, 0.1) !important;
+}
+
+/* ==========================================================================
+   6. Custom Luxury Gold Scrollbar
+   ========================================================================== */
+.custom-scrollbar::-webkit-scrollbar,
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track,
+::-webkit-scrollbar-track {
+  background: #080705;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb,
+::-webkit-scrollbar-thumb {
+  background: rgba(245, 158, 11, 0.35);
+  border-radius: 9999px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover,
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(245, 158, 11, 0.6);
+}
+
+/* ==========================================================================
+   7. Official Google Translate Widget — Hide Top Banner & Luxury Gold Theme
+   ========================================================================== */
+iframe.goog-te-banner-frame,
+.goog-te-banner-frame,
+.goog-te-banner-frame.skiptranslate,
+body > .skiptranslate,
+body > .skiptranslate > iframe,
+#goog-gt-tt,
+.goog-te-balloon-frame,
+.goog-tooltip,
+.goog-tooltip:hover,
+.VIpgJd-ZVi9od-ORHb-OEVmcd,
+.VIpgJd-ZVi9od-aZ2wEe-wOHMyf,
+.VIpgJd-ZVi9od-SmfZ-OEVmcd,
+.VIpgJd-ZVi9od-xl07Ob-OEVmcd {
+  display: none !important;
+  visibility: hidden !important;
+  height: 0 !important;
+  width: 0 !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
+html,
+body {
+  top: 0px !important;
+  position: static !important;
+  margin-top: 0px !important;
+}
+
+.goog-text-highlight {
+  background-color: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+
+#google_translate_element .goog-te-gadget {
+  font-family: inherit !important;
+  font-size: 0px !important;
+  color: transparent !important;
+  line-height: 1 !important;
+}
+
+#google_translate_element .goog-te-gadget span {
+  display: none !important;
+}
+
+#google_translate_element select.goog-te-combo {
+  width: 100% !important;
+  background-color: #0b0906 !important;
+  color: #fde68a !important;
+  border: 1px solid rgba(245, 158, 11, 0.45) !important;
+  border-radius: 0.5rem !important;
+  padding: 0.375rem 0.5rem !important;
+  font-size: 11px !important;
+  font-weight: 700 !important;
+  margin: 0 !important;
+  cursor: pointer !important;
+  outline: none !important;
+}
+
+#google_translate_element select.goog-te-combo:focus {
+  border-color: #fbbf24 !important;
+  box-shadow: 0 0 10px rgba(245, 158, 11, 0.25) !important;
+}
+

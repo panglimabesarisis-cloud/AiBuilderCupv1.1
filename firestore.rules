@@ -1,0 +1,92 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // Role dari custom token (login PIN -> /api/auth/firebase-token), fallback ke dokumen users/{uid}
+    function getUserRole() {
+      return !isSignedIn() ? ''
+        : request.auth.token.role is string ? request.auth.token.role
+        : exists(/databases/$(database)/documents/users/$(request.auth.uid))
+          ? get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role
+          : '';
+    }
+
+    function isOwnerOrAdmin() {
+      return getUserRole() in ['owner', 'admin', 'Owner / Super Admin', 'super_admin'];
+    }
+
+    function isStaff() {
+      return isSignedIn() && getUserRole() != '' && getUserRole() != 'customer';
+    }
+
+    // Koleksi yang HANYA boleh ditulis server (Firebase Admin SDK, bypass rules)
+    function serverOnly(c) {
+      return c in ['otp_sessions', 'ai_agents_private', 'settings', 'payment_gateway_secrets',
+                   'payment_intents', 'settlement_history'];
+    }
+
+    match /otp_sessions/{phone} {
+      allow read, write: if false;
+    }
+    match /ai_agents_private/{agentId} {
+      allow read, write: if false;
+    }
+    match /payment_gateway_secrets/{p} {
+      allow read, write: if false; // ciphertext, hanya server
+    }
+
+    // Tagihan QRIS & settlement: staff boleh baca, hanya server (webhook terverifikasi) yang menulis
+    match /payment_intents/{id} {
+      allow read: if isStaff();
+      allow write: if false;
+    }
+    match /settlement_history/{id} {
+      allow read: if isStaff();
+      allow write: if false;
+    }
+
+    // Pengaturan: semua staff baca (POS butuh settings/pos), owner/admin tulis; payment_gateway hanya via server
+    match /settings/{docId} {
+      allow read: if isStaff();
+      allow write: if isOwnerOrAdmin() && docId != 'payment_gateway';
+    }
+
+    // Profil pengguna
+    match /users/{userId} {
+      allow read: if isSignedIn();
+      allow write: if isOwnerOrAdmin() || (isSignedIn() && request.auth.uid == userId);
+    }
+
+    // Data per toko: stores/store_001/{transactions|orders|settings|...}
+    match /stores/{storeId}/{sub}/{docId} {
+      allow read: if isStaff();
+      allow create, update: if isStaff() && (sub != 'settings' || isOwnerOrAdmin());
+      allow delete: if isOwnerOrAdmin();
+      match /{rest=**} {
+        allow read, write: if isStaff();
+      }
+    }
+
+    // Data operasional top-level (produk, transaksi, shift, stok, audit_logs, dsb.)
+    match /{collection}/{docId} {
+      allow read: if isStaff() && !serverOnly(collection);
+      allow create, update: if isStaff() && !serverOnly(collection);
+      allow delete: if isOwnerOrAdmin() && !serverOnly(collection);
+      match /{rest=**} {
+        allow read, write: if isStaff() && !serverOnly(collection) && collection != 'stores';
+      }
+    }
+
+    // Client PWA: katalog boleh dibaca publik, pelanggan login boleh membuat order
+    match /{catalog}/{docId} {
+      allow read: if catalog in ['products', 'product_categories', 'categories', 'marketing_banners', 'rewards', 'outlets'];
+    }
+    match /orders/{orderId} {
+      allow create: if isSignedIn();
+      allow read: if isSignedIn() && resource.data.customerUid == request.auth.uid;
+    }
+  }
+}

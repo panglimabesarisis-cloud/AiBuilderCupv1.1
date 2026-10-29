@@ -1,0 +1,111 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // Role dari custom token (login PIN -> /api/auth/firebase-token), fallback ke dokumen users/{uid}
+    function getUserRole() {
+      return !isSignedIn() ? ''
+        : request.auth.token.role is string ? request.auth.token.role
+        : exists(/databases/$(database)/documents/users/$(request.auth.uid))
+          ? get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role
+          : '';
+    }
+
+    function isOwnerOrAdmin() {
+      return (isSignedIn() && request.auth.token.email == 'panglimabesarisis@gmail.com')
+        || getUserRole() in ['owner', 'admin', 'Owner / Super Admin', 'super_admin', 'OWNER', 'DEMO'];
+    }
+
+    function isStaff() {
+      return isOwnerOrAdmin() || (isSignedIn() && getUserRole() != '' && getUserRole() != 'customer');
+    }
+
+    // Mode PIN lokal (ketika FIREBASE_SERVICE_ACCOUNT belum diset di environment preview sehingga request.auth == null)
+    function isAppClientOrStaff() {
+      return isStaff() || request.auth == null || isSignedIn();
+    }
+
+    // Koleksi rahasia yang HANYA boleh diakses Firebase Admin SDK
+    function serverOnly(c) {
+      return c in ['otp_sessions', 'ai_agents_private', 'payment_gateway_secrets'];
+    }
+
+    match /otp_sessions/{phone} {
+      allow read, write: if false;
+    }
+    match /ai_agents_private/{agentId} {
+      allow read, write: if false;
+    }
+    match /payment_gateway_secrets/{p} {
+      allow read, write: if false; // ciphertext, hanya server
+    }
+
+    // Tagihan QRIS & settlement
+    match /payment_intents/{id} {
+      allow read, write: if isAppClientOrStaff();
+    }
+    match /settlement_history/{id} {
+      allow read, write: if isAppClientOrStaff();
+    }
+
+    // Pengaturan
+    match /settings/{docId} {
+      allow read: if isAppClientOrStaff();
+      allow write: if isAppClientOrStaff() && docId != 'payment_gateway_secrets';
+    }
+
+    // Profil pengguna
+    match /users/{userId} {
+      allow read, write: if isAppClientOrStaff();
+    }
+
+    // Data per toko: stores/store_001/{transactions|orders|settings|brands|categories|...}
+    match /stores/{storeId}/{sub}/{docId} {
+      allow read, write: if isAppClientOrStaff();
+      match /{rest=**} {
+        allow read, write: if isAppClientOrStaff();
+      }
+    }
+
+    // Data operasional top-level (brands, categories, storage_locations, products, transaksi, shift, stok, audit_logs, dsb.)
+    match /{collection}/{docId} {
+      allow read, write: if isAppClientOrStaff() && !serverOnly(collection);
+      match /{rest=**} {
+        allow read, write: if isAppClientOrStaff() && !serverOnly(collection) && collection != 'stores';
+      }
+    }
+
+    // Hadiah Target, Marketing Targets, Promosi & Konfigurasi PWA (bisa dibaca & diklaim oleh Client PWA / Guest)
+    match /reward_targets/{targetId} {
+      allow read: if true;
+      allow write: if true;
+    }
+    match /marketing_targets/{targetId} {
+      allow read: if true;
+      allow write: if true;
+    }
+    match /promotions/{promoId} {
+      allow read: if true;
+      allow write: if true;
+    }
+    match /pwa_page_configs/{configId} {
+      allow read: if true;
+      allow write: if true;
+    }
+    match /reward_claims/{claimId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    // Client PWA: katalog & master data boleh dibaca publik
+    match /{catalog}/{docId} {
+      allow read: if catalog in ['products', 'product_categories', 'categories', 'brands', 'storage_locations', 'marketing_banners', 'rewards', 'outlets', 'reward_targets', 'marketing_targets', 'promotions', 'pwa_page_configs', 'reward_claims', 'vouchers', 'point_rules', 'promo_banners'];
+    }
+    match /orders/{orderId} {
+      allow create, read: if isAppClientOrStaff();
+    }
+  }
+}

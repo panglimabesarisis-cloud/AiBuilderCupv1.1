@@ -1,0 +1,8 @@
+{
+  "name": "Remix AiBuilderCupv1",
+  "description": "Next-gen Anti-Fraud POS and Client PWA with AI anomaly detection, smart restocking advisor, typo-tolerant natural language ordering, and financial asset dashboard.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

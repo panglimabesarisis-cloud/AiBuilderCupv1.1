@@ -1,0 +1,37 @@
+{
+  "id": "/client-pwa",
+  "name": "RiskCart - More than 12 AI Agents Working to Protect Your Business",
+  "short_name": "RiskCart",
+  "description": "Executive Point Of Sale With AI Intelligence Suite - More than 12 AI Agents Working to Protect Your Business.",
+  "start_url": "/client-pwa",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#08090B",
+  "theme_color": "#08090B",
+  "icons": [
+    {
+      "src": "/pwa-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/pwa-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/pwa-maskable-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

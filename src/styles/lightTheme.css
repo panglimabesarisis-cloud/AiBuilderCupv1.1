@@ -1,0 +1,1347 @@
+/* ============================================================================
+   LIGHT THEME OVERRIDES — Visual Audit & Complete Overhaul
+   Non-destructive scoped CSS: active ONLY when html[data-theme="light"] is set.
+   When html[data-theme="dark"] is active, 0% of these rules apply.
+   ============================================================================ */
+
+html[data-theme="light"],
+html.light-theme {
+  --page: #F2ECE3;
+  --app: #FAF8F5;
+  --surface-cream: #F5F0E6;
+  --surface-ivory: #FAF7F2;
+  --card: linear-gradient(180deg, #FFFFFF 0%, #FAF8F5 100%);
+  --card-solid: #FFFFFF;
+  --surface-white: #FFFFFF;
+  --input-bg: #FFFFFF;
+  --line: #E6DFD3;
+  --line-2: #E5DEC9;
+  --line-hover: #D4C8B4;
+  --ink: #1C1917;
+  --ink-2: #44403C;
+  --ink-sub: #57534E;
+  --muted: #78716C;
+  --muted-2: #A8A29E;
+  --green: #166534;
+  --green-2: #14532D;
+  --copper: #B45309;
+  --amber-accent: #D97706;
+  --amber-soft: #FEF3C7;
+  --amber-card: #FFFBEB;
+  --pos: #10B981;
+  --neg: #E11D48;
+  --hover: #F5EFE6;
+  --active-nav: #FEF3C7;
+  --shadow-card: 0 1px 2px rgba(28, 25, 23, 0.04), 0 8px 20px -12px rgba(28, 25, 23, 0.12);
+  color-scheme: light !important;
+}
+
+/* ============================================================================
+   1. MAIN BACKGROUND & ROOT LAYOUT + GLOBAL DARK HEX SWEEP (RULE 5)
+   ============================================================================ */
+html[data-theme="light"],
+html[data-theme="light"] body,
+html[data-theme="light"] #root {
+  background: radial-gradient(1200px 600px at 50% -10%, #FAF8F5 0%, #F2ECE3 75%) !important;
+  background-color: #F2ECE3 !important;
+  color: #1C1917 !important;
+}
+
+/* Catch all dark root/container backgrounds & arbitrary hexes bg-[#0...] */
+html[data-theme="light"] .bg-zinc-950,
+html[data-theme="light"] .bg-slate-950,
+html[data-theme="light"] .bg-neutral-950,
+html[data-theme="light"] .bg-black,
+html[data-theme="light"] [class*="bg-zinc-950/"],
+html[data-theme="light"] [class*="bg-slate-950/"],
+html[data-theme="light"] [class*="bg-[#0"],
+html[data-theme="light"] .rc-bg,
+html[data-theme="light"] .rc-home-root,
+html[data-theme="light"] .rc-master-login-root {
+  background: #FAF8F5 !important;
+  background-color: #FAF8F5 !important;
+  color: #1C1917 !important;
+}
+
+/* Hide dark ambient spotlight & noise overlays in Light Theme */
+html[data-theme="light"] body::before,
+html[data-theme="light"] .rc-spotlight,
+html[data-theme="light"] .rc-noise,
+html[data-theme="light"] .rc-home-bg-glow {
+  opacity: 0.08 !important;
+  background: radial-gradient(800px 400px at 50% 0%, rgba(217, 119, 6, 0.06), transparent 70%) !important;
+}
+
+/* Catch all card/panel/modal/table backgrounds & arbitrary hexes bg-[#1...] and bg-[#2...] */
+html[data-theme="light"] .bg-zinc-900,
+html[data-theme="light"] .bg-zinc-850,
+html[data-theme="light"] .bg-slate-900,
+html[data-theme="light"] .bg-neutral-900,
+html[data-theme="light"] [class*="bg-zinc-900/"],
+html[data-theme="light"] [class*="bg-slate-900/"],
+html[data-theme="light"] [class*="bg-[#1"],
+html[data-theme="light"] [class*="bg-[#2"],
+html[data-theme="light"] .rc-gold-panel,
+html[data-theme="light"] .rc-gold-card,
+html[data-theme="light"] .glow-card {
+  background: #FFFFFF !important;
+  background-color: #FFFFFF !important;
+  border-color: #E6DFD3 !important;
+  box-shadow: var(--shadow-card) !important;
+  color: #1C1917 !important;
+}
+
+/* Secondary elevated surfaces / chips / inner blocks */
+html[data-theme="light"] .bg-zinc-800,
+html[data-theme="light"] [class*="bg-zinc-800/"],
+html[data-theme="light"] .bg-slate-800,
+html[data-theme="light"] [class*="bg-slate-800/"] {
+  background: #F5EFE6 !important;
+  background-color: #F5EFE6 !important;
+  border-color: #E5DEC9 !important;
+  color: #1C1917 !important;
+}
+
+html[data-theme="light"] .bg-zinc-700,
+html[data-theme="light"] .bg-slate-700 {
+  background-color: #EAE2D5 !important;
+  color: #1C1917 !important;
+}
+
+/* Semi-transparent black containers */
+html[data-theme="light"] .bg-black\/10,
+html[data-theme="light"] .bg-black\/15,
+html[data-theme="light"] .bg-black\/20,
+html[data-theme="light"] .bg-black\/25,
+html[data-theme="light"] .bg-black\/30,
+html[data-theme="light"] .bg-black\/35,
+html[data-theme="light"] .bg-black\/40,
+html[data-theme="light"] .bg-black\/45,
+html[data-theme="light"] .bg-black\/50,
+html[data-theme="light"] .bg-black\/60,
+html[data-theme="light"] .bg-black\/70 {
+  background-color: #FAF7F2 !important;
+  border-color: #E5DEC9 !important;
+  color: #1C1917 !important;
+}
+
+/* Keep modal backdrop dark-translucent for clear focus */
+html[data-theme="light"] .fixed.inset-0[class*="bg-black"],
+html[data-theme="light"] .fixed.inset-0[class*="bg-zinc-950"],
+html[data-theme="light"] .fixed.inset-0[class*="bg-slate-950"] {
+  background-color: rgba(28, 25, 23, 0.45) !important;
+  backdrop-filter: blur(4px) !important;
+}
+
+/* Rounded card containers that were overridden in index.css */
+html[data-theme="light"] .rounded-xl.border,
+html[data-theme="light"] .rounded-2xl.border,
+html[data-theme="light"] .rounded-3xl.border {
+  border-color: #E6DFD3 !important;
+  box-shadow: var(--shadow-card) !important;
+}
+
+html[data-theme="light"] .rounded-2xl.border:hover,
+html[data-theme="light"] .rounded-3xl.border:hover {
+  border-color: #D4C8B4 !important;
+}
+
+/* Header & Top Nav structural surfaces */
+html[data-theme="light"] header:not(.brand),
+html[data-theme="light"] nav {
+  background: linear-gradient(180deg, #FFFFFF 0%, #FAF7F2 100%) !important;
+  border-color: #E6DFD3 !important;
+  color: #1C1917 !important;
+}
+
+html[data-theme="light"] header.brand,
+html[data-theme="light"] main header.brand {
+  background: transparent !important;
+  background-color: transparent !important;
+  background-image: none !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+}
+
+/* Global Dark Multi-Stop Gradient Sweep (from-*, via-*, to-*) */
+html[data-theme="light"] [class*="from-zinc-900"],
+html[data-theme="light"] [class*="from-zinc-950"],
+html[data-theme="light"] [class*="from-slate-900"],
+html[data-theme="light"] [class*="from-slate-950"],
+html[data-theme="light"] [class*="from-amber-950"],
+html[data-theme="light"] [class*="from-emerald-950"],
+html[data-theme="light"] [class*="from-sky-950"],
+html[data-theme="light"] [class*="from-rose-950"],
+html[data-theme="light"] [class*="from-purple-950"],
+html[data-theme="light"] [class*="from-indigo-950"],
+html[data-theme="light"] [class*="from-[#0"],
+html[data-theme="light"] [class*="from-[#1"],
+html[data-theme="light"] [class*="from-[#2"] {
+  --tw-gradient-from: #FFFFFF var(--tw-gradient-from-position) !important;
+  --tw-gradient-to: #FAF7F2 var(--tw-gradient-to-position) !important;
+  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to) !important;
+}
+
+html[data-theme="light"] [class*="via-zinc-900"],
+html[data-theme="light"] [class*="via-zinc-950"],
+html[data-theme="light"] [class*="via-slate-900"],
+html[data-theme="light"] [class*="via-black"],
+html[data-theme="light"] [class*="via-[#0"],
+html[data-theme="light"] [class*="via-[#1"],
+html[data-theme="light"] [class*="via-[#2"] {
+  --tw-gradient-via: #FAF8F5 var(--tw-gradient-via-position) !important;
+  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-via), var(--tw-gradient-to) !important;
+}
+
+html[data-theme="light"] [class*="to-zinc-900"],
+html[data-theme="light"] [class*="to-zinc-950"],
+html[data-theme="light"] [class*="to-slate-900"],
+html[data-theme="light"] [class*="to-black"],
+html[data-theme="light"] [class*="to-[#0"],
+html[data-theme="light"] [class*="to-[#1"],
+html[data-theme="light"] [class*="to-[#2"] {
+  --tw-gradient-to: #F5F0E6 var(--tw-gradient-to-position) !important;
+}
+
+/* ============================================================================
+   RULE 1: SIDEBAR & LEFT NAVIGATION MENU OVERHAUL
+   ============================================================================ */
+html[data-theme="light"] aside,
+html[data-theme="light"] .rc-sidebar-root {
+  background: linear-gradient(180deg, #FAF7F2 0%, #F5F0E6 100%) !important;
+  background-color: #FAF7F2 !important;
+  border-color: #E6DFD3 !important;
+  box-shadow: 2px 0 14px rgba(28, 25, 23, 0.05) !important;
+  color: #1C1917 !important;
+}
+
+/* Clean Sub-Menu Group Containers (#FAF7F2 with subtle border #E6DFD3, no muddy grey box) */
+html[data-theme="light"] aside .rc-sidebar-submenu-box,
+html[data-theme="light"] .rc-sidebar-root .rc-sidebar-submenu-box,
+html[data-theme="light"] aside [class*="bg-zinc-950"],
+html[data-theme="light"] .rc-sidebar-root [class*="bg-zinc-950"] {
+  background: #FAF7F2 !important;
+  background-color: #FAF7F2 !important;
+  border-top: 1px solid #E6DFD3 !important;
+  border-right: 1px solid #E6DFD3 !important;
+  border-bottom: 1px solid #E6DFD3 !important;
+  border-left: 3px solid #D97706 !important;
+  box-shadow: none !important;
+  color: #57534E !important;
+}
+
+/* Primary Menu Buttons in Sidebar (Antrean Pesanan, Reservation Table, Dapur, etc.) */
+html[data-theme="light"] aside .rc-sidebar-btn,
+html[data-theme="light"] .rc-sidebar-root .rc-sidebar-btn {
+  background: #FFFFFF !important;
+  background-color: #FFFFFF !important;
+  border: 1px solid #E6DFD3 !important;
+  color: #1C1917 !important;
+  box-shadow: 0 1px 2px rgba(28, 25, 23, 0.04) !important;
+}
+
+html[data-theme="light"] aside .rc-sidebar-btn span,
+html[data-theme="light"] .rc-sidebar-root .rc-sidebar-btn span {
+  color: #1C1917 !important;
+}
+
+html[data-theme="light"] aside .rc-sidebar-btn svg,
+html[data-theme="light"] .rc-sidebar-root .rc-sidebar-btn svg {
+  color: #D97706 !important;
+}
+
+html[data-theme="light"] aside .rc-sidebar-btn:hover,
+html[data-theme="light"] .rc-sidebar-root .rc-sidebar-btn:hover {
+  background: #F5EFE6 !important;
+  background-color: #F5EFE6 !important;
+  border-color: #D97706 !important;
+  color: #1C1917 !important;
+}
+
+/* Active Primary Menu Button in Sidebar (Warm Amber/Gold #FEF3C7 & #D97706) */
+html[data-theme="light"] aside .rc-sidebar-btn.rc-sidebar-btn-active,
+html[data-theme="light"] .rc-sidebar-root .rc-sidebar-btn.rc-sidebar-btn-active {
+  background: linear-gradient(135deg, #FEF3C7 0%, #FDE68A 100%) !important;
+  background-color: #FEF3C7 !important;
+  border: 1.5px solid #D97706 !important;
+  color: #1C1917 !important;
+  font-weight: 800 !important;
+  box-shadow: 0 3px 10px rgba(217, 119, 6, 0.18) !important;
+}
+
+html[data-theme="light"] aside .rc-sidebar-btn.rc-sidebar-btn-active span,
+html[data-theme="light"] .rc-sidebar-root .rc-sidebar-btn.rc-sidebar-btn-active span {
+  color: #1C1917 !important;
+}
+
+/* Group Accordion Header Buttons (DASHBOARD, RESERVATION TABLE, SHIFT STAFF, AI, etc.) */
+html[data-theme="light"] aside .rc-sidebar-group-btn,
+html[data-theme="light"] .rc-sidebar-root .rc-sidebar-group-btn {
+  background: transparent !important;
+  color: #1C1917 !important;
+}
+
+html[data-theme="light"] aside .rc-sidebar-group-btn .rc-sidebar-group-title,
+html[data-theme="light"] .rc-sidebar-root .rc-sidebar-group-btn .rc-sidebar-group-title {
+  color: #1C1917 !important;
+  font-weight: 800 !important;
+}
+
+html[data-theme="light"] aside .rc-sidebar-group-btn:hover,
+html[data-theme="light"] .rc-sidebar-root .rc-sidebar-group-btn:hover {
+  background: #F5EFE6 !important;
+  color: #1C1917 !important;
+}
+
+/* Sub-Menu Links (Idle #57534E, Hover/Active #1C1917 font-semibold) */
+html[data-theme="light"] aside .rc-sidebar-submenu-link,
+html[data-theme="light"] .rc-sidebar-root .rc-sidebar-submenu-link,
+html[data-theme="light"] aside .rc-sidebar-submenu-link span:first-child,
+html[data-theme="light"] .rc-sidebar-root .rc-sidebar-submenu-link span:first-child {
+  color: #57534E !important;
+  font-weight: 500 !important;
+}
+
+html[data-theme="light"] aside .rc-sidebar-submenu-link:hover,
+html[data-theme="light"] .rc-sidebar-root .rc-sidebar-submenu-link:hover,
+html[data-theme="light"] aside .rc-sidebar-submenu-link:hover span:first-child,
+html[data-theme="light"] .rc-sidebar-root .rc-sidebar-submenu-link:hover span:first-child {
+  color: #1C1917 !important;
+  font-weight: 600 !important;
+  background-color: #F5EFE6 !important;
+  border-radius: 0.5rem !important;
+}
+
+/* Active Sub-Menu Link (#FEF3C7 background, #D97706 border, #1C1917 bold text) */
+html[data-theme="light"] aside .rc-sidebar-submenu-link.rc-sidebar-submenu-link-active,
+html[data-theme="light"] .rc-sidebar-root .rc-sidebar-submenu-link.rc-sidebar-submenu-link-active {
+  background: #FEF3C7 !important;
+  background-color: #FEF3C7 !important;
+  border-left: 3px solid #D97706 !important;
+  color: #1C1917 !important;
+  font-weight: 700 !important;
+  padding-left: 0.5rem !important;
+  padding-right: 0.5rem !important;
+  border-radius: 0.5rem !important;
+}
+
+html[data-theme="light"] aside .rc-sidebar-submenu-link.rc-sidebar-submenu-link-active span,
+html[data-theme="light"] .rc-sidebar-root .rc-sidebar-submenu-link.rc-sidebar-submenu-link-active span {
+  color: #1C1917 !important;
+  font-weight: 700 !important;
+}
+
+/* Badges inside Sidebar (Queue, Dapur, latency ms, NEW, etc.) */
+html[data-theme="light"] aside .rc-sidebar-badge,
+html[data-theme="light"] .rc-sidebar-root .rc-sidebar-badge {
+  background: #FEF3C7 !important;
+  background-color: #FEF3C7 !important;
+  border-color: #D97706 !important;
+  color: #78350F !important;
+  font-weight: 700 !important;
+}
+
+/* Sidebar Footer */
+html[data-theme="light"] aside .rc-sidebar-footer,
+html[data-theme="light"] .rc-sidebar-root .rc-sidebar-footer {
+  background: #F5EFE6 !important;
+  background-color: #F5EFE6 !important;
+  border-top: 1px solid #E6DFD3 !important;
+  color: #1C1917 !important;
+}
+
+/* ============================================================================
+   RULE 2: DENAH MEJA (LAYOUT TABLE) & KOMPONEN MEJA GRADASI HALUS
+   ============================================================================ */
+
+/* Floorplan Canvas Box */
+html[data-theme="light"] .rc-floorplan-canvas {
+  background-color: #FAF7F2 !important;
+  background-image:
+    radial-gradient(rgba(180, 83, 9, 0.18) 1px, transparent 1px),
+    linear-gradient(to right, rgba(214, 203, 184, 0.45) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(214, 203, 184, 0.45) 1px, transparent 1px) !important;
+  border-bottom: 1px solid #E5DEC9 !important;
+}
+
+html[data-theme="light"] .rc-floorplan-badge,
+html[data-theme="light"] .rc-floorplan-legend,
+html[data-theme="light"] .rc-floorplan-rotate-pill {
+  background: #FFFFFF !important;
+  background-color: #FFFFFF !important;
+  border: 1px solid #E5DEC9 !important;
+  color: #1C1917 !important;
+  box-shadow: 0 2px 8px rgba(28, 25, 23, 0.08) !important;
+}
+
+/* Status Bar at Bottom of Floorplan Canvas (Indoor 1 — Indoor 1 (Bulat)...) */
+html[data-theme="light"] .rc-floorplan-footer {
+  background: #F5EFE6 !important;
+  background-color: #F5EFE6 !important;
+  border-top: 1px solid #E5DEC9 !important;
+  color: #1C1917 !important;
+}
+
+html[data-theme="light"] .rc-floorplan-footer span,
+html[data-theme="light"] .rc-floorplan-footer strong {
+  color: #1C1917 !important;
+}
+
+/* 1) Meja Tersedia / Kosong (Hijau/Tosca): #ECFDF5 -> #D1FAE5, border #10B981, text #065F46 */
+html[data-theme="light"] .rc-table-artwork.rc-table-status-available {
+  background: linear-gradient(135deg, #ECFDF5 0%, #D1FAE5 100%) !important;
+  border-color: #10B981 !important;
+  color: #065F46 !important;
+  box-shadow: 0 6px 16px -4px rgba(16, 185, 129, 0.22), 0 1px 0 rgba(255, 255, 255, 0.9) inset !important;
+}
+html[data-theme="light"] .rc-table-chair.rc-table-chair-available {
+  background: #A7F3D0 !important;
+  background-color: #A7F3D0 !important;
+  border-color: #10B981 !important;
+}
+html[data-theme="light"] .rc-table-status-available .rc-table-num,
+html[data-theme="light"] .rc-table-status-available .rc-table-label,
+html[data-theme="light"] .rc-table-status-available .rc-table-seats,
+html[data-theme="light"] .rc-table-status-available .rc-table-price {
+  color: #065F46 !important;
+}
+
+/* 2) Meja Terisi / Duduk (Amber/Coklat): #FFFBEB -> #FDE68A, border #D97706, text #92400E */
+html[data-theme="light"] .rc-table-artwork.rc-table-status-occupied {
+  background: linear-gradient(135deg, #FFFBEB 0%, #FDE68A 100%) !important;
+  border-color: #D97706 !important;
+  color: #92400E !important;
+  box-shadow: 0 6px 16px -4px rgba(217, 119, 6, 0.24), 0 1px 0 rgba(255, 255, 255, 0.9) inset !important;
+}
+html[data-theme="light"] .rc-table-chair.rc-table-chair-occupied {
+  background: #FDE68A !important;
+  background-color: #FDE68A !important;
+  border-color: #D97706 !important;
+}
+html[data-theme="light"] .rc-table-status-occupied .rc-table-num,
+html[data-theme="light"] .rc-table-status-occupied .rc-table-label,
+html[data-theme="light"] .rc-table-status-occupied .rc-table-seats,
+html[data-theme="light"] .rc-table-status-occupied .rc-table-price {
+  color: #92400E !important;
+}
+
+/* 3) Meja Reservasi (Biru): #EFF6FF -> #DBEAFE, border #3B82F6, text #1E40AF */
+html[data-theme="light"] .rc-table-artwork.rc-table-status-reserved {
+  background: linear-gradient(135deg, #EFF6FF 0%, #DBEAFE 100%) !important;
+  border-color: #3B82F6 !important;
+  color: #1E40AF !important;
+  box-shadow: 0 6px 16px -4px rgba(59, 130, 246, 0.22), 0 1px 0 rgba(255, 255, 255, 0.9) inset !important;
+}
+html[data-theme="light"] .rc-table-chair.rc-table-chair-reserved {
+  background: #BFDBFE !important;
+  background-color: #BFDBFE !important;
+  border-color: #3B82F6 !important;
+}
+html[data-theme="light"] .rc-table-status-reserved .rc-table-num,
+html[data-theme="light"] .rc-table-status-reserved .rc-table-label,
+html[data-theme="light"] .rc-table-status-reserved .rc-table-seats,
+html[data-theme="light"] .rc-table-status-reserved .rc-table-price {
+  color: #1E40AF !important;
+}
+
+/* 4) Meja Siap Bayar / Bill (Merah/Rose): #FFF1F2 -> #FFE4E6, border #F43F5E, text #9F1239 */
+html[data-theme="light"] .rc-table-artwork.rc-table-status-billing {
+  background: linear-gradient(135deg, #FFF1F2 0%, #FFE4E6 100%) !important;
+  border-color: #F43F5E !important;
+  color: #9F1239 !important;
+  box-shadow: 0 6px 16px -4px rgba(244, 63, 94, 0.22), 0 1px 0 rgba(255, 255, 255, 0.9) inset !important;
+}
+html[data-theme="light"] .rc-table-chair.rc-table-chair-billing {
+  background: #FECDD3 !important;
+  background-color: #FECDD3 !important;
+  border-color: #F43F5E !important;
+}
+html[data-theme="light"] .rc-table-status-billing .rc-table-num,
+html[data-theme="light"] .rc-table-status-billing .rc-table-label,
+html[data-theme="light"] .rc-table-status-billing .rc-table-seats,
+html[data-theme="light"] .rc-table-status-billing .rc-table-price {
+  color: #9F1239 !important;
+}
+
+/* Highlight ring when a table is selected on the floorplan in Light Theme */
+html[data-theme="light"] .rc-table-artwork.rc-table-selected {
+  box-shadow: 0 0 0 3px rgba(217, 119, 6, 0.35), 0 8px 20px rgba(28, 25, 23, 0.16) !important;
+}
+
+/* ============================================================================
+   RULE 3: HALAMAN RESERVASI (/dashboard/reservation)
+   ============================================================================ */
+
+/* Calendar Grid Wrapper */
+html[data-theme="light"] .rc-cal-grid-wrap {
+  background: #FAF8F5 !important;
+  background-color: #FAF8F5 !important;
+}
+
+/* Calendar Day Header Row (SEN, SEL, RAB, KAM, JUM, SAB, MIN) */
+html[data-theme="light"] .rc-cal-day-header {
+  background: #F3EDE2 !important;
+  background-color: #F3EDE2 !important;
+  border: 1px solid #E5DEC9 !important;
+  color: #44403C !important;
+  font-weight: 800 !important;
+}
+
+/* Calendar Regular Cells (In Current Month) */
+html[data-theme="light"] .rc-cal-cell.rc-cal-cell-current {
+  background: #FFFFFF !important;
+  background-color: #FFFFFF !important;
+  border: 1px solid #E5DEC9 !important;
+  color: #1C1917 !important;
+  box-shadow: 0 1px 2px rgba(28, 25, 23, 0.03) !important;
+}
+html[data-theme="light"] .rc-cal-cell.rc-cal-cell-current:hover {
+  background: #FFFBEB !important;
+  border-color: #D97706 !important;
+}
+html[data-theme="light"] .rc-cal-cell.rc-cal-cell-current .rc-cal-day-num {
+  color: #1C1917 !important;
+}
+html[data-theme="light"] .rc-cal-cell.rc-cal-cell-current .rc-cal-avail-label {
+  color: #78716C !important;
+}
+
+/* Calendar Disabled / Out-of-Month Cells */
+html[data-theme="light"] .rc-cal-cell.rc-cal-cell-muted {
+  background: #FAF7F2 !important;
+  background-color: #FAF7F2 !important;
+  border: 1px solid #EDE7DC !important;
+  color: #A8A29E !important;
+  box-shadow: none !important;
+}
+html[data-theme="light"] .rc-cal-cell.rc-cal-cell-muted .rc-cal-day-num,
+html[data-theme="light"] .rc-cal-cell.rc-cal-cell-muted .rc-cal-avail-label {
+  color: #A8A29E !important;
+}
+
+/* Calendar Selected Date Cell (#FEF3C7 with #D97706 border, no harsh dark gradient) */
+html[data-theme="light"] .rc-cal-cell.rc-cal-cell-selected {
+  background: #FEF3C7 !important;
+  background-color: #FEF3C7 !important;
+  background-image: none !important;
+  border: 2px solid #D97706 !important;
+  color: #78350F !important;
+  box-shadow: 0 4px 12px rgba(217, 119, 6, 0.2) !important;
+}
+html[data-theme="light"] .rc-cal-cell.rc-cal-cell-selected .rc-cal-day-num {
+  color: #78350F !important;
+  font-weight: 900 !important;
+}
+html[data-theme="light"] .rc-cal-cell.rc-cal-cell-selected .rc-cal-avail-label {
+  color: #92400E !important;
+  font-weight: 700 !important;
+}
+
+/* Calendar Badges ("Hari Ini" & "1 Reservasi") */
+html[data-theme="light"] .rc-cal-today-badge {
+  background: #DCFCE7 !important;
+  background-color: #DCFCE7 !important;
+  color: #166534 !important;
+  border: 1px solid #86EFAC !important;
+}
+html[data-theme="light"] .rc-cal-res-badge {
+  background: #DBEAFE !important;
+  background-color: #DBEAFE !important;
+  border: 1px solid #60A5FA !important;
+  color: #1E40AF !important;
+  font-weight: 700 !important;
+}
+
+/* "Jadwal Jam Reservasi" Slot Cards */
+html[data-theme="light"] .rc-hour-slot.rc-hour-slot-empty {
+  background: #FFFFFF !important;
+  background-color: #FFFFFF !important;
+  border: 1px solid #E5DEC9 !important;
+  color: #1C1917 !important;
+  box-shadow: 0 1px 2px rgba(28, 25, 23, 0.04) !important;
+}
+html[data-theme="light"] .rc-hour-slot.rc-hour-slot-empty:hover {
+  background: #FFFBEB !important;
+  border-color: #D97706 !important;
+}
+html[data-theme="light"] .rc-hour-slot.rc-hour-slot-empty .rc-hour-time {
+  color: #1C1917 !important;
+}
+html[data-theme="light"] .rc-hour-slot.rc-hour-slot-empty .rc-hour-subtext {
+  color: #57534E !important;
+}
+html[data-theme="light"] .rc-hour-badge.rc-hour-badge-empty {
+  background: #DCFCE7 !important;
+  background-color: #DCFCE7 !important;
+  color: #166534 !important;
+  border: 1px solid #86EFAC !important;
+  font-weight: 700 !important;
+}
+
+/* Selected Hourly Slot Card */
+html[data-theme="light"] .rc-hour-slot.rc-hour-slot-selected {
+  background: linear-gradient(135deg, #FEF3C7 0%, #FDE68A 100%) !important;
+  background-color: #FEF3C7 !important;
+  border: 2px solid #D97706 !important;
+  color: #1C1917 !important;
+  box-shadow: 0 4px 12px rgba(217, 119, 6, 0.22) !important;
+}
+html[data-theme="light"] .rc-hour-slot.rc-hour-slot-selected .rc-hour-time,
+html[data-theme="light"] .rc-hour-slot.rc-hour-slot-selected .rc-hour-subtext {
+  color: #1C1917 !important;
+  font-weight: 800 !important;
+}
+html[data-theme="light"] .rc-hour-badge.rc-hour-badge-selected {
+  background: #D97706 !important;
+  background-color: #D97706 !important;
+  color: #FFFFFF !important;
+}
+
+/* Booked Hourly Slot Card */
+html[data-theme="light"] .rc-hour-slot.rc-hour-slot-booked {
+  background: #EFF6FF !important;
+  background-color: #EFF6FF !important;
+  border: 1.5px solid #3B82F6 !important;
+  color: #1E40AF !important;
+}
+html[data-theme="light"] .rc-hour-slot.rc-hour-slot-booked .rc-hour-time,
+html[data-theme="light"] .rc-hour-slot.rc-hour-slot-booked .rc-hour-subtext {
+  color: #1E40AF !important;
+}
+html[data-theme="light"] .rc-hour-badge.rc-hour-badge-booked {
+  background: #DBEAFE !important;
+  background-color: #DBEAFE !important;
+  color: #1E40AF !important;
+  border: 1px solid #93C5FD !important;
+}
+
+/* Footer Bar below Jadwal Jam Reservasi (#F5EFE6 with #1C1917 text) */
+html[data-theme="light"] .rc-res-schedule-footer {
+  background: #F5EFE6 !important;
+  background-color: #F5EFE6 !important;
+  border-top: 1px solid #E5DEC9 !important;
+  color: #1C1917 !important;
+}
+html[data-theme="light"] .rc-res-schedule-footer span,
+html[data-theme="light"] .rc-res-schedule-footer strong {
+  color: #1C1917 !important;
+}
+
+/* "Pilih Meja untuk Reservasi" Cards */
+html[data-theme="light"] .rc-res-table-card.rc-res-table-card-avail {
+  background: #FFFFFF !important;
+  background-color: #FFFFFF !important;
+  border: 1px solid #E5DEC9 !important;
+  color: #1C1917 !important;
+  box-shadow: 0 1px 2px rgba(28, 25, 23, 0.04) !important;
+}
+html[data-theme="light"] .rc-res-table-card.rc-res-table-card-avail:hover {
+  background: #FAF7F2 !important;
+  border-color: #D97706 !important;
+}
+
+html[data-theme="light"] .rc-res-table-card.rc-res-table-card-booked {
+  background: #EFF6FF !important;
+  background-color: #EFF6FF !important;
+  border: 1.5px solid #60A5FA !important;
+  color: #1E40AF !important;
+}
+html[data-theme="light"] .rc-res-table-card.rc-res-table-card-booked .rc-res-table-num,
+html[data-theme="light"] .rc-res-table-card.rc-res-table-card-booked .rc-res-table-seats,
+html[data-theme="light"] .rc-res-table-card.rc-res-table-card-booked .rc-res-table-zone,
+html[data-theme="light"] .rc-res-table-card.rc-res-table-card-booked .rc-res-table-status {
+  color: #1E40AF !important;
+}
+
+html[data-theme="light"] .rc-res-table-card.rc-res-table-card-selected {
+  background: #FEF3C7 !important;
+  background-color: #FEF3C7 !important;
+  border: 2px solid #D97706 !important;
+  color: #1C1917 !important;
+  box-shadow: 0 4px 12px rgba(217, 119, 6, 0.18) !important;
+}
+html[data-theme="light"] .rc-res-table-card .rc-res-table-num {
+  color: #1C1917 !important;
+}
+html[data-theme="light"] .rc-res-table-card .rc-res-table-seats {
+  color: #B45309 !important;
+  font-weight: 700 !important;
+}
+html[data-theme="light"] .rc-res-table-card .rc-res-table-zone {
+  color: #57534E !important;
+}
+html[data-theme="light"] .rc-res-table-card > div.bg-black\/25 {
+  background: #FAF8F5 !important;
+  background-color: #FAF8F5 !important;
+  border-color: #E5DEC9 !important;
+}
+
+/* ============================================================================
+   RULE 4: HALAMAN AUTONOMOUS AI AGENT ECOSYSTEM (/ai-overview & /dashboard/ai)
+   ============================================================================ */
+
+/* Unselected AI Agent Cards: White #FFFFFF, border #E6DFD3, title #1C1917, desc #57534E */
+html[data-theme="light"] .rc-ai-agent-card {
+  background: #FFFFFF !important;
+  background-color: #FFFFFF !important;
+  background-image: none !important;
+  border: 1px solid #E6DFD3 !important;
+  color: #1C1917 !important;
+  box-shadow: 0 2px 8px -2px rgba(28, 25, 23, 0.06) !important;
+}
+
+html[data-theme="light"] .rc-ai-agent-card:hover {
+  background: #FAF8F5 !important;
+  background-color: #FAF8F5 !important;
+  border-color: #D97706 !important;
+  box-shadow: 0 6px 16px -4px rgba(217, 119, 6, 0.15) !important;
+}
+
+/* Selected / Active AI Agent Card: #FFFBEB background, #D97706 border, soft shadow */
+html[data-theme="light"] .rc-ai-agent-card.rc-ai-agent-card-active {
+  background: linear-gradient(135deg, #FFFBEB 0%, #FEF3C7 100%) !important;
+  background-color: #FFFBEB !important;
+  border: 2px solid #D97706 !important;
+  color: #1C1917 !important;
+  box-shadow: 0 8px 20px -6px rgba(217, 119, 6, 0.22) !important;
+}
+
+/* AI Agent Card Icon Box */
+html[data-theme="light"] .rc-ai-agent-card .rc-ai-agent-icon {
+  background: #FEF3C7 !important;
+  background-color: #FEF3C7 !important;
+  border: 1px solid #F59E0B !important;
+  color: #B45309 !important;
+}
+
+/* AI Agent Card Top-Right Badge (170ms, 142ms, MASTER, etc.) */
+html[data-theme="light"] .rc-ai-agent-card .rc-ai-agent-badge {
+  background: #F3EDE2 !important;
+  background-color: #F3EDE2 !important;
+  border: 1px solid #E5DEC9 !important;
+  color: #78350F !important;
+  font-weight: 800 !important;
+}
+
+html[data-theme="light"] .rc-ai-agent-card.rc-ai-agent-card-active .rc-ai-agent-badge,
+html[data-theme="light"] .rc-ai-agent-card .rc-ai-agent-badge.rc-ai-agent-badge-active {
+  background: #FEF3C7 !important;
+  background-color: #FEF3C7 !important;
+  border: 1px solid #D97706 !important;
+  color: #78350F !important;
+  font-weight: 900 !important;
+}
+
+/* AI Agent Card Title & Description */
+html[data-theme="light"] .rc-ai-agent-card .rc-ai-agent-title {
+  color: #1C1917 !important;
+  font-weight: 800 !important;
+}
+
+html[data-theme="light"] .rc-ai-agent-card.rc-ai-agent-card-active .rc-ai-agent-title {
+  color: #78350F !important;
+  font-weight: 900 !important;
+}
+
+html[data-theme="light"] .rc-ai-agent-card .rc-ai-agent-desc {
+  color: #57534E !important;
+  font-weight: 500 !important;
+}
+
+/* ============================================================================
+   3. INPUT, SELECT, TEXTAREA & SEARCH BAR
+   ============================================================================ */
+html[data-theme="light"] input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+html[data-theme="light"] select,
+html[data-theme="light"] textarea,
+html[data-theme="light"] .rc-gold-input {
+  background: #FFFFFF !important;
+  background-color: #FFFFFF !important;
+  border-color: #D6CEBF !important;
+  color: #1C1917 !important;
+  box-shadow: 0 1px 2px rgba(28, 25, 23, 0.04) inset !important;
+}
+
+html[data-theme="light"] input::placeholder,
+html[data-theme="light"] textarea::placeholder {
+  color: #78716C !important;
+  opacity: 1 !important;
+}
+
+html[data-theme="light"] input:focus,
+html[data-theme="light"] select:focus,
+html[data-theme="light"] textarea:focus,
+html[data-theme="light"] .rc-gold-input:focus {
+  background-color: #FFFFFF !important;
+  border-color: #D97706 !important;
+  box-shadow: 0 0 0 3px rgba(217, 119, 6, 0.16) !important;
+  outline: none !important;
+}
+
+html[data-theme="light"] select option {
+  background-color: #FFFFFF !important;
+  color: #1C1917 !important;
+}
+
+/* ============================================================================
+   4. TYPOGRAPHY & HIGH-CONTRAST TEXT MAPPING
+   ============================================================================ */
+html[data-theme="light"] .text-white,
+html[data-theme="light"] .text-amber-50,
+html[data-theme="light"] .text-zinc-50,
+html[data-theme="light"] .text-zinc-100,
+html[data-theme="light"] .text-zinc-200,
+html[data-theme="light"] .text-slate-50,
+html[data-theme="light"] .text-slate-100,
+html[data-theme="light"] .text-slate-200,
+html[data-theme="light"] .text-neutral-100,
+html[data-theme="light"] .text-neutral-200 {
+  color: #1C1917 !important;
+}
+
+html[data-theme="light"] .text-zinc-300,
+html[data-theme="light"] .text-slate-300,
+html[data-theme="light"] .text-amber-100,
+html[data-theme="light"] [class*="text-amber-100/"],
+html[data-theme="light"] .text-amber-200,
+html[data-theme="light"] [class*="text-amber-200/"] {
+  color: #44403C !important;
+}
+
+html[data-theme="light"] .text-zinc-400,
+html[data-theme="light"] .text-zinc-500,
+html[data-theme="light"] .text-slate-400,
+html[data-theme="light"] .text-slate-500,
+html[data-theme="light"] [class*="text-amber-300/"],
+html[data-theme="light"] [class*="text-amber-400/"],
+html[data-theme="light"] [class*="text-amber-500/"] {
+  color: #57534E !important;
+}
+
+html[data-theme="light"] .text-zinc-600,
+html[data-theme="light"] .text-slate-600 {
+  color: #78716C !important;
+}
+
+/* High-contrast semantic accent text (overrides index.css #fbbf24 !important) */
+html[data-theme="light"] .text-amber-300,
+html[data-theme="light"] .text-amber-400,
+html[data-theme="light"] .text-amber-500,
+html[data-theme="light"] .text-amber-600,
+html[data-theme="light"] .text-yellow-300,
+html[data-theme="light"] .text-yellow-400,
+html[data-theme="light"] .text-yellow-500 {
+  color: #B45309 !important;
+}
+
+html[data-theme="light"] .text-blue-200,
+html[data-theme="light"] .text-blue-300,
+html[data-theme="light"] .text-blue-400,
+html[data-theme="light"] .text-blue-500,
+html[data-theme="light"] .text-sky-200,
+html[data-theme="light"] .text-sky-300,
+html[data-theme="light"] .text-sky-400,
+html[data-theme="light"] .text-cyan-300,
+html[data-theme="light"] .text-cyan-400,
+html[data-theme="light"] .text-indigo-300,
+html[data-theme="light"] .text-indigo-400 {
+  color: #1E40AF !important;
+}
+
+html[data-theme="light"] .text-emerald-200,
+html[data-theme="light"] .text-emerald-300,
+html[data-theme="light"] .text-emerald-400,
+html[data-theme="light"] .text-emerald-500,
+html[data-theme="light"] .text-green-300,
+html[data-theme="light"] .text-green-400,
+html[data-theme="light"] .text-teal-300,
+html[data-theme="light"] .text-teal-400 {
+  color: #065F46 !important;
+}
+
+html[data-theme="light"] .text-rose-200,
+html[data-theme="light"] .text-rose-300,
+html[data-theme="light"] .text-rose-400,
+html[data-theme="light"] .text-red-200,
+html[data-theme="light"] .text-red-300,
+html[data-theme="light"] .text-red-400 {
+  color: #9F1239 !important;
+}
+
+html[data-theme="light"] .text-purple-200,
+html[data-theme="light"] .text-purple-300,
+html[data-theme="light"] .text-purple-400,
+html[data-theme="light"] .text-violet-300,
+html[data-theme="light"] .text-violet-400,
+html[data-theme="light"] .text-fuchsia-300,
+html[data-theme="light"] .text-fuchsia-400 {
+  color: #6B21A8 !important;
+}
+
+html[data-theme="light"] .text-orange-300,
+html[data-theme="light"] .text-orange-400 {
+  color: #C2410C !important;
+}
+
+/* ============================================================================
+   5. SOLID BUTTONS & SOFT TINTED BADGES / ALERTS
+   ============================================================================ */
+html[data-theme="light"] .bg-blue-600,
+html[data-theme="light"] .bg-blue-500,
+html[data-theme="light"] .bg-indigo-600 {
+  background: #2563EB !important;
+  background-color: #2563EB !important;
+  border-color: #1D4ED8 !important;
+  color: #FFFFFF !important;
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.22) !important;
+}
+
+html[data-theme="light"] .bg-blue-600:hover,
+html[data-theme="light"] .bg-blue-500:hover,
+html[data-theme="light"] .bg-indigo-600:hover {
+  background: #1D4ED8 !important;
+  background-color: #1D4ED8 !important;
+  color: #FFFFFF !important;
+}
+
+html[data-theme="light"] .bg-emerald-600,
+html[data-theme="light"] .bg-emerald-500,
+html[data-theme="light"] .bg-green-600 {
+  background: #059669 !important;
+  background-color: #059669 !important;
+  border-color: #047857 !important;
+  color: #FFFFFF !important;
+}
+
+html[data-theme="light"] .bg-rose-600,
+html[data-theme="light"] .bg-rose-500,
+html[data-theme="light"] .bg-red-600,
+html[data-theme="light"] .bg-red-500 {
+  background: #E11D48 !important;
+  background-color: #E11D48 !important;
+  border-color: #BE123C !important;
+  color: #FFFFFF !important;
+}
+
+html[data-theme="light"] .bg-purple-600,
+html[data-theme="light"] .bg-violet-600 {
+  background: #7C3AED !important;
+  background-color: #7C3AED !important;
+  border-color: #6D28D9 !important;
+  color: #FFFFFF !important;
+}
+
+html[data-theme="light"] .bg-amber-500,
+html[data-theme="light"] .bg-amber-600,
+html[data-theme="light"] .bg-yellow-500 {
+  background: linear-gradient(180deg, #F59E0B 0%, #D97706 100%) !important;
+  background-color: #D97706 !important;
+  border-color: #B45309 !important;
+  color: #FFFFFF !important;
+  box-shadow: 0 4px 12px rgba(217, 119, 6, 0.25) !important;
+}
+
+/* Ensure children inside solid buttons stay crisp white */
+html[data-theme="light"] .bg-blue-600 *,
+html[data-theme="light"] .bg-blue-500 *,
+html[data-theme="light"] .bg-indigo-600 *,
+html[data-theme="light"] .bg-emerald-600 *,
+html[data-theme="light"] .bg-emerald-500 *,
+html[data-theme="light"] .bg-green-600 *,
+html[data-theme="light"] .bg-rose-600 *,
+html[data-theme="light"] .bg-rose-500 *,
+html[data-theme="light"] .bg-red-600 *,
+html[data-theme="light"] .bg-purple-600 *,
+html[data-theme="light"] .bg-amber-500:not(.rc-hour-slot) *,
+html[data-theme="light"] .bg-amber-600 * {
+  color: #FFFFFF !important;
+}
+
+/* Soft tinted badge/alert backgrounds in Light Theme */
+html[data-theme="light"] [class*="bg-amber-500/"],
+html[data-theme="light"] [class*="bg-amber-400/"],
+html[data-theme="light"] [class*="bg-amber-950"],
+html[data-theme="light"] [class*="bg-amber-900"] {
+  background-color: #FEF3C7 !important;
+  border-color: #F59E0B !important;
+  color: #92400E !important;
+}
+
+html[data-theme="light"] [class*="bg-emerald-500/"],
+html[data-theme="light"] [class*="bg-emerald-400/"],
+html[data-theme="light"] [class*="bg-emerald-950"],
+html[data-theme="light"] [class*="bg-emerald-900"],
+html[data-theme="light"] [class*="bg-green-500/"],
+html[data-theme="light"] [class*="bg-teal-500/"] {
+  background-color: #DCFCE7 !important;
+  border-color: #34D399 !important;
+  color: #065F46 !important;
+}
+
+html[data-theme="light"] [class*="bg-blue-500/"],
+html[data-theme="light"] [class*="bg-blue-400/"],
+html[data-theme="light"] [class*="bg-blue-950"],
+html[data-theme="light"] [class*="bg-blue-900"],
+html[data-theme="light"] [class*="bg-sky-500/"],
+html[data-theme="light"] [class*="bg-sky-400/"],
+html[data-theme="light"] [class*="bg-sky-950"],
+html[data-theme="light"] [class*="bg-sky-900"],
+html[data-theme="light"] [class*="bg-cyan-500/"],
+html[data-theme="light"] [class*="bg-indigo-500/"] {
+  background-color: #EFF6FF !important;
+  border-color: #60A5FA !important;
+  color: #1E40AF !important;
+}
+
+html[data-theme="light"] [class*="bg-rose-500/"],
+html[data-theme="light"] [class*="bg-rose-400/"],
+html[data-theme="light"] [class*="bg-rose-950"],
+html[data-theme="light"] [class*="bg-rose-900"],
+html[data-theme="light"] [class*="bg-red-500/"],
+html[data-theme="light"] [class*="bg-red-950"],
+html[data-theme="light"] [class*="bg-red-900"] {
+  background-color: #FFF1F2 !important;
+  border-color: #FDA4AF !important;
+  color: #9F1239 !important;
+}
+
+html[data-theme="light"] [class*="bg-purple-500/"],
+html[data-theme="light"] [class*="bg-purple-950"],
+html[data-theme="light"] [class*="bg-purple-900"],
+html[data-theme="light"] [class*="bg-violet-500/"] {
+  background-color: #F3E8FF !important;
+  border-color: #C084FC !important;
+  color: #6B21A8 !important;
+}
+
+/* ============================================================================
+   6. BORDERS, DIVIDERS, TABLES & HOVER STATES
+   ============================================================================ */
+html[data-theme="light"] .border-zinc-900,
+html[data-theme="light"] .border-zinc-800,
+html[data-theme="light"] [class*="border-zinc-800/"],
+html[data-theme="light"] .border-zinc-700,
+html[data-theme="light"] [class*="border-zinc-700/"],
+html[data-theme="light"] .border-slate-900,
+html[data-theme="light"] .border-slate-800,
+html[data-theme="light"] .border-slate-700,
+html[data-theme="light"] [class*="border-white/"] {
+  border-color: #E6DFD3 !important;
+}
+
+html[data-theme="light"] [class*="border-amber-500/"],
+html[data-theme="light"] [class*="border-amber-400/"] {
+  border-color: #E5DEC9 !important;
+}
+
+html[data-theme="light"] .border-amber-500,
+html[data-theme="light"] .border-amber-400 {
+  border-color: #D97706 !important;
+}
+
+html[data-theme="light"] .divide-zinc-900 > :not([hidden]) ~ :not([hidden]),
+html[data-theme="light"] .divide-zinc-800 > :not([hidden]) ~ :not([hidden]),
+html[data-theme="light"] .divide-zinc-700 > :not([hidden]) ~ :not([hidden]),
+html[data-theme="light"] .divide-slate-800 > :not([hidden]) ~ :not([hidden]) {
+  border-color: #E6DFD3 !important;
+}
+
+/* Tables & Data Grids */
+html[data-theme="light"] table {
+  background-color: transparent !important;
+  color: #1C1917 !important;
+}
+
+html[data-theme="light"] table thead,
+html[data-theme="light"] table thead tr {
+  background: #F3EDE2 !important;
+  border-bottom: 1px solid #E5DEC9 !important;
+  color: #44403C !important;
+}
+
+html[data-theme="light"] table thead th {
+  color: #44403C !important;
+  font-weight: 800 !important;
+}
+
+html[data-theme="light"] table tbody tr {
+  border-bottom: 1px solid #E6DFD3 !important;
+  color: #1C1917 !important;
+}
+
+html[data-theme="light"] table tbody tr:hover {
+  background: #FAF7F2 !important;
+}
+
+/* Hover States */
+html[data-theme="light"] .hover\:bg-zinc-900:hover,
+html[data-theme="light"] .hover\:bg-zinc-800:hover,
+html[data-theme="light"] .hover\:bg-zinc-800\/80:hover,
+html[data-theme="light"] .hover\:bg-zinc-800\/60:hover,
+html[data-theme="light"] .hover\:bg-zinc-700:hover,
+html[data-theme="light"] .hover\:bg-slate-800:hover,
+html[data-theme="light"] .hover\:bg-white\/5:hover,
+html[data-theme="light"] .hover\:bg-white\/10:hover {
+  background-color: #F5EFE6 !important;
+  color: #1C1917 !important;
+}
+
+/* Scrollbars in Light Theme */
+html[data-theme="light"] ::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+html[data-theme="light"] ::-webkit-scrollbar-track {
+  background: #F2ECE3 !important;
+}
+
+html[data-theme="light"] ::-webkit-scrollbar-thumb {
+  background: #D5C8B6 !important;
+  border-radius: 9999px;
+}
+
+html[data-theme="light"] ::-webkit-scrollbar-thumb:hover {
+  background: #D97706 !important;
+}
+
+/* Landing Page, Master Login & Client PWA Scoped Overrides */
+html[data-theme="light"] .rc-home-card,
+html[data-theme="light"] .rc-login-card,
+html[data-theme="light"] .rc-master-card {
+  background: #FFFFFF !important;
+  border-color: #E5DEC9 !important;
+  box-shadow: var(--shadow-card) !important;
+  color: #1C1917 !important;
+}
+
+html[data-theme="light"] .mobile-frame,
+html[data-theme="light"] .pwa-shell,
+html[data-theme="light"] .member-home-shell {
+  background: #FAF8F5 !important;
+  color: #1C1917 !important;
+  border-color: #E5DEC9 !important;
+}
+
+html[data-theme="light"] .top-burger-row,
+html[data-theme="light"] .bottom-nav,
+html[data-theme="light"] .glass-card,
+html[data-theme="light"] .promo-card,
+html[data-theme="light"] .menu-card,
+html[data-theme="light"] .action-pill,
+html[data-theme="light"] .burger-btn,
+html[data-theme="light"] .icon-btn {
+  background: #FFFFFF !important;
+  border-color: #E5DEC9 !important;
+  color: #1C1917 !important;
+  box-shadow: var(--shadow-card) !important;
+}
+
+html[data-theme="light"] .burger-line {
+  background: #1C1917 !important;
+}
+
+/* ============================================================================
+   7. TOOLTIPS, RECHARTS (<Tooltip />), POPOVERS & HOVER INFO BOXES
+   ============================================================================ */
+
+/* 7A. Recharts Default Tooltip & Wrapper Overrides */
+html[data-theme="light"] .recharts-default-tooltip,
+html[data-theme="light"] .recharts-tooltip-wrapper .recharts-default-tooltip {
+  background: linear-gradient(180deg, #FFFFFF 0%, #FAF8F5 100%) !important;
+  background-color: #FFFFFF !important;
+  border: 1px solid #E5DEC9 !important;
+  border-radius: 12px !important;
+  box-shadow: 0 10px 25px -5px rgba(28, 25, 23, 0.12), 0 4px 10px -2px rgba(28, 25, 23, 0.06) !important;
+  color: #1C1917 !important;
+  padding: 10px 14px !important;
+}
+
+html[data-theme="light"] .recharts-tooltip-label,
+html[data-theme="light"] .recharts-tooltip-wrapper .recharts-tooltip-label {
+  color: #1C1917 !important;
+  font-weight: 700 !important;
+  border-bottom: 1px solid #E6DFD3 !important;
+  padding-bottom: 5px !important;
+  margin-bottom: 6px !important;
+}
+
+html[data-theme="light"] .recharts-tooltip-item-list {
+  padding-top: 2px !important;
+}
+
+html[data-theme="light"] .recharts-tooltip-item,
+html[data-theme="light"] .recharts-tooltip-wrapper .recharts-tooltip-item {
+  color: #57534E !important;
+  font-weight: 600 !important;
+  padding-top: 2px !important;
+  padding-bottom: 2px !important;
+}
+
+html[data-theme="light"] .recharts-tooltip-item-name,
+html[data-theme="light"] .recharts-tooltip-item-separator {
+  color: #57534E !important;
+  font-weight: 600 !important;
+}
+
+html[data-theme="light"] .recharts-tooltip-item-value {
+  color: #D97706 !important;
+  font-weight: 800 !important;
+}
+
+/* Recharts bar/area hover cursor highlight & chart data labels */
+html[data-theme="light"] .recharts-tooltip-cursor {
+  fill: rgba(217, 119, 6, 0.08) !important;
+  stroke: #D97706 !important;
+}
+
+html[data-theme="light"] .recharts-label-list text,
+html[data-theme="light"] .recharts-cartesian-axis-tick-value {
+  fill: #44403C !important;
+}
+
+/* 7B. Custom UI Tooltips, Popovers & Hover Info Boxes */
+html[data-theme="light"] .rc-tooltip-box,
+html[data-theme="light"] [role="tooltip"],
+html[data-theme="light"] [class*="group-hover:opacity-100"][class*="bg-"],
+html[data-theme="light"] [class*="group-hover:block"][class*="bg-"],
+html[data-theme="light"] .rc-floorplan-rotate-pill {
+  background: linear-gradient(180deg, #FFFFFF 0%, #FAF8F5 100%) !important;
+  background-color: #FAF8F5 !important;
+  border: 1px solid #E5DEC9 !important;
+  box-shadow: 0 10px 25px -5px rgba(28, 25, 23, 0.12), 0 4px 10px -2px rgba(28, 25, 23, 0.06) !important;
+  color: #1C1917 !important;
+}
+
+/* Primary Title / Header inside Custom Tooltip */
+html[data-theme="light"] .rc-tooltip-box .rc-tooltip-title,
+html[data-theme="light"] [role="tooltip"] .rc-tooltip-title {
+  color: #1C1917 !important;
+  font-weight: 700 !important;
+  border-color: #E6DFD3 !important;
+}
+
+html[data-theme="light"] .rc-tooltip-box .rc-tooltip-title span:first-child,
+html[data-theme="light"] [role="tooltip"] .rc-tooltip-title span:first-child {
+  color: #1C1917 !important;
+  font-weight: 700 !important;
+}
+
+/* Secondary Description / Label inside Custom Tooltip */
+html[data-theme="light"] .rc-tooltip-box .rc-tooltip-label,
+html[data-theme="light"] [role="tooltip"] .rc-tooltip-label {
+  color: #57534E !important;
+}
+
+/* Secondary Value inside Custom Tooltip */
+html[data-theme="light"] .rc-tooltip-box .rc-tooltip-value,
+html[data-theme="light"] [role="tooltip"] .rc-tooltip-value {
+  color: #1C1917 !important;
+  font-weight: 700 !important;
+}
+
+/* Highlight / Numeric Accent inside Custom Tooltip */
+html[data-theme="light"] .rc-tooltip-box .rc-tooltip-accent,
+html[data-theme="light"] [role="tooltip"] .rc-tooltip-accent {
+  color: #D97706 !important;
+  font-weight: 800 !important;
+}
+
+/* Dividers & Borders inside Custom Tooltip / Popover */
+html[data-theme="light"] .rc-tooltip-box [class*="border-"],
+html[data-theme="light"] [role="tooltip"] [class*="border-"] {
+  border-color: #E6DFD3 !important;
+}
+
+/* Tooltip Caret / Arrow matching Light Theme Box */
+html[data-theme="light"] .rc-tooltip-arrow,
+html[data-theme="light"] [role="tooltip"] .tooltip-arrow {
+  background-color: #FAF8F5 !important;
+  border-color: #E5DEC9 !important;
+}
+
+/* ============================================================================
+   RULE 8: WAITER POS "+ NOTES" BUTTON, PREVIEW & REQUEST MODAL (.rc-notes-*)
+   ============================================================================ */
+
+html[data-theme="light"] .rc-notes-modal {
+  background: #FAF8F5 !important;
+  background-color: #FAF8F5 !important;
+  border: 1.5px solid #E5DEC9 !important;
+  box-shadow: 0 20px 50px -10px rgba(28, 25, 23, 0.18), 0 8px 20px -4px rgba(28, 25, 23, 0.08) !important;
+  color: #1C1917 !important;
+}
+
+html[data-theme="light"] .rc-notes-modal > div:first-child {
+  background: #F5EFE6 !important;
+  background-color: #F5EFE6 !important;
+  border-bottom: 1px solid #E5DEC9 !important;
+}
+
+html[data-theme="light"] .rc-notes-modal h3,
+html[data-theme="light"] .rc-notes-modal label {
+  color: #1C1917 !important;
+}
+
+html[data-theme="light"] .rc-notes-modal p {
+  color: #57534E !important;
+}
+
+html[data-theme="light"] .rc-notes-modal p strong {
+  color: #B45309 !important;
+}
+
+html[data-theme="light"] .rc-notes-modal textarea {
+  background: #FFFFFF !important;
+  background-color: #FFFFFF !important;
+  border: 1px solid #E5DEC9 !important;
+  color: #1C1917 !important;
+}
+
+html[data-theme="light"] .rc-notes-modal textarea:focus {
+  border-color: #D97706 !important;
+  box-shadow: 0 0 0 3px rgba(217, 119, 6, 0.15) !important;
+}
+
+html[data-theme="light"] .rc-notes-chip {
+  background: #FFFFFF !important;
+  background-color: #FFFFFF !important;
+  border: 1px solid #E5DEC9 !important;
+  color: #1C1917 !important;
+}
+
+html[data-theme="light"] .rc-notes-chip:hover {
+  background: #FEF3C7 !important;
+  background-color: #FEF3C7 !important;
+  border-color: #D97706 !important;
+  color: #92400E !important;
+}
+
+html[data-theme="light"] .rc-notes-chip.bg-amber-500 {
+  background: linear-gradient(135deg, #F59E0B 0%, #D97706 100%) !important;
+  border-color: #B45309 !important;
+  color: #FFFFFF !important;
+}
+
+html[data-theme="light"] .rc-notes-btn {
+  background: #FFFFFF !important;
+  background-color: #FFFFFF !important;
+  border: 1px solid #E5DEC9 !important;
+  color: #1C1917 !important;
+}
+
+html[data-theme="light"] .rc-notes-btn:hover {
+  background: #FEF3C7 !important;
+  background-color: #FEF3C7 !important;
+  border-color: #D97706 !important;
+  color: #92400E !important;
+}
+
+html[data-theme="light"] .rc-notes-preview {
+  background: #FFFBEB !important;
+  background-color: #FFFBEB !important;
+  border: 1px solid #FCD34D !important;
+  color: #92400E !important;
+}
+
+

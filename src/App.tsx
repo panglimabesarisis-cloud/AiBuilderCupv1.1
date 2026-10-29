@@ -21,7 +21,14 @@ import { ThemeProvider } from './context/ThemeContext';
 import { AccessControlProvider, useAccessControl } from './context/AccessControlContext';
 import { AppDataProvider } from './context/AppDataContext';
 import { ShieldAlert, Lock, ArrowRight } from 'lucide-react';
-import { useAppNavigation, ResolvedAppRoute, RequireAuth, RootRedirect } from './router';
+import {
+  useAppNavigation,
+  ResolvedAppRoute,
+  ProtectedRoute,
+  PublicOnlyRoute,
+  RequireAuth,
+  RootRedirect,
+} from './router';
 import { startStockSyncService } from './services/stockSyncService';
 import { LoginPage } from './components/common/LoginPage';
 import { PosPinGate } from './components/pos/PosPinGate';
@@ -749,13 +756,13 @@ function AppRoutes() {
 
   return (
     <Routes>
-      {/* Halaman Wajib Login */}
-      <Route path="/login" element={<LoginPage />} />
+      {/* Halaman Login: jika sudah login, otomatis redirect ke /dashboard */}
+      <Route path="/login" element={<PublicOnlyRoute><LoginPage /></PublicOnlyRoute>} />
 
       {/* Root redirect: / -> /login (jika belum login) atau /dashboard (jika sudah login) */}
       <Route path="/" element={<RootRedirect />} />
 
-      {/* Route Mandiri Khusus PWA */}
+      {/* Route Mandiri Khusus PWA Pelanggan */}
       <Route path="/client-pwa" element={<ClientPwaStandalone />} />
       <Route path="/client-pwa/*" element={<ClientPwaStandalone />} />
       <Route path="/pwa" element={<Navigate to="/client-pwa" replace />} />
@@ -763,15 +770,15 @@ function AppRoutes() {
       <Route path="/clienthome" element={<Navigate to="/client-pwa/clienthome" replace />} />
       <Route path="/clienthome/*" element={<Navigate to="/client-pwa/clienthome" replace />} />
 
-      {/* Semua route wajib login melalui RequireAuth */}
-      <Route path="/waiters" element={<RequireAuth><DashboardLayout /></RequireAuth>} />
-      <Route path="/waiters/*" element={<RequireAuth><DashboardLayout /></RequireAuth>} />
-      <Route path="/kitchen" element={<RequireAuth><DashboardLayout /></RequireAuth>} />
-      <Route path="/kitchen/*" element={<RequireAuth><DashboardLayout /></RequireAuth>} />
-      <Route path="/dashboard" element={<RequireAuth><DashboardLayout /></RequireAuth>} />
-      <Route path="/dashboard/*" element={<RequireAuth><DashboardLayout /></RequireAuth>} />
-      <Route path="/pos" element={<RequireAuth><DashboardLayout /></RequireAuth>} />
-      <Route path="*" element={<RequireAuth><DashboardLayout /></RequireAuth>} />
+      {/* Semua route Admin / Dashboard / POS / Kitchen / Waiters wajib login melalui ProtectedRoute */}
+      <Route path="/waiters" element={<ProtectedRoute><DashboardLayout /></ProtectedRoute>} />
+      <Route path="/waiters/*" element={<ProtectedRoute><DashboardLayout /></ProtectedRoute>} />
+      <Route path="/kitchen" element={<ProtectedRoute><DashboardLayout /></ProtectedRoute>} />
+      <Route path="/kitchen/*" element={<ProtectedRoute><DashboardLayout /></ProtectedRoute>} />
+      <Route path="/dashboard" element={<ProtectedRoute><DashboardLayout /></ProtectedRoute>} />
+      <Route path="/dashboard/*" element={<ProtectedRoute><DashboardLayout /></ProtectedRoute>} />
+      <Route path="/pos" element={<ProtectedRoute><DashboardLayout /></ProtectedRoute>} />
+      <Route path="*" element={<ProtectedRoute><DashboardLayout /></ProtectedRoute>} />
     </Routes>
   );
 }

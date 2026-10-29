@@ -1,7 +1,7 @@
 import React from 'react';
 import { Link, LinkProps, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import type { ProductCartonTabType } from './components/common/Sidebar';
-import { useAccessControl } from './context/AccessControlContext';
+import { useAccessControl, hasValidAuthSession } from './context/AccessControlContext';
 
 export interface ResolvedAppRoute {
   activeTab: string;
@@ -1541,19 +1541,33 @@ export const AppLink: React.FC<AppLinkProps> = ({ to, children, ...rest }) => {
   );
 };
 
-export const RequireAuth: React.FC<{ children: React.ReactElement }> = ({ children }) => {
+export const ProtectedRoute: React.FC<{ children: React.ReactElement }> = ({ children }) => {
   const { isAuthenticated } = useAccessControl();
   const location = useLocation();
+  const validSession = isAuthenticated && hasValidAuthSession();
 
-  if (!isAuthenticated) {
+  if (!validSession) {
     return <Navigate to="/login" state={{ from: location }} replace />;
+  }
+  return children;
+};
+
+export const RequireAuth = ProtectedRoute;
+
+export const PublicOnlyRoute: React.FC<{ children: React.ReactElement }> = ({ children }) => {
+  const { isAuthenticated } = useAccessControl();
+  const validSession = isAuthenticated && hasValidAuthSession();
+
+  if (validSession) {
+    return <Navigate to="/dashboard" replace />;
   }
   return children;
 };
 
 export const RootRedirect: React.FC = () => {
   const { isAuthenticated } = useAccessControl();
-  return <Navigate to={isAuthenticated ? '/dashboard/beranda' : '/login'} replace />;
+  const validSession = isAuthenticated && hasValidAuthSession();
+  return <Navigate to={validSession ? '/dashboard' : '/login'} replace />;
 };
 
 

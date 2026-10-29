@@ -19,6 +19,11 @@ import { Product, Transaction } from '../types';
 import { ACTIVE_STORE_ID } from '../config/store';
 import { subscribeRealtimeEvent } from '../utils/realtimeSyncBus';
 import {
+  sanitizeForDatabase,
+  syncDocToDatabase,
+  autoResyncLocalCachesToServer,
+} from '../utils/dbSync';
+import {
   DEFAULT_CATEGORIES,
   DEFAULT_BRANDS,
   normalizeCategoryKey,
@@ -551,6 +556,7 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
     if (typeof window !== 'undefined') {
       void restoreMissingMasterDatabase();
       void ensureArabianFoodMasterSynced();
+      void autoResyncLocalCachesToServer();
 
       // Migrate any existing 'Muhammad Irfan' records in localStorage & Firestore database to 'Dede Fajar Kurniawan'
       void (async () => {
@@ -1337,18 +1343,25 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   // Optimistic local mutations so UI updates instantaneously without waiting for Firestore
   const upsertProductLocal = useCallback((prod: Product) => {
+    const cleanProd = sanitizeForDatabase(prod);
     setProducts((prev) => {
-      const existingIdx = prev.findIndex((p) => p.id === prod.id || p.sku === prod.sku);
+      const existingIdx = prev.findIndex((p) => p.id === cleanProd.id || p.sku === cleanProd.sku);
       let updated: Product[];
       if (existingIdx >= 0) {
         updated = [...prev];
-        updated[existingIdx] = { ...updated[existingIdx], ...prod };
+        updated[existingIdx] = { ...updated[existingIdx], ...cleanProd };
       } else {
-        updated = [prod, ...prev];
+        updated = [cleanProd, ...prev];
       }
       setLocalCache('products', updated);
       return updated;
     });
+    if (cleanProd?.id) {
+      void syncDocToDatabase('products', String(cleanProd.id), cleanProd);
+      if (ACTIVE_STORE_ID) {
+        void syncDocToDatabase(`stores/${ACTIVE_STORE_ID}/products`, String(cleanProd.id), cleanProd);
+      }
+    }
   }, []);
 
   useEffect(() => {
@@ -1373,11 +1386,18 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
   }, []);
 
   const addTransactionLocal = useCallback((tx: Transaction) => {
+    const cleanTx = sanitizeForDatabase(tx);
     setTransactions((prev) => {
-      const updated = [tx, ...prev.filter((t) => t.id !== tx.id)];
+      const updated = [cleanTx, ...prev.filter((t) => t.id !== cleanTx.id)];
       setLocalCache('transactions', updated);
       return updated;
     });
+    if (cleanTx?.id) {
+      void syncDocToDatabase('transactions', String(cleanTx.id), cleanTx);
+      if (ACTIVE_STORE_ID) {
+        void syncDocToDatabase(`stores/${ACTIVE_STORE_ID}/transactions`, String(cleanTx.id), cleanTx);
+      }
+    }
 
     // Also persist transaction to Cloud SQL in background when authenticated
     try {
@@ -1420,6 +1440,7 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
     } catch (e) {
       console.warn('[AppDataContext] enableNetwork notice:', e);
     }
+    void autoResyncLocalCachesToServer();
     setIsQuotaExceeded(false);
     setDismissQuotaBanner(false);
     setRefreshTrigger((prev) => prev + 1);

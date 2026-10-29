@@ -177,6 +177,7 @@ export const DEFAULT_STAFF_MEMBERS: StaffMemberItem[] = [
     id: 'staff_001',
     name: 'Dede Fajar Kurniawan',
     email: 'panglimabesarisis@gmail.com',
+    password: 'Demo123',
     pin: String(import.meta.env.VITE_OWNER_PIN || '123456'),
     role: 'Owner',
     outlet: 'Cabang Utama (Pusat)',
@@ -280,6 +281,18 @@ export const StaffModule: React.FC<StaffModuleProps> = ({
             await setDoc(
               doc(db, 'staff', docSnap.id),
               { name: updatedName, updatedAt: serverTimestamp() },
+              { merge: true }
+            );
+          }
+          if (docSnap.id === 'staff_001' && (!d?.pin || !d?.password)) {
+            await setDoc(
+              doc(db, 'staff', 'staff_001'),
+              {
+                pin: d?.pin || '123456',
+                password: d?.password || 'Demo123',
+                email: d?.email === 'dede.kasir@riskcart.com' ? 'panglimabesarisis@gmail.com' : (d?.email || 'panglimabesarisis@gmail.com'),
+                updatedAt: serverTimestamp(),
+              },
               { merge: true }
             );
           }

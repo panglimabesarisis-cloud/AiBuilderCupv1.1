@@ -8,13 +8,15 @@ coverage/
 
 # Environment Variables & Secrets (Strict Block for Public GitHub)
 .env
+.env*
 .env.local
 .env.development
 .env.production
 .env.*
 !.env.example
 
-# Service Accounts, Private Keys & Firebase Admin Credentials
+# Firebase Applet Configuration & Service Accounts
+firebase-applet-config.json
 *serviceAccount*.json
 *firebase-adminsdk*.json
 firebase-adminsdk*.json
@@ -27,4 +29,3 @@ firebase-adminsdk*.json
 public/assets/aistudio/
 *.blueprint.json
 firebase-blueprint.json
-

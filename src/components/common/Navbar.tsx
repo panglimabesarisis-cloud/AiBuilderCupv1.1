@@ -201,11 +201,16 @@ export const Navbar: React.FC<NavbarProps> = ({
       await logout();
     } catch {
       try {
-        localStorage.clear();
-        sessionStorage.clear();
+        window.localStorage.removeItem('riskcart_auth_session_v2');
+        window.sessionStorage.removeItem('riskcart_auth_session_v2');
+        window.localStorage.removeItem('riskcart_active_cashier');
+        window.localStorage.removeItem('riskcart_server_token');
+        window.sessionStorage.removeItem('riskcart_server_token');
+        window.localStorage.setItem('riskcart_auth_logged_in', 'false');
+        window.sessionStorage.setItem('riskcart_auth_logged_in', 'false');
       } catch {}
     } finally {
-      window.location.replace('/login');
+      navigate('/login', { replace: true });
     }
   };
 

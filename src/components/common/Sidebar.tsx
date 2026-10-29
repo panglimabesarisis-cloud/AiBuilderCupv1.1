@@ -32,6 +32,7 @@ import { LanguageDropdown } from './LanguageDropdown';
 import { useLanguage, applyGoogleTranslateCookie } from '../../context/LanguageContext';
 import { sanitizeGoogleTranslateDOM } from '../../utils/i18nEngine';
 import { useAppData } from '../../context/AppDataContext';
+import { useAccessControl } from '../../context/AccessControlContext';
 import { AppLink, getPathForTab, getPathForProductSubTab, useAppNavigation } from '../../router';
 import { useSidebarMenuConfig } from '../../services/sidebarMenuService';
 import { SidebarGroupsRenderer } from './SidebarGroupsRenderer';
@@ -694,24 +695,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           )}
 
           {/* User profile & currency footer */}
-          {!collapsed && (
-            <div
-              translate="no"
-              className="notranslate pt-1 flex items-center justify-between text-[11px] text-amber-100/70"
-            >
-              <div className="flex items-center gap-1.5">
-                <span className="w-2 h-2 rounded-full bg-emerald-400" />
-                <span className="font-semibold text-amber-100">Admin User</span>
-              </div>
-              <button
-                onClick={() => setCurrencyMode(currencyMode === 'IDR' ? 'USD' : 'IDR')}
-                className="font-bold text-[10px] px-2 py-0.5 rounded bg-[#16120b] text-amber-300 hover:bg-amber-500/20 transition border border-amber-500/40 cursor-pointer"
-                title="Toggle currency mode (IDR / USD)"
-              >
-                {currencyMode}
-              </button>
-            </div>
-          )}
+          {!collapsed && <SidebarUserFooter currencyMode={currencyMode} setCurrencyMode={setCurrencyMode} />}
         </div>
       </div>
     );
@@ -738,5 +722,41 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </div>
       )}
     </>
+  );
+};
+
+const SidebarUserFooter: React.FC<{
+  currencyMode: 'IDR' | 'USD' | 'EUR' | 'SGD';
+  setCurrencyMode: (mode: 'IDR' | 'USD' | 'EUR' | 'SGD') => void;
+}> = ({ currencyMode, setCurrencyMode }) => {
+  const { activeCashier, isAuthenticated } = useAccessControl();
+  const displayName =
+    isAuthenticated && activeCashier?.name && activeCashier.name !== 'Belum Login'
+      ? activeCashier.name
+      : 'Belum Login';
+
+  return (
+    <div
+      translate="no"
+      className="notranslate pt-1 flex items-center justify-between text-[11px] text-amber-100/70 gap-2"
+    >
+      <div className="flex items-center gap-1.5 min-w-0">
+        <span
+          className={`w-2 h-2 rounded-full shrink-0 ${
+            isAuthenticated ? 'bg-emerald-400' : 'bg-zinc-500'
+          }`}
+        />
+        <span className="font-semibold text-amber-100 truncate" title={displayName}>
+          {displayName}
+        </span>
+      </div>
+      <button
+        onClick={() => setCurrencyMode(currencyMode === 'IDR' ? 'USD' : 'IDR')}
+        className="font-bold text-[10px] px-2 py-0.5 rounded bg-[#16120b] text-amber-300 hover:bg-amber-500/20 transition border border-amber-500/40 cursor-pointer shrink-0"
+        title="Toggle currency mode (IDR / USD)"
+      >
+        {currencyMode}
+      </button>
+    </div>
   );
 };

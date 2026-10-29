@@ -1,9 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { useAccessControl } from '../../context/AccessControlContext';
+import { useAccessControl, hasValidAuthSession } from '../../context/AccessControlContext';
 
 export const LoginPage: React.FC = () => {
-  const { loginWithCredentials } = useAccessControl();
+  const { isAuthenticated, loginWithCredentials } = useAccessControl();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -13,17 +13,36 @@ export const LoginPage: React.FC = () => {
   const [statusMessage, setStatusMessage] = useState<{ text: string; type: 'info' | 'error' | 'ok' } | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  const getRedirectDestination = () => {
+    const fromPath = (location.state as { from?: { pathname?: string } } | null)?.from?.pathname;
+    if (fromPath && fromPath !== '/login' && fromPath !== '/') {
+      return fromPath;
+    }
+    return '/dashboard';
+  };
+
+  useEffect(() => {
+    if (isAuthenticated && hasValidAuthSession()) {
+      navigate(getRedirectDestination(), { replace: true });
+    }
+  }, [isAuthenticated, navigate]);
+
   const handleFillDemo = () => {
-    setEmail('demo@mayamandiri.com');
+    setEmail('panglimabesarisis@gmail.com');
     setPassword('Demo123');
     setStatusMessage({
-      text: 'Kredensial Demo Admin terisi (demo@mayamandiri.com / Demo123). Klik Sign In atau gunakan tombol Login Cepat di bawah.',
+      text: 'Kredensial Owner Utama terisi (panglimabesarisis@gmail.com | Pass: Demo123 atau PIN: 123456). Klik Sign In untuk masuk.',
       type: 'info',
     });
   };
 
-  const handleQuickDemoLogin = async (roleType: 'admin' | 'kasir') => {
-    const targetEmail = roleType === 'admin' ? 'demo@mayamandiri.com' : 'kasir@mayamandiri.com';
+  const handleQuickDemoLogin = async (roleType: 'owner' | 'admin' | 'kasir') => {
+    const targetEmail =
+      roleType === 'owner'
+        ? 'panglimabesarisis@gmail.com'
+        : roleType === 'admin'
+        ? 'demo@mayamandiri.com'
+        : 'kasir@mayamandiri.com';
     const targetPass = 'Demo123';
     setEmail(targetEmail);
     setPassword(targetPass);
@@ -33,13 +52,13 @@ export const LoginPage: React.FC = () => {
       const result = await loginWithCredentials(targetEmail, targetPass);
       if (result.ok) {
         setStatusMessage({ text: result.message, type: 'ok' });
-        navigate('/dashboard/beranda', { replace: true });
+        navigate(getRedirectDestination(), { replace: true });
       } else {
         setStatusMessage({ text: result.message, type: 'error' });
       }
     } catch {
       setStatusMessage({
-        text: 'Terjadi kesalahan saat masuk ke akun Demo. Silakan coba lagi.',
+        text: 'Terjadi kesalahan saat masuk ke akun. Silakan coba lagi.',
         type: 'error',
       });
     } finally {
@@ -49,9 +68,11 @@ export const LoginPage: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email.trim() || !password.trim()) {
+    const cleanEmailInput = email.trim();
+    const cleanPassInput = password.trim();
+    if (!cleanEmailInput || !cleanPassInput) {
       setStatusMessage({
-        text: 'Please enter both Email and Password.',
+        text: 'Silakan masukkan Email/Username dan Password/PIN Anda terlebih dahulu.',
         type: 'error',
       });
       return;
@@ -60,16 +81,21 @@ export const LoginPage: React.FC = () => {
     setIsSubmitting(true);
     setStatusMessage(null);
     try {
-      const result = await loginWithCredentials(email, password);
+      const result = await loginWithCredentials(cleanEmailInput, cleanPassInput);
       if (result.ok) {
         setStatusMessage({ text: result.message, type: 'ok' });
-        navigate('/dashboard/beranda', { replace: true });
+        navigate(getRedirectDestination(), { replace: true });
       } else {
-        setStatusMessage({ text: result.message, type: 'error' });
+        setStatusMessage({
+          text:
+            result.message ||
+            'Email/Username atau Password/PIN salah. Silakan periksa kembali kredensial Anda.',
+          type: 'error',
+        });
       }
     } catch {
       setStatusMessage({
-        text: 'An error occurred while signing in. Please try again.',
+        text: 'Terjadi kesalahan saat memverifikasi akun. Silakan coba lagi.',
         type: 'error',
       });
     } finally {
@@ -713,7 +739,7 @@ export const LoginPage: React.FC = () => {
 
             <form id="loginForm" noValidate onSubmit={handleSubmit}>
               <div className="field">
-                <label htmlFor="email">Email</label>
+                <label htmlFor="email">Email / Username</label>
                 <div className="input">
                   <svg className="ico" viewBox="0 0 24 24" aria-hidden="true">
                     <rect x="3" y="5" width="18" height="14" rx="2.5" />
@@ -722,13 +748,14 @@ export const LoginPage: React.FC = () => {
                   <input
                     id="email"
                     name="email"
-                    type="email"
+                    type="text"
+                    inputMode="email"
                     value={email}
                     onChange={(e) => {
                       setEmail(e.target.value);
                       if (statusMessage) setStatusMessage(null);
                     }}
-                    placeholder="Enter your email"
+                    placeholder="panglimabesarisis@gmail.com / demo@mayamandiri.com"
                     autoComplete="username"
                     required
                   />
@@ -736,7 +763,7 @@ export const LoginPage: React.FC = () => {
               </div>
 
               <div className="field">
-                <label htmlFor="password">Password</label>
+                <label htmlFor="password">Password / PIN POS</label>
                 <div className="input">
                   <svg className="ico" viewBox="0 0 24 24" aria-hidden="true">
                     <rect x="4" y="11" width="16" height="10" rx="2.5" />
@@ -751,7 +778,7 @@ export const LoginPage: React.FC = () => {
                       setPassword(e.target.value);
                       if (statusMessage) setStatusMessage(null);
                     }}
-                    placeholder="Enter your password"
+                    placeholder="Masukkan Password (Demo123) atau PIN (123456)"
                     autoComplete="current-password"
                     required
                   />
@@ -781,7 +808,7 @@ export const LoginPage: React.FC = () => {
 
               <div className="demo-forgot-row">
                 <div className="demo-info">
-                  <span className="demo-title">SANDBOX DEMO EVALUATION</span>
+                  <span className="demo-title">AKSES CEPAT OWNER & DEMO</span>
                   <span className="demo-pin">
                     Pass: <strong>Demo123</strong> | PIN POS: <strong>123456</strong>
                   </span>
@@ -792,7 +819,7 @@ export const LoginPage: React.FC = () => {
                   id="forgotLink"
                   onClick={handleFillDemo}
                 >
-                  Isi Form Demo
+                  Isi Form Owner
                 </button>
               </div>
 
@@ -812,11 +839,26 @@ export const LoginPage: React.FC = () => {
                 </div>
               )}
 
-              {/* Pintasan 1-Klik Login Cepat Akun Demo (Admin / Kasir) */}
-              <div className="mb-3 p-3 rounded-xl border border-amber-400/35 bg-amber-500/5">
-                <div className="text-[11px] font-extrabold uppercase tracking-wider text-amber-300 mb-2 text-center">
-                  🔑 Login Cepat Akun Demo (Admin / Kasir)
+              {/* Pintasan 1-Klik Login Cepat Owner Utama & Akun Demo */}
+              <div className="mb-3 p-3 rounded-xl border border-amber-400/35 bg-amber-500/5 space-y-2">
+                <div className="text-[11px] font-extrabold uppercase tracking-wider text-amber-300 text-center">
+                  🔑 Login Cepat 1-Klik (Owner Live Database & Demo)
                 </div>
+                <button
+                  type="button"
+                  id="masterOwnerBtn"
+                  disabled={isSubmitting}
+                  onClick={() => void handleQuickDemoLogin('owner')}
+                  className="btn-demo !mb-0 !h-auto w-full py-2.5 px-3 flex flex-col items-center justify-center text-center border-amber-400/70 bg-amber-500/15 hover:bg-amber-500/25"
+                  title="Login 1-Klik sebagai Owner Utama Live Database (panglimabesarisis@gmail.com | Demo123 / 123456)"
+                >
+                  <span className="text-xs font-extrabold text-amber-200 leading-tight">
+                    ⚡ Login Owner Utama (Live Database)
+                  </span>
+                  <span className="text-[10px] font-mono text-amber-100/85">
+                    panglimabesarisis@gmail.com • Pass: Demo123 / PIN: 123456
+                  </span>
+                </button>
                 <div className="grid grid-cols-2 gap-2">
                   <button
                     type="button"

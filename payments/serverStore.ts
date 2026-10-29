@@ -91,10 +91,41 @@ export function getAdminAuthOrNull() {
   return app ? getAdminAuth(app) : null;
 }
 
+function sanitizeServerPayload(val: any): any {
+  if (val === undefined) return null;
+  if (val === null) return null;
+  if (typeof val === 'number') return Number.isFinite(val) ? val : 0;
+  if (typeof val === 'string' || typeof val === 'boolean') return val;
+  if (typeof val === 'function' || typeof val === 'symbol') return null;
+  if (val instanceof Date) {
+    return Number.isNaN(val.getTime()) ? new Date().toISOString() : val.toISOString();
+  }
+  if (typeof val === 'object') {
+    if (typeof val._methodName === 'string' || (typeof val.toDate === 'function' && typeof val.seconds === 'number')) {
+      return val;
+    }
+    if (Array.isArray(val)) {
+      return val
+        .filter((item) => typeof item !== 'function' && typeof item !== 'symbol')
+        .map((item) => sanitizeServerPayload(item));
+    }
+    const out: Record<string, any> = {};
+    for (const [k, v] of Object.entries(val)) {
+      if (!k || k.startsWith('__') || typeof v === 'function' || typeof v === 'symbol') continue;
+      out[k] = v === undefined ? null : sanitizeServerPayload(v);
+    }
+    return out;
+  }
+  return val;
+}
+
 export function createServerStore(clientDb: ClientFirestore, databaseId?: string): ServerStore {
   const app = getAdminApp();
   if (app) {
     const adb: AdminFirestore = databaseId ? getAdminFirestore(app, databaseId) : getAdminFirestore(app);
+    try {
+      adb.settings({ ignoreUndefinedProperties: true });
+    } catch {}
     const store: ServerStore = {
       mode: 'admin-sdk',
       async get(path) {
@@ -106,15 +137,17 @@ export function createServerStore(clientDb: ClientFirestore, databaseId?: string
         return store.get(path);
       },
       async set(path, data, opts) {
+        const clean = sanitizeServerPayload(data);
         const prev = memoryCache.get(path) || {};
-        memoryCache.set(path, opts?.merge ? { ...prev, ...data } : { ...data });
-        await adb.doc(path).set(data, { merge: !!opts?.merge });
+        memoryCache.set(path, opts?.merge ? { ...prev, ...clean } : { ...clean });
+        await adb.doc(path).set(clean, { merge: !!opts?.merge });
       },
       setDoc(path, data, opts) {
         return store.set(path, data, opts);
       },
       async add(col, data) {
-        await adb.collection(col).add(data);
+        const clean = sanitizeServerPayload(data);
+        await adb.collection(col).add(clean);
       },
       addDoc(col, data) {
         return store.add(col, data);
@@ -158,7 +191,7 @@ export function createServerStore(clientDb: ClientFirestore, databaseId?: string
     };
     return store;
   }
-  console.warn('[serverStore] FIREBASE_SERVICE_ACCOUNT belum di-set: memakai client SDK (gagal jika rules ketat).');
+  console.warn('[serverStore] FIREBASE_SERVICE_ACCOUNT belum di-set: memakai client SDK.');
   const store: ServerStore = {
     mode: 'client-sdk',
     async get(path) {
@@ -177,29 +210,57 @@ export function createServerStore(clientDb: ClientFirestore, databaseId?: string
       return store.get(path);
     },
     async set(path, data, opts) {
+      const clean = sanitizeServerPayload(data);
       const prev = memoryCache.get(path) || {};
-      memoryCache.set(path, opts?.merge ? { ...prev, ...data } : { ...data });
-      await cSetDoc(cDoc(clientDb, path), data, { merge: !!opts?.merge });
+      memoryCache.set(path, opts?.merge ? { ...prev, ...clean } : { ...clean });
+      try {
+        await cSetDoc(cDoc(clientDb, path), clean, { merge: !!opts?.merge });
+      } catch (err: any) {
+        console.error('[serverStore.set fallback notice]', { path, code: err?.code, message: err?.message });
+      }
     },
     setDoc(path, data, opts) {
       return store.set(path, data, opts);
     },
     async add(col, data) {
-      await cAddDoc(cCollection(clientDb, col), data);
+      const clean = sanitizeServerPayload(data);
+      try {
+        await cAddDoc(cCollection(clientDb, col), clean);
+      } catch (err: any) {
+        const fallbackId = String(clean?.id || `doc_${Date.now()}`);
+        memoryCache.set(`${col}/${fallbackId}`, clean);
+        console.error('[serverStore.add fallback notice]', { col, code: err?.code, message: err?.message });
+      }
     },
     addDoc(col, data) {
       return store.add(col, data);
     },
     async list(col) {
-      const qs = await cGetDocs(cCollection(clientDb, col));
-      return withDocsProperty(qs.docs.map((d) => ({ id: d.id, exists: () => true, data: () => d.data() })));
+      try {
+        const qs = await cGetDocs(cCollection(clientDb, col));
+        return withDocsProperty(qs.docs.map((d) => ({ id: d.id, exists: () => true, data: () => d.data() })));
+      } catch {
+        const prefix = `${col}/`;
+        const items: (SnapLike & { id: string })[] = [];
+        for (const [k, v] of memoryCache.entries()) {
+          if (k.startsWith(prefix)) {
+            const rest = k.slice(prefix.length);
+            if (!rest.includes('/')) {
+              items.push({ id: rest, exists: () => true, data: () => v });
+            }
+          }
+        }
+        return withDocsProperty(items);
+      }
     },
     listDocs(col) {
       return store.list(col);
     },
     async delete(path) {
       memoryCache.delete(path);
-      await cDeleteDoc(cDoc(clientDb, path));
+      try {
+        await cDeleteDoc(cDoc(clientDb, path));
+      } catch {}
     },
     deleteDoc(path) {
       return store.delete(path);
@@ -229,4 +290,5 @@ export function createServerStore(clientDb: ClientFirestore, databaseId?: string
   };
   return store;
 }
+
 

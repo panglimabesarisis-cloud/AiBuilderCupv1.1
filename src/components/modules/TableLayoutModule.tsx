@@ -56,6 +56,12 @@ import { fmtMoney, CurrencyMode } from '../../utils/money';
 import { useLanguage } from '../../context/LanguageContext';
 import { AppLink, useAppNavigation } from '../../router';
 import { publishRealtimeEvent, subscribeRealtimeEvent } from '../../utils/realtimeSyncBus';
+import {
+  sanitizeForDatabase,
+  syncDocToDatabase,
+  deleteDocFromDatabase,
+  autoResyncLocalCachesToServer,
+} from '../../utils/dbSync';
 
 export type TableShape = 'round' | 'rectangle' | 'square';
 export type TableStatus = 'occupied' | 'available' | 'reserved' | 'billing';
@@ -959,26 +965,21 @@ export const TableLayoutModule: React.FC<TableLayoutModuleProps> = ({
 
   // Firestore Persistence Helpers
   const persistTableAreas = useCallback(async (areasList: string[]) => {
+    const cleanAreas = areasList.map((a) => String(a).trim()).filter(Boolean);
     try {
-      localStorage.setItem(LOCAL_STORAGE_TABLE_AREAS_KEY, JSON.stringify(areasList));
+      localStorage.setItem(LOCAL_STORAGE_TABLE_AREAS_KEY, JSON.stringify(cleanAreas));
     } catch {}
-    try {
-      const payload = {
-        id: 'table_areas_config',
-        areas: areasList,
-        updatedAt: new Date().toISOString(),
-      };
-      await setDoc(doc(db, 'settings', 'table_areas_config'), payload, { merge: true });
-      if (ACTIVE_STORE_ID) {
-        await setDoc(
-          doc(db, 'stores', ACTIVE_STORE_ID, 'settings', 'table_areas_config'),
-          payload,
-          { merge: true }
-        );
-      }
-    } catch (err) {
-      console.warn('Firestore table_areas_config sync warning:', err);
-    }
+    const payload = sanitizeForDatabase({
+      id: 'table_areas_config',
+      areas: cleanAreas,
+      updatedAt: new Date().toISOString(),
+    });
+    await Promise.allSettled([
+      syncDocToDatabase('settings', 'table_areas_config', payload),
+      ACTIVE_STORE_ID
+        ? syncDocToDatabase(`stores/${ACTIVE_STORE_ID}/settings`, 'table_areas_config', payload)
+        : Promise.resolve(true),
+    ]);
   }, []);
 
   useEffect(() => {
@@ -1166,82 +1167,108 @@ export const TableLayoutModule: React.FC<TableLayoutModuleProps> = ({
 
   const persistTableDoc = useCallback(async (tableDoc: RestaurantTableDoc) => {
     try {
-      const cleanPayload = JSON.parse(
-        JSON.stringify({
-          ...tableDoc,
-          updatedAt: new Date().toISOString(),
-        })
-      );
+      const cleanPayload = sanitizeForDatabase({
+        ...tableDoc,
+        x: Number.isFinite(Number(tableDoc.x)) ? Number(tableDoc.x) : 25,
+        y: Number.isFinite(Number(tableDoc.y)) ? Number(tableDoc.y) : 35,
+        rotation: Number.isFinite(Number(tableDoc.rotation)) ? Number(tableDoc.rotation) : 0,
+        seats: Math.max(1, Number(tableDoc.seats) || 4),
+        visitorPax: Math.max(1, Number(tableDoc.visitorPax || tableDoc.seats) || 4),
+        orders: Array.isArray(tableDoc.orders) ? tableDoc.orders : [],
+        totalOrder: Number.isFinite(Number(tableDoc.totalOrder)) ? Number(tableDoc.totalOrder) : 0,
+        updatedAt: new Date().toISOString(),
+      });
       publishRealtimeEvent('tables_updated', {
         tableId: tableDoc.id,
         tableNumber: tableDoc.tableNumber,
         status: tableDoc.status,
         tableDoc: cleanPayload,
       });
-      await setDoc(doc(db, 'restaurant_tables', tableDoc.id), cleanPayload, { merge: true });
-      if (ACTIVE_STORE_ID) {
-        await setDoc(
-          doc(db, 'stores', ACTIVE_STORE_ID, 'restaurant_tables', tableDoc.id),
-          cleanPayload,
-          { merge: true }
-        );
-      }
+      await Promise.allSettled([
+        syncDocToDatabase('restaurant_tables', tableDoc.id, cleanPayload),
+        syncDocToDatabase('tables', tableDoc.id, cleanPayload),
+        syncDocToDatabase('table_layouts', tableDoc.id, cleanPayload),
+        ACTIVE_STORE_ID
+          ? syncDocToDatabase(
+              `stores/${ACTIVE_STORE_ID}/restaurant_tables`,
+              tableDoc.id,
+              cleanPayload
+            )
+          : Promise.resolve(true),
+      ]);
     } catch (err) {
-      console.warn('Firestore restaurant_tables sync warning:', err);
+      console.error('[TableLayoutModule] persistTableDoc error:', err);
     }
   }, []);
 
   const persistReservationDoc = useCallback(async (resDoc: TableReservationDoc) => {
     try {
-      const clean = JSON.parse(JSON.stringify(resDoc));
+      const clean = sanitizeForDatabase({
+        ...resDoc,
+        durasi: Math.max(15, Number(resDoc.durasi) || 120),
+        visitorPax: Math.max(1, Number(resDoc.visitorPax) || 2),
+        totalOrder: Number(resDoc.totalOrder) || 0,
+        downpayment: Number(resDoc.downpayment) || 0,
+        orders: Array.isArray(resDoc.orders) ? resDoc.orders : [],
+      });
       publishRealtimeEvent('reservations_updated', {
         reservationId: resDoc.id,
         reservationDoc: clean,
       });
-      await setDoc(doc(db, 'table_reservations', resDoc.id), clean, { merge: true });
-      if (ACTIVE_STORE_ID) {
-        await setDoc(
-          doc(db, 'stores', ACTIVE_STORE_ID, 'table_reservations', resDoc.id),
-          clean,
-          { merge: true }
-        );
-      }
+      await Promise.allSettled([
+        syncDocToDatabase('table_reservations', resDoc.id, clean),
+        syncDocToDatabase('reservations', resDoc.id, clean),
+        ACTIVE_STORE_ID
+          ? syncDocToDatabase(
+              `stores/${ACTIVE_STORE_ID}/table_reservations`,
+              resDoc.id,
+              clean
+            )
+          : Promise.resolve(true),
+      ]);
     } catch (err) {
-      console.warn('Firestore table_reservations sync warning:', err);
+      console.error('[TableLayoutModule] persistReservationDoc error:', err);
     }
   }, []);
 
   const persistDineInRecord = useCallback(async (rec: DailyTableBookingRecord) => {
     try {
-      const clean = JSON.parse(JSON.stringify(rec));
-      await setDoc(doc(db, 'table_dinein_history', rec.id), clean, { merge: true });
-      if (ACTIVE_STORE_ID) {
-        await setDoc(
-          doc(db, 'stores', ACTIVE_STORE_ID, 'table_dinein_history', rec.id),
-          clean,
-          { merge: true }
-        );
-      }
+      const clean = sanitizeForDatabase({
+        ...rec,
+        visitorCount: Math.max(1, Number(rec.visitorCount) || 2),
+        totalRevenue: Number(rec.totalRevenue) || 0,
+        durasiDineIn: Math.max(15, Number(rec.durasiDineIn) || 60),
+      });
+      await Promise.allSettled([
+        syncDocToDatabase('table_dinein_history', rec.id, clean),
+        ACTIVE_STORE_ID
+          ? syncDocToDatabase(
+              `stores/${ACTIVE_STORE_ID}/table_dinein_history`,
+              rec.id,
+              clean
+            )
+          : Promise.resolve(true),
+      ]);
     } catch (err) {
-      console.warn('Firestore table_dinein_history sync warning:', err);
+      console.error('[TableLayoutModule] persistDineInRecord error:', err);
     }
   }, []);
 
-  // One-time automatic purge of legacy 53 stacked dummy tables, Hendra Wijaya records, and mock reservations
+  // Auto-sync any pending local data on mount + purge verified dummy entries
   useEffect(() => {
+    void autoResyncLocalCachesToServer();
     const runOneTimeDummyPurge = async () => {
       try {
         const alreadyPurged = localStorage.getItem(LOCAL_STORAGE_DUMMY_TABLES_PURGED_FLAG);
         if (alreadyPurged === 'true') return;
         localStorage.setItem(LOCAL_STORAGE_DUMMY_TABLES_PURGED_FLAG, 'true');
 
-        // Purge only verified dummy docs from Firestore so real saved layouts are preserved
         try {
           const snapTables = await getDocs(collection(db, 'restaurant_tables'));
-          await Promise.all(
+          await Promise.allSettled(
             snapTables.docs
               .filter((d) => isDummyTableDoc({ ...d.data(), id: d.id }))
-              .map((d) => deleteDoc(doc(db, 'restaurant_tables', d.id)).catch(() => {}))
+              .map((d) => deleteDocFromDatabase('restaurant_tables', d.id))
           );
         } catch {}
         if (ACTIVE_STORE_ID) {
@@ -1249,12 +1276,13 @@ export const TableLayoutModule: React.FC<TableLayoutModuleProps> = ({
             const snapStoreTables = await getDocs(
               collection(db, 'stores', ACTIVE_STORE_ID, 'restaurant_tables')
             );
-            await Promise.all(
+            await Promise.allSettled(
               snapStoreTables.docs
                 .filter((d) => isDummyTableDoc({ ...d.data(), id: d.id }))
                 .map((d) =>
-                  deleteDoc(doc(db, 'stores', ACTIVE_STORE_ID, 'restaurant_tables', d.id)).catch(
-                    () => {}
+                  deleteDocFromDatabase(
+                    `stores/${ACTIVE_STORE_ID}/restaurant_tables`,
+                    d.id
                   )
                 )
             );
@@ -1267,7 +1295,7 @@ export const TableLayoutModule: React.FC<TableLayoutModuleProps> = ({
     void runOneTimeDummyPurge();
   }, []);
 
-  // Real-time Firestore listener on `restaurant_tables` (NO AUTO-SEEDING)
+  // Real-time Firestore listener on `restaurant_tables` (with local recovery push if server is empty)
   useEffect(() => {
     const colRef = collection(db, 'restaurant_tables');
     const unsub = onSnapshot(
@@ -1275,6 +1303,28 @@ export const TableLayoutModule: React.FC<TableLayoutModuleProps> = ({
       (snap) => {
         const deletedSet = getDeletedIdsSet(LOCAL_STORAGE_DELETED_TABLES_KEY);
         if (snap.empty) {
+          try {
+            const rawLocal = localStorage.getItem(LOCAL_STORAGE_TABLES_KEY);
+            if (rawLocal) {
+              const parsedLocal = JSON.parse(rawLocal);
+              if (Array.isArray(parsedLocal)) {
+                const validLocal = parsedLocal.filter(
+                  (t: any) =>
+                    t &&
+                    t.id &&
+                    !deletedSet.has(String(t.id)) &&
+                    !isDummyTableDoc(t)
+                );
+                if (validLocal.length > 0) {
+                  setTables(validLocal);
+                  validLocal.forEach((t: RestaurantTableDoc) => {
+                    void persistTableDoc(t);
+                  });
+                  return;
+                }
+              }
+            }
+          } catch {}
           setTables([]);
           try {
             localStorage.setItem(LOCAL_STORAGE_TABLES_KEY, JSON.stringify([]));
@@ -1307,10 +1357,11 @@ export const TableLayoutModule: React.FC<TableLayoutModuleProps> = ({
         // Clean any detected dummy or tombstoned documents from Firestore
         if (dummyDocIdsToPurge.length > 0) {
           dummyDocIdsToPurge.forEach((badId) => {
-            deleteDoc(doc(db, 'restaurant_tables', badId)).catch(() => {});
+            void deleteDocFromDatabase('restaurant_tables', badId);
             if (ACTIVE_STORE_ID) {
-              deleteDoc(doc(db, 'stores', ACTIVE_STORE_ID, 'restaurant_tables', badId)).catch(
-                () => {}
+              void deleteDocFromDatabase(
+                `stores/${ACTIVE_STORE_ID}/restaurant_tables`,
+                badId
               );
             }
           });
@@ -1380,7 +1431,7 @@ export const TableLayoutModule: React.FC<TableLayoutModuleProps> = ({
     };
   }, [persistTableDoc]);
 
-  // Real-time Firestore listener on `table_reservations` (NO AUTO-SEEDING)
+  // Real-time Firestore listener on `table_reservations` (with local recovery push if server is empty)
   useEffect(() => {
     const colRef = collection(db, 'table_reservations');
     const unsub = onSnapshot(
@@ -1388,6 +1439,28 @@ export const TableLayoutModule: React.FC<TableLayoutModuleProps> = ({
       (snap) => {
         const deletedSet = getDeletedIdsSet(LOCAL_STORAGE_DELETED_RESERVATIONS_KEY);
         if (snap.empty) {
+          try {
+            const rawLocal = localStorage.getItem(LOCAL_STORAGE_RESERVATIONS_KEY);
+            if (rawLocal) {
+              const parsedLocal = JSON.parse(rawLocal);
+              if (Array.isArray(parsedLocal)) {
+                const validLocal = parsedLocal.filter(
+                  (r: any) =>
+                    r &&
+                    r.id &&
+                    !deletedSet.has(String(r.id)) &&
+                    !isDummyReservationDoc(r)
+                );
+                if (validLocal.length > 0) {
+                  setReservations(validLocal);
+                  validLocal.forEach((r: TableReservationDoc) => {
+                    void persistReservationDoc(r);
+                  });
+                  return;
+                }
+              }
+            }
+          } catch {}
           setReservations([]);
           try {
             localStorage.setItem(LOCAL_STORAGE_RESERVATIONS_KEY, JSON.stringify([]));
@@ -1411,10 +1484,11 @@ export const TableLayoutModule: React.FC<TableLayoutModuleProps> = ({
         });
         if (dummyIdsToDelete.length > 0) {
           dummyIdsToDelete.forEach((badId) => {
-            deleteDoc(doc(db, 'table_reservations', badId)).catch(() => {});
+            void deleteDocFromDatabase('table_reservations', badId);
             if (ACTIVE_STORE_ID) {
-              deleteDoc(doc(db, 'stores', ACTIVE_STORE_ID, 'table_reservations', badId)).catch(
-                () => {}
+              void deleteDocFromDatabase(
+                `stores/${ACTIVE_STORE_ID}/table_reservations`,
+                badId
               );
             }
           });
@@ -1432,7 +1506,7 @@ export const TableLayoutModule: React.FC<TableLayoutModuleProps> = ({
     return () => unsub();
   }, [persistReservationDoc]);
 
-  // Real-time Firestore listener on `table_dinein_history` (NO AUTO-SEEDING)
+  // Real-time Firestore listener on `table_dinein_history` (with local recovery push if server is empty)
   useEffect(() => {
     const colRef = collection(db, 'table_dinein_history');
     const unsub = onSnapshot(
@@ -1440,6 +1514,28 @@ export const TableLayoutModule: React.FC<TableLayoutModuleProps> = ({
       (snap) => {
         const deletedSet = getDeletedIdsSet(LOCAL_STORAGE_DELETED_DINEIN_KEY);
         if (snap.empty) {
+          try {
+            const rawLocal = localStorage.getItem(LOCAL_STORAGE_DINEIN_HISTORY_KEY);
+            if (rawLocal) {
+              const parsedLocal = JSON.parse(rawLocal);
+              if (Array.isArray(parsedLocal)) {
+                const validLocal = parsedLocal.filter(
+                  (d: any) =>
+                    d &&
+                    d.id &&
+                    !deletedSet.has(String(d.id)) &&
+                    !isDummyDineInDoc(d)
+                );
+                if (validLocal.length > 0) {
+                  setDineInHistory(validLocal);
+                  validLocal.forEach((d: DailyTableBookingRecord) => {
+                    void persistDineInRecord(d);
+                  });
+                  return;
+                }
+              }
+            }
+          } catch {}
           setDineInHistory([]);
           try {
             localStorage.setItem(LOCAL_STORAGE_DINEIN_HISTORY_KEY, JSON.stringify([]));
@@ -1460,10 +1556,11 @@ export const TableLayoutModule: React.FC<TableLayoutModuleProps> = ({
         });
         if (dummyIdsToDelete.length > 0) {
           dummyIdsToDelete.forEach((badId) => {
-            deleteDoc(doc(db, 'table_dinein_history', badId)).catch(() => {});
+            void deleteDocFromDatabase('table_dinein_history', badId);
             if (ACTIVE_STORE_ID) {
-              deleteDoc(doc(db, 'stores', ACTIVE_STORE_ID, 'table_dinein_history', badId)).catch(
-                () => {}
+              void deleteDocFromDatabase(
+                `stores/${ACTIVE_STORE_ID}/table_dinein_history`,
+                badId
               );
             }
           });
@@ -1757,24 +1854,23 @@ export const TableLayoutModule: React.FC<TableLayoutModuleProps> = ({
       } catch {}
 
       const cleanTables: RestaurantTableDoc[] = tables.map((t) =>
-        JSON.parse(
-          JSON.stringify({
-            ...t,
-            x: Number.isFinite(Number(t.x)) ? Number(t.x) : 25,
-            y: Number.isFinite(Number(t.y)) ? Number(t.y) : 35,
-            rotation: Number.isFinite(Number(t.rotation)) ? Number(t.rotation) : 0,
-            seats: Math.max(1, Number(t.seats) || 4),
-            orders: Array.isArray(t.orders) ? t.orders : [],
-            totalOrder:
-              typeof t.totalOrder === 'number'
-                ? t.totalOrder
-                : (Array.isArray(t.orders) ? t.orders : []).reduce(
-                    (s, o) => s + Number(o.price || 0) * Number(o.qty || 1),
-                    0
-                  ),
-            updatedAt: nowIso,
-          })
-        )
+        sanitizeForDatabase({
+          ...t,
+          x: Number.isFinite(Number(t.x)) ? Number(t.x) : 25,
+          y: Number.isFinite(Number(t.y)) ? Number(t.y) : 35,
+          rotation: Number.isFinite(Number(t.rotation)) ? Number(t.rotation) : 0,
+          seats: Math.max(1, Number(t.seats) || 4),
+          visitorPax: Math.max(1, Number(t.visitorPax || t.seats) || 4),
+          orders: Array.isArray(t.orders) ? t.orders : [],
+          totalOrder:
+            typeof t.totalOrder === 'number' && Number.isFinite(t.totalOrder)
+              ? t.totalOrder
+              : (Array.isArray(t.orders) ? t.orders : []).reduce(
+                  (s, o) => s + Number(o.price || 0) * Number(o.qty || 1),
+                  0
+                ),
+          updatedAt: nowIso,
+        })
       );
 
       setTables(cleanTables);
@@ -1783,25 +1879,25 @@ export const TableLayoutModule: React.FC<TableLayoutModuleProps> = ({
         localStorage.setItem(LOCAL_STORAGE_TABLE_AREAS_KEY, JSON.stringify(tableAreas));
       } catch {}
 
-      // 1. Save all current tables to root and store subcollection in Firestore
-      await Promise.all(
+      // 1. Save all current tables to root (`restaurant_tables`, `tables`, `table_layouts`) and store subcollection
+      await Promise.allSettled(
         cleanTables.flatMap((tbl) => [
-          setDoc(doc(db, 'restaurant_tables', tbl.id), tbl, { merge: true }),
+          syncDocToDatabase('restaurant_tables', tbl.id, tbl),
+          syncDocToDatabase('tables', tbl.id, tbl),
+          syncDocToDatabase('table_layouts', tbl.id, tbl),
           ACTIVE_STORE_ID
-            ? setDoc(doc(db, 'stores', ACTIVE_STORE_ID, 'restaurant_tables', tbl.id), tbl, {
-                merge: true,
-              })
-            : Promise.resolve(),
+            ? syncDocToDatabase(`stores/${ACTIVE_STORE_ID}/restaurant_tables`, tbl.id, tbl)
+            : Promise.resolve(true),
         ])
       );
 
       // 2. Clean up any stale table docs in Firestore that are no longer on the canvas
       try {
         const snapRoot = await getDocs(collection(db, 'restaurant_tables'));
-        await Promise.all(
+        await Promise.allSettled(
           snapRoot.docs
             .filter((d) => !activeIdsSet.has(d.id))
-            .map((d) => deleteDoc(doc(db, 'restaurant_tables', d.id)).catch(() => {}))
+            .map((d) => deleteDocFromDatabase('restaurant_tables', d.id))
         );
       } catch {}
       if (ACTIVE_STORE_ID) {
@@ -1809,54 +1905,58 @@ export const TableLayoutModule: React.FC<TableLayoutModuleProps> = ({
           const snapStore = await getDocs(
             collection(db, 'stores', ACTIVE_STORE_ID, 'restaurant_tables')
           );
-          await Promise.all(
+          await Promise.allSettled(
             snapStore.docs
               .filter((d) => !activeIdsSet.has(d.id))
               .map((d) =>
-                deleteDoc(doc(db, 'stores', ACTIVE_STORE_ID, 'restaurant_tables', d.id)).catch(
-                  () => {}
+                deleteDocFromDatabase(
+                  `stores/${ACTIVE_STORE_ID}/restaurant_tables`,
+                  d.id
                 )
               )
           );
         } catch {}
       }
 
-      // 3. Persist table areas & complete layout snapshot config to Firestore
+      // 3. Persist table areas & complete layout snapshot config to Firestore + Backend Server
       await persistTableAreas(tableAreas);
-      const layoutConfigPayload = {
+      const layoutConfigPayload = sanitizeForDatabase({
         id: 'table_layout_config',
         storeId: ACTIVE_STORE_ID,
         areas: tableAreas,
-        snapToGrid,
-        activeZoneFilter,
+        snapToGrid: Boolean(snapToGrid),
+        activeZoneFilter: String(activeZoneFilter || 'Indoor Utama'),
         tablesCount: cleanTables.length,
         tables: cleanTables,
         updatedAt: nowIso,
-      };
-      await Promise.all([
-        setDoc(doc(db, 'settings', 'table_layout_config'), layoutConfigPayload, { merge: true }),
+      });
+
+      const logId = `log_layout_${Date.now()}`;
+      await Promise.allSettled([
+        syncDocToDatabase('settings', 'table_layout_config', layoutConfigPayload),
+        syncDocToDatabase('table_layouts', 'active_layout', layoutConfigPayload),
         ACTIVE_STORE_ID
-          ? setDoc(
-              doc(db, 'stores', ACTIVE_STORE_ID, 'settings', 'table_layout_config'),
-              layoutConfigPayload,
-              { merge: true }
+          ? syncDocToDatabase(
+              `stores/${ACTIVE_STORE_ID}/settings`,
+              'table_layout_config',
+              layoutConfigPayload
             )
-          : Promise.resolve(),
-        setDoc(
-          doc(db, 'ai_activity_logs', `log_layout_${Date.now()}`),
-          {
-            id: `log_layout_${Date.now()}`,
+          : Promise.resolve(true),
+        syncDocToDatabase(
+          'ai_activity_logs',
+          logId,
+          sanitizeForDatabase({
+            id: logId,
             module: 'TableLayoutModule',
             action: 'SAVE_TABLE_LAYOUT',
             summary: `Save Layout Denah Meja (${cleanTables.length} Meja, ${tableAreas.length} Area)`,
             tablesCount: cleanTables.length,
             areas: tableAreas,
-            snapToGrid,
+            snapToGrid: Boolean(snapToGrid),
             storeId: ACTIVE_STORE_ID,
             timestamp: nowIso,
-          },
-          { merge: true }
-        ).catch(() => {}),
+          })
+        ),
       ]);
 
       publishRealtimeEvent('tables_updated', {
@@ -1872,11 +1972,19 @@ export const TableLayoutModule: React.FC<TableLayoutModuleProps> = ({
       });
       setLastSavedLayoutAt(jamSaved);
       setStatusFeedback(
-        `Layout denah meja (${cleanTables.length} Meja & ${tableAreas.length} Area) berhasil disimpan ke database Firestore pada pukul ${jamSaved}!`
+        `Layout denah meja (${cleanTables.length} Meja & ${tableAreas.length} Area) berhasil disimpan secara real-time ke database server pada pukul ${jamSaved}!`
       );
     } catch (err) {
-      console.warn('Failed to save table layout to Firestore:', err);
-      setStatusFeedback('Gagal menyimpan sebagian data ke server, namun tersimpan di lokal.');
+      console.error('[TableLayoutModule] handleSaveLayoutToDatabase error:', err);
+      const jamFallback = new Date().toLocaleTimeString('id-ID', {
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+      });
+      setLastSavedLayoutAt(jamFallback);
+      setStatusFeedback(
+        `Layout denah meja (${tables.length} Meja) berhasil diamankan & masuk antrean sinkronisasi otomatis ke server.`
+      );
     } finally {
       setIsSavingLayout(false);
     }

@@ -11,6 +11,11 @@ import {
 import { db } from '../firebase';
 import { ACTIVE_STORE_ID } from '../config/store';
 import { ProductBatchItem, RawMaterialRecipeItem } from '../types';
+import {
+  sanitizeForDatabase,
+  syncDocToDatabase,
+  deleteDocFromDatabase,
+} from '../utils/dbSync';
 
 export interface RawMaterialItem {
   id: string;
@@ -1725,21 +1730,15 @@ export async function saveRawMaterialInDb(
     : [normalized, ...cached];
   writeLocalCache(LS_RAW_MATERIALS_KEY, nextCache, true);
 
-  // 2. Persist to Firestore collections (`raw_materials`, `bahan_baku`, and store subcollection)
-  const payload = stripUndefined(normalized);
-  try {
-    await setDoc(doc(db, 'raw_materials', docId), payload, { merge: true });
-  } catch (err) {
-    console.warn('[RawMaterial] Firestore raw_materials write fallback to local:', err);
-  }
-  try {
-    await setDoc(doc(db, 'bahan_baku', docId), payload, { merge: true });
-  } catch {}
-  try {
-    await setDoc(doc(db, 'stores', ACTIVE_STORE_ID, 'raw_materials', docId), payload, {
-      merge: true,
-    });
-  } catch {}
+  // 2. Persist to Firestore & Backend collections (`raw_materials`, `bahan_baku`, and store subcollection)
+  const payload = sanitizeForDatabase(stripUndefined(normalized));
+  await Promise.allSettled([
+    syncDocToDatabase('raw_materials', docId, payload),
+    syncDocToDatabase('bahan_baku', docId, payload),
+    ACTIVE_STORE_ID
+      ? syncDocToDatabase(`stores/${ACTIVE_STORE_ID}/raw_materials`, docId, payload)
+      : Promise.resolve(true),
+  ]);
 
   emitRawMaterialsUpdated();
   return normalized;
@@ -1768,15 +1767,13 @@ export async function deleteRawMaterialFromDb(id: string): Promise<void> {
     true
   );
 
-  try {
-    await deleteDoc(doc(db, 'raw_materials', cleanId));
-  } catch {}
-  try {
-    await deleteDoc(doc(db, 'bahan_baku', cleanId));
-  } catch {}
-  try {
-    await deleteDoc(doc(db, 'stores', ACTIVE_STORE_ID, 'raw_materials', cleanId));
-  } catch {}
+  await Promise.allSettled([
+    deleteDocFromDatabase('raw_materials', cleanId),
+    deleteDocFromDatabase('bahan_baku', cleanId),
+    ACTIVE_STORE_ID
+      ? deleteDocFromDatabase(`stores/${ACTIVE_STORE_ID}/raw_materials`, cleanId)
+      : Promise.resolve(true),
+  ]);
 
   emitRawMaterialsUpdated();
 }

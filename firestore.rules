@@ -5,17 +5,16 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    // Role dari custom token (login PIN -> /api/auth/firebase-token), fallback ke dokumen users/{uid}
+    // Safe role helper (checks map key existence first to prevent CEL evaluation errors)
     function getUserRole() {
       return !isSignedIn() ? ''
-        : request.auth.token.role is string ? request.auth.token.role
-        : exists(/databases/$(database)/documents/users/$(request.auth.uid))
-          ? get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role
+        : ('role' in request.auth.token && request.auth.token.role is string)
+          ? request.auth.token.role
           : '';
     }
 
     function isOwnerOrAdmin() {
-      return (isSignedIn() && request.auth.token.email == 'panglimabesarisis@gmail.com')
+      return (isSignedIn() && 'email' in request.auth.token && request.auth.token.email == 'panglimabesarisis@gmail.com')
         || getUserRole() in ['owner', 'admin', 'Owner / Super Admin', 'super_admin', 'OWNER', 'DEMO'];
     }
 
@@ -23,12 +22,12 @@ service cloud.firestore {
       return isOwnerOrAdmin() || (isSignedIn() && getUserRole() != '' && getUserRole() != 'customer');
     }
 
-    // Mode PIN lokal (ketika FIREBASE_SERVICE_ACCOUNT belum diset di environment preview sehingga request.auth == null)
+    // Izinkan akses operasional penuh bagi aplikasi POS, Admin Dashboard, Reservasi, Table Layout, dan Client PWA
     function isAppClientOrStaff() {
-      return isStaff() || request.auth == null || isSignedIn();
+      return request.auth == null || isSignedIn() || isStaff();
     }
 
-    // Koleksi rahasia yang HANYA boleh diakses Firebase Admin SDK
+    // Koleksi rahasia yang HANYA boleh diakses Firebase Admin SDK di server
     function serverOnly(c) {
       return c in ['otp_sessions', 'ai_agents_private', 'payment_gateway_secrets'];
     }
@@ -40,29 +39,112 @@ service cloud.firestore {
       allow read, write: if false;
     }
     match /payment_gateway_secrets/{p} {
-      allow read, write: if false; // ciphertext, hanya server
+      allow read, write: if false;
     }
 
-    // Tagihan QRIS & settlement
-    match /payment_intents/{id} {
-      allow read, write: if isAppClientOrStaff();
-    }
-    match /settlement_history/{id} {
-      allow read, write: if isAppClientOrStaff();
-    }
-
-    // Pengaturan
+    // Pengaturan (melindungi dokumen rahasia payment_gateway_secrets)
     match /settings/{docId} {
-      allow read: if isAppClientOrStaff();
+      allow read: if isAppClientOrStaff() && docId != 'payment_gateway_secrets';
       allow write: if isAppClientOrStaff() && docId != 'payment_gateway_secrets';
     }
 
-    // Profil pengguna
-    match /users/{userId} {
+    // Koleksi Table Layout, Denah Meja, Reservasi & Riwayat Dine-In
+    match /restaurant_tables/{tableId} {
+      allow read, write: if isAppClientOrStaff();
+    }
+    match /tables/{tableId} {
+      allow read, write: if isAppClientOrStaff();
+    }
+    match /table_layouts/{layoutId} {
+      allow read, write: if isAppClientOrStaff();
+    }
+    match /table_reservations/{resId} {
+      allow read, write: if isAppClientOrStaff();
+    }
+    match /reservations/{resId} {
+      allow read, write: if isAppClientOrStaff();
+    }
+    match /table_dinein_history/{recId} {
       allow read, write: if isAppClientOrStaff();
     }
 
-    // Data per toko: stores/store_001/{transactions|orders|settings|brands|categories|...}
+    // Koleksi Katalog Produk, Bahan Baku (BOM), Pembelian & Gudang
+    match /products/{productId} {
+      allow read, write: if isAppClientOrStaff();
+    }
+    match /raw_materials/{rmId} {
+      allow read, write: if isAppClientOrStaff();
+    }
+    match /bahan_baku/{rmId} {
+      allow read, write: if isAppClientOrStaff();
+    }
+    match /raw_material_suppliers/{supId} {
+      allow read, write: if isAppClientOrStaff();
+    }
+    match /raw_material_purchase_orders/{poId} {
+      allow read, write: if isAppClientOrStaff();
+    }
+    match /raw_material_purchase_requests/{prId} {
+      allow read, write: if isAppClientOrStaff();
+    }
+    match /raw_material_movements/{movId} {
+      allow read, write: if isAppClientOrStaff();
+    }
+    match /purchase_orders/{poId} {
+      allow read, write: if isAppClientOrStaff();
+    }
+    match /procurements/{procId} {
+      allow read, write: if isAppClientOrStaff();
+    }
+    match /stock_movements/{movId} {
+      allow read, write: if isAppClientOrStaff();
+    }
+
+    // Koleksi Transaksi POS, Pesanan Online, Kas, Shift & Brangkas
+    match /transactions/{txId} {
+      allow read, write: if isAppClientOrStaff();
+    }
+    match /orders/{orderId} {
+      allow read, write: if isAppClientOrStaff();
+    }
+    match /pos_orders/{orderId} {
+      allow read, write: if isAppClientOrStaff();
+    }
+    match /shifts/{shiftId} {
+      allow read, write: if isAppClientOrStaff();
+    }
+    match /shift_history/{shiftId} {
+      allow read, write: if isAppClientOrStaff();
+    }
+    match /cashier_shifts/{shiftId} {
+      allow read, write: if isAppClientOrStaff();
+    }
+    match /cash_logs/{logId} {
+      allow read, write: if isAppClientOrStaff();
+    }
+    match /cash_flows/{flowId} {
+      allow read, write: if isAppClientOrStaff();
+    }
+    match /cash_mutations/{mutId} {
+      allow read, write: if isAppClientOrStaff();
+    }
+    match /pos_incomes/{incId} {
+      allow read, write: if isAppClientOrStaff();
+    }
+    match /incomes/{incId} {
+      allow read, write: if isAppClientOrStaff();
+    }
+    match /expenses/{expId} {
+      allow read, write: if isAppClientOrStaff();
+    }
+    match /brangkas_toko_logs/{logId} {
+      allow read, write: if isAppClientOrStaff();
+    }
+    match /safe_deposits/{depId} {
+      allow read, write: if isAppClientOrStaff();
+    }
+
+    // Data per toko: stores/store_001/{products|restaurant_tables|table_reservations|transactions|orders|settings|...}
     match /stores/{storeId}/{sub}/{docId} {
       allow read, write: if isAppClientOrStaff();
       match /{rest=**} {
@@ -70,42 +152,12 @@ service cloud.firestore {
       }
     }
 
-    // Data operasional top-level (brands, categories, storage_locations, products, transaksi, shift, stok, audit_logs, dsb.)
+    // Fallback data operasional top-level lainnya (brands, categories, customers, users, staff, ai_activity_logs, dsb.)
     match /{collection}/{docId} {
-      allow read, write: if isAppClientOrStaff() && !serverOnly(collection);
+      allow read, write: if isAppClientOrStaff() && !serverOnly(collection) && collection != 'settings';
       match /{rest=**} {
         allow read, write: if isAppClientOrStaff() && !serverOnly(collection) && collection != 'stores';
       }
-    }
-
-    // Hadiah Target, Marketing Targets, Promosi & Konfigurasi PWA (bisa dibaca & diklaim oleh Client PWA / Guest)
-    match /reward_targets/{targetId} {
-      allow read: if true;
-      allow write: if true;
-    }
-    match /marketing_targets/{targetId} {
-      allow read: if true;
-      allow write: if true;
-    }
-    match /promotions/{promoId} {
-      allow read: if true;
-      allow write: if true;
-    }
-    match /pwa_page_configs/{configId} {
-      allow read: if true;
-      allow write: if true;
-    }
-    match /reward_claims/{claimId} {
-      allow read: if true;
-      allow write: if true;
-    }
-
-    // Client PWA: katalog & master data boleh dibaca publik
-    match /{catalog}/{docId} {
-      allow read: if catalog in ['products', 'product_categories', 'categories', 'brands', 'storage_locations', 'marketing_banners', 'rewards', 'outlets', 'reward_targets', 'marketing_targets', 'promotions', 'pwa_page_configs', 'reward_claims', 'vouchers', 'point_rules', 'promo_banners'];
-    }
-    match /orders/{orderId} {
-      allow create, read: if isAppClientOrStaff();
     }
   }
 }

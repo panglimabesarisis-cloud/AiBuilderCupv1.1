@@ -12,6 +12,7 @@ import {
 } from 'react-router-dom';
 import { Navbar } from './components/common/Navbar';
 import { Sidebar } from './components/common/Sidebar';
+import { DemoJuriRibbon } from './components/common/DemoJuriRibbon';
 import { GlobalModals } from './components/common/GlobalModals';
 import { OfflineIndicator } from './components/common/OfflineIndicator';
 import { ComingSoonPlaceholder } from './components/common/ComingSoonPlaceholder';
@@ -240,7 +241,16 @@ function DashboardLayout() {
     setActiveRoleId,
     roles,
     canPerformModuleAction,
+    isDemoMode,
+    activeCashier,
   } = useAccessControl();
+
+  const showDemoBadge =
+    isDemoMode ||
+    activeRoleId === 'demo_owner' ||
+    activeRoleId === 'demo_cashier' ||
+    activeCashier?.role === 'demo_owner' ||
+    activeCashier?.role === 'demo_cashier';
 
   const isWaiterFlow =
     activeTab === 'waiters' ||
@@ -769,6 +779,8 @@ function DashboardLayout() {
 
   return (
     <div className="h-dvh flex flex-col bg-[#070604] text-amber-50 font-sans antialiased selection:bg-amber-500 selection:text-zinc-950 overflow-hidden">
+      {showDemoBadge && <DemoJuriRibbon />}
+
       {/* 1. STICKY TOP HEADER (Hidden on /waiters so no sidebar menu toggle is shown) */}
       {!isWaiterFlow && (
         <Navbar
@@ -820,7 +832,7 @@ function DashboardLayout() {
   );
 }
 
-function AppRoutes() {
+function StaffWorkspace() {
   useEffect(() => {
     const stopStockSync = startStockSyncService();
     return () => {
@@ -828,15 +840,31 @@ function AppRoutes() {
     };
   }, []);
 
+  return <DashboardLayout />;
+}
+
+function StaffProtectedRoute() {
+  return (
+    <ProtectedRoute>
+      <AppDataProvider>
+        <StaffWorkspace />
+      </AppDataProvider>
+    </ProtectedRoute>
+  );
+}
+
+function WaiterRoute() {
+  return (
+    <AppDataProvider>
+      <StaffWorkspace />
+    </AppDataProvider>
+  );
+}
+
+function AppRoutes() {
   return (
     <Routes>
-      {/* Halaman Login: jika sudah login, otomatis redirect ke /dashboard */}
-      <Route path="/login" element={<PublicOnlyRoute><LoginPage /></PublicOnlyRoute>} />
-
-      {/* Root redirect: / -> /login (jika belum login) atau /dashboard (jika sudah login) */}
-      <Route path="/" element={<RootRedirect />} />
-
-      {/* Route Mandiri Khusus PWA Pelanggan */}
+      {/* Route Mandiri Khusus PWA Pelanggan (cukup LanguageProvider, tanpa AccessControlProvider & AppDataProvider) */}
       <Route path="/client-pwa" element={<ClientPwaStandalone />} />
       <Route path="/client-pwa/*" element={<ClientPwaStandalone />} />
       <Route path="/order-pelanggan" element={<ClientPwaStandalone />} />
@@ -846,22 +874,38 @@ function AppRoutes() {
       <Route path="/clienthome" element={<Navigate to="/client-pwa/clienthome" replace />} />
       <Route path="/clienthome/*" element={<Navigate to="/client-pwa/clienthome" replace />} />
 
-      {/* Route /waiters langsung masuk ke Terminal Kasir POS tanpa ditahan /login dan tanpa popup PIN */}
-      <Route path="/waiters" element={<DashboardLayout />} />
-      <Route path="/waiters/*" element={<DashboardLayout />} />
-      <Route path="/waiter" element={<DashboardLayout />} />
-      <Route path="/waiter/*" element={<DashboardLayout />} />
+      {/* Route Login & Staf dibungkus AccessControlProvider */}
+      <Route
+        path="/*"
+        element={
+          <AccessControlProvider>
+            <Routes>
+              {/* Halaman Login: cukup LanguageProvider + AccessControlProvider */}
+              <Route path="/login" element={<PublicOnlyRoute><LoginPage /></PublicOnlyRoute>} />
 
-      {/* Semua route Admin / Dashboard / POS / Kitchen wajib login melalui ProtectedRoute */}
-      <Route path="/kitchen" element={<ProtectedRoute><DashboardLayout /></ProtectedRoute>} />
-      <Route path="/kitchen/*" element={<ProtectedRoute><DashboardLayout /></ProtectedRoute>} />
-      <Route path="/pos" element={<ProtectedRoute><DashboardLayout /></ProtectedRoute>} />
-      <Route path="/pos/*" element={<ProtectedRoute><DashboardLayout /></ProtectedRoute>} />
-      <Route path="/dashboard/pos" element={<ProtectedRoute><DashboardLayout /></ProtectedRoute>} />
-      <Route path="/dashboard/pos/*" element={<ProtectedRoute><DashboardLayout /></ProtectedRoute>} />
-      <Route path="/dashboard" element={<ProtectedRoute><DashboardLayout /></ProtectedRoute>} />
-      <Route path="/dashboard/*" element={<ProtectedRoute><DashboardLayout /></ProtectedRoute>} />
-      <Route path="*" element={<ProtectedRoute><DashboardLayout /></ProtectedRoute>} />
+              {/* Root redirect: / -> /login (jika belum login) atau /dashboard (jika sudah login) */}
+              <Route path="/" element={<RootRedirect />} />
+
+              {/* Route /waiters & /waiter dibungkus AppDataProvider */}
+              <Route path="/waiters" element={<WaiterRoute />} />
+              <Route path="/waiters/*" element={<WaiterRoute />} />
+              <Route path="/waiter" element={<WaiterRoute />} />
+              <Route path="/waiter/*" element={<WaiterRoute />} />
+
+              {/* Semua route Staf (/dashboard, /pos, /kitchen) dibungkus ProtectedRoute + AppDataProvider */}
+              <Route path="/kitchen" element={<StaffProtectedRoute />} />
+              <Route path="/kitchen/*" element={<StaffProtectedRoute />} />
+              <Route path="/pos" element={<StaffProtectedRoute />} />
+              <Route path="/pos/*" element={<StaffProtectedRoute />} />
+              <Route path="/dashboard/pos" element={<StaffProtectedRoute />} />
+              <Route path="/dashboard/pos/*" element={<StaffProtectedRoute />} />
+              <Route path="/dashboard" element={<StaffProtectedRoute />} />
+              <Route path="/dashboard/*" element={<StaffProtectedRoute />} />
+              <Route path="*" element={<StaffProtectedRoute />} />
+            </Routes>
+          </AccessControlProvider>
+        }
+      />
     </Routes>
   );
 }
@@ -872,11 +916,7 @@ export default function App() {
       <ThemeProvider>
         <BrowserRouter>
           <LanguageProvider>
-            <AccessControlProvider>
-              <AppDataProvider>
-                <AppRoutes />
-              </AppDataProvider>
-            </AccessControlProvider>
+            <AppRoutes />
           </LanguageProvider>
         </BrowserRouter>
       </ThemeProvider>

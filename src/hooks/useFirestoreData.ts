@@ -115,17 +115,6 @@ export function useCollection<T extends { id: string }>(
         return next;
       });
 
-      if (isFirestoreQuotaExhausted()) {
-        enqueuePendingSync({
-          op: 'set',
-          collectionPath: cleanName,
-          docId: docRef.id,
-          data: newItem,
-          merge: true,
-        });
-        return docRef.id;
-      }
-
       try {
         await setDoc(docRef, newItem, { merge: true });
         setError(null);
@@ -163,17 +152,6 @@ export function useCollection<T extends { id: string }>(
         return next;
       });
 
-      if (isFirestoreQuotaExhausted()) {
-        enqueuePendingSync({
-          op: 'set',
-          collectionPath: cleanName,
-          docId: id,
-          data: updateData,
-          merge: true,
-        });
-        return;
-      }
-
       try {
         await setDoc(docRef, updateData, { merge: true });
         setError(null);
@@ -200,15 +178,6 @@ export function useCollection<T extends { id: string }>(
         writeLocalCache(cleanName, next);
         return next;
       });
-
-      if (isFirestoreQuotaExhausted()) {
-        enqueuePendingSync({
-          op: 'delete',
-          collectionPath: cleanName,
-          docId: id,
-        });
-        return;
-      }
 
       try {
         await deleteDoc(doc(db, cleanName, id));
@@ -362,10 +331,6 @@ export function useSettingsDoc<T extends Record<string, any>>(
         return next;
       });
 
-      if (isFirestoreQuotaExhausted()) {
-        return;
-      }
-
       try {
         await setDoc(docRef, updateData, { merge: true });
         if (isPosSettingsPath) {
@@ -379,6 +344,16 @@ export function useSettingsDoc<T extends Record<string, any>>(
       } catch (err: any) {
         if (String(err?.code || '').toLowerCase().includes('resource-exhausted')) {
           markFirestoreQuotaExhausted(true);
+        }
+        const parts = path.split('/').filter(Boolean);
+        if (parts.length >= 2) {
+          enqueuePendingSync({
+            op: 'set',
+            collectionPath: parts.slice(0, -1).join('/'),
+            docId: parts[parts.length - 1],
+            data: updateData,
+            merge: true,
+          });
         }
       }
     },

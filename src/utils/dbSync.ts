@@ -212,11 +212,32 @@ export function getPendingSyncQueue(): PendingSyncOperation[] {
   }
 }
 
+function stripBase64Value(val: any): any {
+  if (typeof val === 'string') return val.startsWith('data:') ? '' : val;
+  if (Array.isArray(val)) return val.map(stripBase64Value);
+  if (val && typeof val === 'object') {
+    const out: Record<string, any> = {};
+    for (const [k, v] of Object.entries(val)) {
+      if (typeof v === 'string' && v.startsWith('data:')) continue;
+      out[k] = stripBase64Value(v);
+    }
+    return out;
+  }
+  return val;
+}
+
 function savePendingSyncQueue(queue: PendingSyncOperation[]): void {
   if (typeof window === 'undefined') return;
+  const trimmed = queue.slice(-100).map(stripBase64Value);
+  const serialized = JSON.stringify(trimmed);
   try {
-    localStorage.setItem(PENDING_SYNC_QUEUE_KEY, JSON.stringify(queue.slice(-500)));
-  } catch {}
+    localStorage.setItem(PENDING_SYNC_QUEUE_KEY, serialized);
+  } catch {
+    try {
+      localStorage.removeItem(PENDING_SYNC_QUEUE_KEY);
+      localStorage.setItem(PENDING_SYNC_QUEUE_KEY, serialized);
+    } catch {}
+  }
 }
 
 export function enqueuePendingSync(op: Omit<PendingSyncOperation, 'id' | 'timestamp' | 'retryCount'>): void {
@@ -289,24 +310,22 @@ export async function syncDocToDatabase(
   let clientSuccess = false;
   let serverSuccess = false;
 
-  if (!isFirestoreQuotaExhausted()) {
-    try {
-      const segments = cleanCol.split('/').filter(Boolean);
-      const docRef = doc(db, segments[0], ...segments.slice(1), cleanId);
-      await setDoc(docRef, cleanPayload, options);
-      clientSuccess = true;
-    } catch (err: any) {
-      const errCode = String(err?.code || '').toLowerCase();
-      const errMsg = String(err?.message || err || '').toLowerCase();
-      if (errCode.includes('resource-exhausted') || errMsg.includes('quota')) {
-        markFirestoreQuotaExhausted(true);
-      } else {
-        console.warn('[DB Sync Notice - Client Firestore]', {
-          collectionPath: cleanCol,
-          docId: cleanId,
-          code: err?.code || 'unknown',
-        });
-      }
+  try {
+    const segments = cleanCol.split('/').filter(Boolean);
+    const docRef = doc(db, segments[0], ...segments.slice(1), cleanId);
+    await setDoc(docRef, cleanPayload, options);
+    clientSuccess = true;
+  } catch (err: any) {
+    const errCode = String(err?.code || '').toLowerCase();
+    const errMsg = String(err?.message || err || '').toLowerCase();
+    if (errCode.includes('resource-exhausted') || errMsg.includes('quota')) {
+      markFirestoreQuotaExhausted(true);
+    } else {
+      console.warn('[DB Sync Notice - Client Firestore]', {
+        collectionPath: cleanCol,
+        docId: cleanId,
+        code: err?.code || 'unknown',
+      });
     }
   }
 
@@ -341,18 +360,16 @@ export async function deleteDocFromDatabase(
   let clientSuccess = false;
   let serverSuccess = false;
 
-  if (!isFirestoreQuotaExhausted()) {
-    try {
-      const segments = cleanCol.split('/').filter(Boolean);
-      const docRef = doc(db, segments[0], ...segments.slice(1), cleanId);
-      await deleteDoc(docRef);
-      clientSuccess = true;
-    } catch (err: any) {
-      const errCode = String(err?.code || '').toLowerCase();
-      const errMsg = String(err?.message || err || '').toLowerCase();
-      if (errCode.includes('resource-exhausted') || errMsg.includes('quota')) {
-        markFirestoreQuotaExhausted(true);
-      }
+  try {
+    const segments = cleanCol.split('/').filter(Boolean);
+    const docRef = doc(db, segments[0], ...segments.slice(1), cleanId);
+    await deleteDoc(docRef);
+    clientSuccess = true;
+  } catch (err: any) {
+    const errCode = String(err?.code || '').toLowerCase();
+    const errMsg = String(err?.message || err || '').toLowerCase();
+    if (errCode.includes('resource-exhausted') || errMsg.includes('quota')) {
+      markFirestoreQuotaExhausted(true);
     }
   }
 
@@ -452,11 +469,9 @@ export async function flushPendingSyncQueue(): Promise<{ flushed: number; remain
         if (item.op === 'set') {
           const clean = sanitizeForDatabase(item.data || {});
           await setDoc(docRef, clean, { merge: item.merge !== false });
-          void mirrorWriteToBackendServer('set', item.collectionPath, item.docId, clean, true);
           ok = true;
         } else if (item.op === 'delete') {
           await deleteDoc(docRef);
-          void mirrorWriteToBackendServer('delete', item.collectionPath, item.docId);
           ok = true;
         }
       } catch {
@@ -492,7 +507,7 @@ let isResyncingLocalCaches = false;
  * to Firestore and the backend server so nothing stays local-only.
  */
 export async function autoResyncLocalCachesToServer(): Promise<void> {
-  if (typeof window === 'undefined' || isResyncingLocalCaches || isFirestoreQuotaExhausted()) return;
+  if (typeof window === 'undefined' || isResyncingLocalCaches) return;
   isResyncingLocalCaches = true;
 
   try {

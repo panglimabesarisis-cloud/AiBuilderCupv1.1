@@ -2,7 +2,8 @@ import React, { createContext, useContext, useState, useEffect, useMemo, useCall
 import {
   collection,
   doc,
-  getDocs,
+  query,
+  limit,
   setDoc,
   deleteDoc,
   onSnapshot,
@@ -1014,6 +1015,10 @@ interface AccessControlContextValue {
     email: string,
     password: string
   ) => Promise<{ ok: boolean; message: string; isDemo?: boolean; roleId?: string }>;
+  loginWithDemoRole: (
+    role: 'owner' | 'cashier',
+    preloadedData?: any
+  ) => Promise<{ ok: boolean; message: string; isDemo?: boolean; roleId?: string }>;
   logout: () => Promise<void>;
   verifyPosPin: (
     pin: string
@@ -1026,6 +1031,8 @@ const AccessControlContext = createContext<AccessControlContextValue | null>(nul
 export function resolveRoleIdFromRoleName(roleNameOrId: string, roles: RoleDefinition[]): string {
   const clean = (roleNameOrId || '').trim().toLowerCase();
   if (!clean) return 'owner';
+  if (clean === 'demo_owner') return 'demo_owner';
+  if (clean === 'demo_cashier') return 'demo_cashier';
   if (clean === 'owner' || clean.includes('super admin') || clean.includes('owner')) return 'owner';
   const direct = roles.find(
     (r) =>
@@ -1238,6 +1245,22 @@ export const AccessControlProvider: React.FC<{ children: React.ReactNode }> = ({
   const [staffDirectory, setStaffDirectory] = useState<any[]>([]);
 
   useEffect(() => {
+    const handleDemoChange = (e: Event) => {
+      const custom = e as CustomEvent<{ isDemoMode: boolean }>;
+      if (typeof custom?.detail?.isDemoMode === 'boolean') {
+        setIsDemoMode(custom.detail.isDemoMode);
+      } else {
+        setIsDemoMode(isDemoModeActive());
+      }
+    };
+    window.addEventListener('riskcart_demo_mode_changed', handleDemoChange);
+
+    if (!isAuthenticated) {
+      return () => {
+        window.removeEventListener('riskcart_demo_mode_changed', handleDemoChange);
+      };
+    }
+
     let rootList: any[] = [];
     let storeList: any[] = [];
     const mergeStaff = () => {
@@ -1251,7 +1274,7 @@ export const AccessControlProvider: React.FC<{ children: React.ReactNode }> = ({
     let unsubStore = () => {};
     try {
       unsubRoot = onSnapshot(
-        collection(db, 'staff'),
+        query(collection(db, 'staff'), limit(100)),
         (snap) => {
           rootList = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
           mergeStaff();
@@ -1261,7 +1284,7 @@ export const AccessControlProvider: React.FC<{ children: React.ReactNode }> = ({
     } catch {}
     try {
       unsubStore = onSnapshot(
-        collection(db, 'stores', 'store_001', 'staff'),
+        query(collection(db, 'stores', 'store_001', 'staff'), limit(100)),
         (snap) => {
           storeList = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
           mergeStaff();
@@ -1270,22 +1293,12 @@ export const AccessControlProvider: React.FC<{ children: React.ReactNode }> = ({
       );
     } catch {}
 
-    const handleDemoChange = (e: Event) => {
-      const custom = e as CustomEvent<{ isDemoMode: boolean }>;
-      if (typeof custom?.detail?.isDemoMode === 'boolean') {
-        setIsDemoMode(custom.detail.isDemoMode);
-      } else {
-        setIsDemoMode(isDemoModeActive());
-      }
-    };
-    window.addEventListener('riskcart_demo_mode_changed', handleDemoChange);
-
     return () => {
       unsubRoot();
       unsubStore();
       window.removeEventListener('riskcart_demo_mode_changed', handleDemoChange);
     };
-  }, []);
+  }, [isAuthenticated]);
 
   // Supervisor PIN Modal State
   const [pinRequestModal, setPinRequestModal] = useState<{
@@ -1322,31 +1335,7 @@ export const AccessControlProvider: React.FC<{ children: React.ReactNode }> = ({
       return;
     }
 
-    try {
-      const snap = await getDocs(collection(db, 'staff'));
-      let matchedSupervisor = false;
-      snap.forEach((docSnap) => {
-        const d = docSnap.data();
-        const rId = resolveRoleIdFromRoleName(d.role || '', roles);
-        if (
-          (String(d.pin || '').trim() === cleanPin || String(d.password || '').trim() === cleanPin) &&
-          (rId === 'owner' || rId === 'admin_toko')
-        ) {
-          matchedSupervisor = true;
-        }
-      });
-
-      if (matchedSupervisor) {
-        const callback = pinRequestModal?.onSuccess;
-        setPinRequestModal(null);
-        setPinInput('');
-        if (callback) callback();
-      } else {
-        setPinError('PIN atau Password tidak valid atau bukan milik Owner / Admin Toko.');
-      }
-    } catch {
-      setPinError('PIN Otorisasi tidak dikenali.');
-    }
+    setPinError('PIN atau Password tidak valid atau bukan milik Owner / Admin Toko.');
   };
 
   useEffect(() => {
@@ -1485,10 +1474,9 @@ export const AccessControlProvider: React.FC<{ children: React.ReactNode }> = ({
         return { ok: false, message: 'Harap masukkan Email/Username dan Password/PIN.' };
       }
 
-      // 0. Try Server Unified Login Endpoint (`/api/auth/login`) first with a 3.5s timeout
       try {
         const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
-        const timer = controller ? setTimeout(() => controller.abort(), 3500) : null;
+        const timer = controller ? setTimeout(() => controller.abort(), 5000) : null;
         const res = await fetch('/api/auth/login', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -1503,285 +1491,99 @@ export const AccessControlProvider: React.FC<{ children: React.ReactNode }> = ({
           if (timer) clearTimeout(timer);
         });
 
-        if (res.ok) {
-          const data = await res.json().catch(() => null);
-          if (data && data.ok && data.user) {
-            const serverProfile: ActiveCashierProfile = {
-              id: String(data.user.id || 'staff_001'),
-              name: String(data.user.name || 'Owner RiskCart'),
-              email: String(data.user.email || cleanEmail),
-              role: String(data.user.role || 'Owner / Super Admin'),
-              outlet: String(data.user.outlet || 'Cabang Utama (Pusat)'),
-              phone: String(data.user.phone || '-'),
-              shift: String(data.user.shift || 'Full-Time / All Shift'),
-            };
-            const resolvedRoleId = String(
-              data.roleId || resolveRoleIdFromRoleName(serverProfile.role, roles) || 'owner'
-            );
-            const isDemo = Boolean(data.isDemo);
-            const token = String(data.sessionToken || data.token || '');
-            const customToken = data.customToken ? String(data.customToken) : undefined;
-
-            persistAuthenticatedSession(serverProfile, resolvedRoleId, isDemo, token, customToken);
-            return {
-              ok: true,
-              message: String(data.message || `Selamat datang kembali, ${serverProfile.name}!`),
-              isDemo,
-              roleId: resolvedRoleId,
-            };
-          }
-        }
-      } catch {
-        // Continue to client-side Firestore & fallback verification if server route is unreachable
-      }
-
-      // 1A. Official Demo Admin / Owner Account (`demo@mayamandiri.com` or `demo` or `demo@riskcart.ai` | `Demo123`)
-      if (
-        (cleanEmail === 'demo@mayamandiri.com' ||
-          cleanEmail === 'demo' ||
-          cleanEmail === 'demo@riskcart.ai') &&
-        (cleanPass === 'Demo123' || cleanPass === 'demo123' || cleanPass === '123456')
-      ) {
-        const demoAdminProfile: ActiveCashierProfile = {
-          id: 'demo_admin_001',
-          name: 'Demo Admin / Owner',
-          email: 'demo@mayamandiri.com',
-          role: 'Owner / Super Admin',
-          outlet: 'Cabang Utama (Sandbox Demo)',
-          phone: '0812-0000-0001',
-          shift: 'Full-Time / All Shift',
-        };
-        persistAuthenticatedSession(demoAdminProfile, 'owner', true);
-        return {
-          ok: true,
-          message: 'Login Demo Admin / Owner berhasil! Mode Isolasi Sandbox aktif.',
-          isDemo: true,
-          roleId: 'owner',
-        };
-      }
-
-      // 1B. Official Demo Kasir Account (`kasir@mayamandiri.com` or `demo_kasir` | `Demo123`)
-      if (
-        (cleanEmail === 'kasir@mayamandiri.com' ||
-          cleanEmail === 'demo_kasir' ||
-          cleanEmail === 'kasir@riskcart.ai') &&
-        (cleanPass === 'Demo123' || cleanPass === 'demo123' || cleanPass === '123456')
-      ) {
-        const demoKasirProfile: ActiveCashierProfile = {
-          id: 'demo_kasir_001',
-          name: 'Demo Kasir POS',
-          email: 'kasir@mayamandiri.com',
-          role: 'Cashier',
-          outlet: 'Cabang Utama (Sandbox Demo)',
-          phone: '0812-0000-0002',
-          shift: 'Pagi (07:30 - 15:00)',
-        };
-        persistAuthenticatedSession(demoKasirProfile, 'cashier', true);
-        return {
-          ok: true,
-          message: 'Login Demo Kasir berhasil! Silakan masukkan PIN Kasir & Buka Shift untuk masuk ke POS.',
-          isDemo: true,
-          roleId: 'cashier',
-        };
-      }
-
-      // 2. Check Master Owner account (`panglimabesarisis@gmail.com`, `owner@riskcart.ai`, `dedefajarkurniawan@gmail.com`, etc.)
-      const MASTER_OWNER_IDENTIFIERS = new Set([
-        'panglimabesarisis@gmail.com',
-        'dedefajarkurniawan@gmail.com',
-        'owner@riskcart.ai',
-        'owner@riskcart.com',
-        'admin@riskcart.ai',
-        'admin@riskcart.com',
-        'dede.kasir@riskcart.com',
-        'owner',
-        'admin',
-        'dede fajar kurniawan',
-      ]);
-      const DEFAULT_OWNER_SECRETS = new Set([
-        '123456',
-        'Demo123',
-        'demo123',
-        'Owner123',
-        'owner123',
-        'Admin123',
-        'admin123',
-        'RiskCart2026',
-        'riskcart123',
-      ]);
-
-      const isMasterOwnerEmail = MASTER_OWNER_IDENTIFIERS.has(cleanEmail);
-
-      if (isMasterOwnerEmail) {
-        const serverVerified = await withPromiseTimeout(
-          verifyOwnerSecretOnServer(cleanPass, 'owner'),
-          3000,
-          false
-        );
-        const ownerStaffMatch = staffDirectory.find(
-          (s) =>
-            String(s.id || '') === 'staff_001' ||
-            String(s.email || '').trim().toLowerCase() === cleanEmail ||
-            String(s.role || '').toLowerCase().includes('owner')
-        );
-        const customStaffPass = String(ownerStaffMatch?.password || '').trim();
-        const customStaffPin = String(ownerStaffMatch?.pin || '').trim();
-        const matchesCustomStaffSecret =
-          (customStaffPass && cleanPass === customStaffPass) ||
-          (customStaffPin && cleanPass === customStaffPin);
-
-        if (serverVerified || matchesCustomStaffSecret || DEFAULT_OWNER_SECRETS.has(cleanPass)) {
-          const ownerProfile: ActiveCashierProfile = {
-            ...DEFAULT_ACTIVE_CASHIER,
-            name: ownerStaffMatch?.name || DEFAULT_ACTIVE_CASHIER.name,
-            email: cleanEmail.includes('@') ? cleanEmail : DEFAULT_ACTIVE_CASHIER.email,
-            phone: ownerStaffMatch?.phone || DEFAULT_ACTIVE_CASHIER.phone,
+        const data = await res.json().catch(() => null);
+        if (res.ok && data && data.ok && data.user) {
+          const serverProfile: ActiveCashierProfile = {
+            id: String(data.user.id || 'staff_001'),
+            name: String(data.user.name || 'Owner RiskCart'),
+            email: String(data.user.email || cleanEmail),
+            role: String(data.user.role || 'Owner / Super Admin'),
+            outlet: String(data.user.outlet || 'Cabang Utama (Pusat)'),
+            phone: String(data.user.phone || '-'),
+            shift: String(data.user.shift || 'Full-Time / All Shift'),
           };
-          persistAuthenticatedSession(ownerProfile, 'owner', false);
-          void setDoc(
-            doc(db, 'staff', 'staff_001'),
-            {
-              id: 'staff_001',
-              name: ownerProfile.name,
-              email: ownerProfile.email,
-              pin: customStaffPin || '123456',
-              password: customStaffPass || 'Demo123',
-              role: 'Owner',
-              outlet: ownerProfile.outlet || 'Cabang Utama (Pusat)',
-              phone: ownerProfile.phone || '0811-1000-001',
-              shift: ownerProfile.shift || 'Full-Time / All Shift',
-              status: 'active',
-              updatedAt: new Date().toISOString(),
-            },
-            { merge: true }
-          ).catch(() => {});
+          const resolvedRoleId = String(
+            data.roleId || resolveRoleIdFromRoleName(serverProfile.role, roles) || 'owner'
+          );
+          const isDemo = Boolean(data.isDemo);
+          const token = String(data.sessionToken || data.token || '');
+          const customToken = data.customToken ? String(data.customToken) : undefined;
 
+          persistAuthenticatedSession(serverProfile, resolvedRoleId, isDemo, token, customToken);
           return {
             ok: true,
-            message: `Selamat datang kembali, ${ownerProfile.name} (Owner / Full Access)!`,
-            isDemo: false,
-            roleId: 'owner',
-          };
-        }
-      }
-
-      // 3. Gather staff/users from real-time state + local caches + Firestore collections (with 3.5s timeout)
-      const candidateMap = new Map<string, any>();
-      const addCandidate = (item: any) => {
-        if (!item || typeof item !== 'object') return;
-        const key = String(item.id || item.email || item.name || Math.random());
-        candidateMap.set(key, { ...(candidateMap.get(key) || {}), ...item });
-      };
-
-      staffDirectory.forEach(addCandidate);
-
-      try {
-        const localRoster = localStorage.getItem('riskcart_staff_division_roster_v1');
-        if (localRoster) {
-          const parsed = JSON.parse(localRoster);
-          if (Array.isArray(parsed)) parsed.forEach(addCandidate);
-        }
-        const localStaffCache = localStorage.getItem('firestore_cache_staff');
-        if (localStaffCache) {
-          const parsed = JSON.parse(localStaffCache);
-          if (Array.isArray(parsed)) parsed.forEach(addCandidate);
-        }
-      } catch {}
-
-      try {
-        const snaps = await withPromiseTimeout(
-          Promise.all([
-            getDocs(collection(db, 'staff')).catch(() => null),
-            getDocs(collection(db, 'stores', 'store_001', 'staff')).catch(() => null),
-            getDocs(collection(db, 'staff_members')).catch(() => null),
-            getDocs(collection(db, 'employees')).catch(() => null),
-            getDocs(collection(db, 'users')).catch(() => null),
-          ]),
-          3500,
-          [null, null, null, null, null]
-        );
-        snaps.forEach((snap) => {
-          if (snap) {
-            snap.forEach((d) => addCandidate({ id: d.id, ...d.data() }));
-          }
-        });
-      } catch {}
-
-      const candidates = Array.from(candidateMap.values());
-
-      const matchedStaff = candidates.find((s) => {
-        const sEmail = String(s.email || '').trim().toLowerCase();
-        const sName = String(s.name || '').trim().toLowerCase();
-        const sUser = String(s.username || '').trim().toLowerCase();
-        const sPhone = String(s.phone || '').trim().toLowerCase();
-        return (
-          sEmail === cleanEmail ||
-          sName === cleanEmail ||
-          (sUser && sUser === cleanEmail) ||
-          (sPhone && sPhone !== '-' && sPhone === cleanEmail)
-        );
-      });
-
-      if (matchedStaff) {
-        const staffPass = String(matchedStaff.password || '').trim();
-        const staffPin = String(matchedStaff.pin || '').trim();
-        const isStaffOwner = String(matchedStaff.role || '').toLowerCase().includes('owner');
-        const isStaffDemo =
-          String(matchedStaff.name || '').toLowerCase().includes('demo user') ||
-          String(matchedStaff.role || '').toLowerCase().includes('demo') ||
-          String(matchedStaff.email || '').toLowerCase() === 'demo@riskcart.ai';
-
-        const serverVerifiedOwner = isStaffOwner
-          ? await withPromiseTimeout(verifyOwnerSecretOnServer(cleanPass, 'owner'), 2500, false)
-          : false;
-
-        const hasNoStoredSecret = !staffPass && !staffPin;
-        const passwordMatches =
-          (staffPass && cleanPass === staffPass) ||
-          (staffPin && cleanPass === staffPin) ||
-          serverVerifiedOwner ||
-          (isStaffOwner && DEFAULT_OWNER_SECRETS.has(cleanPass)) ||
-          (hasNoStoredSecret && (DEFAULT_OWNER_SECRETS.has(cleanPass) || cleanPass === 'Staff#123')) ||
-          (isStaffDemo && (cleanPass === 'Demo123' || cleanPass === 'demo123' || cleanPass === '123456'));
-
-        if (!passwordMatches) {
-          return {
-            ok: false,
-            message: 'Password atau PIN yang dimasukkan tidak sesuai untuk akun tersebut.',
+            message: String(data.message || `Selamat datang kembali, ${serverProfile.name}!`),
+            isDemo,
+            roleId: resolvedRoleId,
           };
         }
 
-        const profile: ActiveCashierProfile = {
-          id: String(matchedStaff.id || 'staff_001'),
-          name: String(matchedStaff.name || 'Staff RiskCart'),
-          email: String(matchedStaff.email || cleanEmail),
-          role: isStaffDemo ? 'Owner / Super Admin' : String(matchedStaff.role || 'Cashier'),
-          outlet: String(matchedStaff.outlet || 'Cabang Utama (Pusat)'),
-          phone: String(matchedStaff.phone || '-'),
-          shift: String(matchedStaff.shift || 'Pagi (07:30 - 15:00)'),
+        return {
+          ok: false,
+          message: String(data?.message || data?.error || 'Email/Username atau Password/PIN tidak valid.'),
         };
+      } catch {
+        return {
+          ok: false,
+          message: 'Gagal menghubungi server autentikasi. Silakan coba lagi.',
+        };
+      }
+    },
+    [roles, persistAuthenticatedSession]
+  );
 
-        const targetRoleId =
-          isStaffDemo || isStaffOwner
-            ? 'owner'
-            : resolveRoleIdFromRoleName(profile.role, roles);
+  const loginWithDemoRole = useCallback(
+    async (
+      role: 'owner' | 'cashier',
+      preloadedData?: any
+    ): Promise<{ ok: boolean; message: string; isDemo?: boolean; roleId?: string }> => {
+      try {
+        let data = preloadedData;
+        if (!data) {
+          const res = await fetch('/api/auth/demo-login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ role }),
+          });
+          data = await res.json().catch(() => null);
+          if (!res.ok || !data?.ok) {
+            return {
+              ok: false,
+              message: String(data?.message || data?.error || 'Gagal masuk Mode Demo Juri.'),
+            };
+          }
+        }
 
-        persistAuthenticatedSession(profile, targetRoleId, false);
+        const targetRoleId = role === 'owner' ? 'demo_owner' : 'demo_cashier';
+        const demoProfile: ActiveCashierProfile = {
+          id: String(data?.user?.id || targetRoleId),
+          name: String(data?.user?.name || (role === 'owner' ? 'Demo Owner (Juri)' : 'Demo Kasir (Juri)')),
+          email: '',
+          role: targetRoleId,
+          outlet: String(data?.user?.outlet || 'Cabang Utama (Sandbox Demo)'),
+          phone: '-',
+          shift: String(data?.user?.shift || 'Full-Time / All Shift'),
+        };
+        const token = String(data?.sessionToken || data?.token || '');
+        const customToken = data?.customToken ? String(data.customToken) : undefined;
+
+        setDemoModeActive(true);
+        persistAuthenticatedSession(demoProfile, targetRoleId, true, token, customToken);
+
         return {
           ok: true,
-          message: `Selamat datang kembali, ${profile.name}!`,
-          isDemo: false,
+          message: String(data?.message || `Mode Demo Juri (${demoProfile.name}) aktif.`),
+          isDemo: true,
           roleId: targetRoleId,
         };
+      } catch {
+        return {
+          ok: false,
+          message: 'Gagal mengaktifkan Mode Demo Juri.',
+        };
       }
-
-      return {
-        ok: false,
-        message:
-          'Email/Username atau Password tidak valid. Gunakan akun Owner (panglimabesarisis@gmail.com / Demo123) atau tombol Login Cepat di bawah.',
-      };
     },
-    [staffDirectory, roles, verifyOwnerSecretOnServer, persistAuthenticatedSession]
+    [persistAuthenticatedSession]
   );
 
   const logout = useCallback(async () => {
@@ -1849,15 +1651,10 @@ export const AccessControlProvider: React.FC<{ children: React.ReactNode }> = ({
       const rawPin = String(pin || '').trim();
       const cleanPin = rawPin.replace(/\D/g, '');
 
-      const currentEmail = String(activeCashier?.email || '').toLowerCase();
-
       if (cleanPin.length !== 6) {
         return { ok: false, message: 'Masukkan 6 digit angka PIN.' };
       }
 
-      // Request server session token via /api/settings/pin/verify so Firebase Custom Token Auth can be established
-      let serverSessionToken = '';
-      let serverPinOk = false;
       try {
         const res = await fetch('/api/settings/pin/verify', {
           method: 'POST',
@@ -1867,76 +1664,14 @@ export const AccessControlProvider: React.FC<{ children: React.ReactNode }> = ({
         if (res.ok) {
           const data = await res.json().catch(() => ({}));
           if (data?.valid || data?.ok) {
-            serverPinOk = true;
-            serverSessionToken = String(data.sessionToken || data.token || '');
+            const serverSessionToken = String(data.sessionToken || data.token || '');
             if (serverSessionToken) {
               try {
                 sessionStorage.setItem('riskcart_server_token', serverSessionToken);
               } catch {}
               await ensureFirebaseSession();
             }
-          }
-        }
-      } catch {}
-
-      // Demo Cashier PIN check (123456)
-      if (
-        (isDemoModeActive() ||
-          currentEmail === 'kasir@mayamandiri.com' ||
-          currentEmail === 'demo_kasir') &&
-        cleanPin === '123456'
-      ) {
-        const demoKasirStaff: ActiveCashierProfile = {
-          id: activeCashier?.id || 'demo_kasir_001',
-          name: activeCashier?.name || 'Demo Kasir POS',
-          email: activeCashier?.email || 'kasir@mayamandiri.com',
-          role: activeCashier?.role || 'Cashier',
-          outlet: activeCashier?.outlet || 'Cabang Utama (Sandbox Demo)',
-          phone: activeCashier?.phone || '0812-0000-0002',
-          shift: activeCashier?.shift || 'Pagi (07:30 - 15:00)',
-        };
-        setPosPinVerified(true);
-        setActiveCashierState(demoKasirStaff);
-        try {
-          sessionStorage.setItem('riskcart_pos_pin_verified', 'true');
-          localStorage.setItem('riskcart_active_cashier', JSON.stringify(demoKasirStaff));
-          window.dispatchEvent(new CustomEvent('riskcart:cashier-change', { detail: demoKasirStaff }));
-          window.dispatchEvent(new CustomEvent('riskcart_cashier_changed', { detail: demoKasirStaff }));
-        } catch {}
-        return {
-          ok: true,
-          staff: demoKasirStaff,
-          message: `Akses POS dibuka: ${demoKasirStaff.name}`,
-          token: serverSessionToken || undefined,
-          sessionToken: serverSessionToken || undefined,
-        };
-      }
-
-      // Gather staff list from real-time subscription or Firestore
-      let candidates: any[] = [...staffDirectory];
-      if (candidates.length === 0) {
-        try {
-          const snap = await getDocs(collection(db, 'staff'));
-          snap.forEach((d) => candidates.push({ id: d.id, ...d.data() }));
-        } catch {}
-      }
-
-      const matched = candidates.find(
-        (s) => String(s.pin || '').trim() === cleanPin && s.status !== 'Nonaktif'
-      );
-
-      if (matched || serverPinOk) {
-        const staffProfile: ActiveCashierProfile = matched
-          ? {
-              id: String(matched.id || activeCashier?.id || 'staff_001'),
-              name: String(matched.name || activeCashier?.name || 'Kasir POS'),
-              email: String(matched.email || activeCashier?.email || 'kasir@riskcart.ai'),
-              role: String(matched.role || activeCashier?.role || 'Cashier'),
-              outlet: String(matched.outlet || activeCashier?.outlet || 'Cabang Utama (Pusat)'),
-              phone: String(matched.phone || activeCashier?.phone || '-'),
-              shift: String(matched.shift || activeCashier?.shift || 'Pagi (07:30 - 15:00)'),
-            }
-          : {
+            const staffProfile: ActiveCashierProfile = {
               id: activeCashier?.id || 'staff_001',
               name: activeCashier?.name || 'Kasir POS',
               email: activeCashier?.email || 'kasir@riskcart.ai',
@@ -1945,26 +1680,28 @@ export const AccessControlProvider: React.FC<{ children: React.ReactNode }> = ({
               phone: activeCashier?.phone || '-',
               shift: activeCashier?.shift || 'Pagi (07:30 - 15:00)',
             };
-        setPosPinVerified(true);
-        setActiveCashierState(staffProfile);
-        try {
-          sessionStorage.setItem('riskcart_pos_pin_verified', 'true');
-          localStorage.setItem('riskcart_active_cashier', JSON.stringify(staffProfile));
-          window.dispatchEvent(new CustomEvent('riskcart:cashier-change', { detail: staffProfile }));
-          window.dispatchEvent(new CustomEvent('riskcart_cashier_changed', { detail: staffProfile }));
-        } catch {}
-        return {
-          ok: true,
-          staff: staffProfile,
-          message: `Akses POS dibuka: ${staffProfile.name}`,
-          token: serverSessionToken || undefined,
-          sessionToken: serverSessionToken || undefined,
-        };
-      }
+            setPosPinVerified(true);
+            setActiveCashierState(staffProfile);
+            try {
+              sessionStorage.setItem('riskcart_pos_pin_verified', 'true');
+              localStorage.setItem('riskcart_active_cashier', JSON.stringify(staffProfile));
+              window.dispatchEvent(new CustomEvent('riskcart:cashier-change', { detail: staffProfile }));
+              window.dispatchEvent(new CustomEvent('riskcart_cashier_changed', { detail: staffProfile }));
+            } catch {}
+            return {
+              ok: true,
+              staff: staffProfile,
+              message: `Akses POS dibuka: ${staffProfile.name}`,
+              token: serverSessionToken || undefined,
+              sessionToken: serverSessionToken || undefined,
+            };
+          }
+        }
+      } catch {}
 
       return { ok: false, message: 'PIN Kasir salah atau tidak terdaftar.' };
     },
-    [staffDirectory, activeCashier, activeRoleId]
+    [activeCashier]
   );
 
   const lockPosSession = useCallback(() => {
@@ -2064,8 +1801,12 @@ export const AccessControlProvider: React.FC<{ children: React.ReactNode }> = ({
     []
   );
 
-  // Real-time listener on `rbac_rules/master_matrix` and fallback `stores/store_001/settings/hak_dan_akses`
+  // Real-time listener on `rbac_rules/master_matrix` only when authenticated
   useEffect(() => {
+    if (!isAuthenticated) {
+      setIsLoading(false);
+      return;
+    }
     let unsubMaster = () => {};
     try {
       const masterRef = doc(db, RBAC_MASTER_DOC_PATH);
@@ -2150,7 +1891,7 @@ export const AccessControlProvider: React.FC<{ children: React.ReactNode }> = ({
     return () => {
       unsubMaster();
     };
-  }, [persistAllToFirestore, saveToLocalStorage]);
+  }, [isAuthenticated, persistAllToFirestore, saveToLocalStorage]);
 
   const saveToCloud = useCallback(async () => {
     setIsSaving(true);
@@ -2609,18 +2350,24 @@ export const AccessControlProvider: React.FC<{ children: React.ReactNode }> = ({
     }
   }, [persistAllToFirestore, saveToLocalStorage]);
 
+  const effectiveRoleId = useMemo(() => {
+    if (activeRoleId === 'demo_owner') return 'owner';
+    if (activeRoleId === 'demo_cashier') return 'cashier';
+    return activeRoleId;
+  }, [activeRoleId]);
+
   const canAccessPermission = useCallback(
     (permKey: string): boolean => {
-      if (activeRoleId === 'owner') return true;
-      const roleGrants = grants[activeRoleId] || [];
+      if (effectiveRoleId === 'owner') return true;
+      const roleGrants = grants[effectiveRoleId] || DEFAULT_GRANTS[effectiveRoleId] || [];
       return roleGrants.includes(permKey);
     },
-    [activeRoleId, grants]
+    [effectiveRoleId, grants]
   );
 
   const canPerformModuleAction = useCallback(
     (moduleIdOrTab: string, action: GranularActionType): boolean => {
-      if (activeRoleId === 'owner') return true;
+      if (effectiveRoleId === 'owner') return true;
       const clean = String(moduleIdOrTab || '').trim();
       if (
         clean === 'pos' ||
@@ -2634,14 +2381,12 @@ export const AccessControlProvider: React.FC<{ children: React.ReactNode }> = ({
         return true;
       }
 
-      const roleMods = moduleMatrix[activeRoleId] || DEFAULT_MODULE_MATRIX[activeRoleId] || {};
+      const roleMods = moduleMatrix[effectiveRoleId] || DEFAULT_MODULE_MATRIX[effectiveRoleId] || {};
 
-      // Check direct moduleId match first
       if (roleMods[moduleIdOrTab]) {
         return Boolean(roleMods[moduleIdOrTab][action]);
       }
 
-      // Find module by matchedTabs or matchedPathPrefixes
       const matchedSpec = ECOSYSTEM_MODULES.find(
         (m) =>
           m.id === moduleIdOrTab ||
@@ -2654,12 +2399,12 @@ export const AccessControlProvider: React.FC<{ children: React.ReactNode }> = ({
 
       return true;
     },
-    [activeRoleId, moduleMatrix]
+    [effectiveRoleId, moduleMatrix]
   );
 
   const canAccess = useCallback(
     (tab: string, subModule?: string): boolean => {
-      if (activeRoleId === 'owner') return true;
+      if (effectiveRoleId === 'owner') return true;
       const cleanTab = String(tab || '').trim();
       if (
         cleanTab === 'pos' ||
@@ -2672,17 +2417,15 @@ export const AccessControlProvider: React.FC<{ children: React.ReactNode }> = ({
         return true;
       }
 
-      // 1. Check granular module matrix 'view' permission first
       const matchedModule = ECOSYSTEM_MODULES.find((m) => m.matchedTabs.includes(tab));
       if (matchedModule) {
-        const roleMods = moduleMatrix[activeRoleId];
+        const roleMods = moduleMatrix[effectiveRoleId] || DEFAULT_MODULE_MATRIX[effectiveRoleId];
         if (roleMods && roleMods[matchedModule.id] && roleMods[matchedModule.id].view === false) {
           return false;
         }
       }
 
-      // 2. Also check fine-grained sub-feature grants if mapped
-      const roleGrants = grants[activeRoleId] || [];
+      const roleGrants = grants[effectiveRoleId] || DEFAULT_GRANTS[effectiveRoleId] || [];
       const matchingItems = RBAC_GROUPS.flatMap((g) => g.items).filter((item) => {
         if (subModule) {
           return item.tab === tab && item.subModule === subModule;
@@ -2696,30 +2439,30 @@ export const AccessControlProvider: React.FC<{ children: React.ReactNode }> = ({
 
       return matchingItems.some((item) => roleGrants.includes(item.id));
     },
-    [activeRoleId, grants, moduleMatrix, canPerformModuleAction]
+    [effectiveRoleId, grants, moduleMatrix, canPerformModuleAction]
   );
 
   const hasPermission = useCallback(
     (moduleOrPermKey: string, action: GranularActionType = 'view'): boolean => {
-      if (activeRoleId === 'owner') return true;
+      if (effectiveRoleId === 'owner') return true;
       if (moduleOrPermKey.includes('.')) {
         return canAccessPermission(moduleOrPermKey);
       }
       return canPerformModuleAction(moduleOrPermKey, action);
     },
-    [activeRoleId, canAccessPermission, canPerformModuleAction]
+    [effectiveRoleId, canAccessPermission, canPerformModuleAction]
   );
 
   const getActiveOperationalLimits = useCallback((): RoleOperationalLimits => {
-    if (activeRoleId === 'owner') return DEFAULT_OPERATIONAL_LIMITS.owner;
-    return operationalLimits[activeRoleId] || DEFAULT_OPERATIONAL_LIMITS.cashier;
-  }, [activeRoleId, operationalLimits]);
+    if (effectiveRoleId === 'owner') return DEFAULT_OPERATIONAL_LIMITS.owner;
+    return operationalLimits[effectiveRoleId] || DEFAULT_OPERATIONAL_LIMITS.cashier;
+  }, [effectiveRoleId, operationalLimits]);
 
   const shouldHideHppAndMargin = useCallback((): boolean => {
-    if (activeRoleId === 'owner') return false;
+    if (effectiveRoleId === 'owner') return false;
     const limits = getActiveOperationalLimits();
     return Boolean(limits.hideHppAndMargin);
-  }, [activeRoleId, getActiveOperationalLimits]);
+  }, [effectiveRoleId, getActiveOperationalLimits]);
 
   const value = useMemo(
     () => ({
@@ -2729,7 +2472,7 @@ export const AccessControlProvider: React.FC<{ children: React.ReactNode }> = ({
       operationalLimits,
       customRules,
       ecosystemModules: ECOSYSTEM_MODULES,
-      activeRoleId,
+      activeRoleId: effectiveRoleId,
       setActiveRoleId: (id: string) => {
         setActiveRoleIdState(id);
         saveToLocalStorage(roles, grants, moduleMatrix, operationalLimits, customRules, id);
@@ -2770,6 +2513,7 @@ export const AccessControlProvider: React.FC<{ children: React.ReactNode }> = ({
       posPinVerified,
       staffDirectory,
       loginWithCredentials,
+      loginWithDemoRole,
       logout,
       verifyPosPin,
       lockPosSession,
@@ -2780,7 +2524,7 @@ export const AccessControlProvider: React.FC<{ children: React.ReactNode }> = ({
       moduleMatrix,
       operationalLimits,
       customRules,
-      activeRoleId,
+      effectiveRoleId,
       activeCashier,
       setActiveCashier,
       canAccess,
@@ -2815,6 +2559,7 @@ export const AccessControlProvider: React.FC<{ children: React.ReactNode }> = ({
       posPinVerified,
       staffDirectory,
       loginWithCredentials,
+      loginWithDemoRole,
       logout,
       verifyPosPin,
       lockPosSession,

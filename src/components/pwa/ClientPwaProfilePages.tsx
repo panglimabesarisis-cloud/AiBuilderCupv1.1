@@ -32,12 +32,12 @@ import {
   Bot,
   RefreshCw,
 } from 'lucide-react';
-import { doc, updateDoc, setDoc, collection, onSnapshot } from 'firebase/firestore';
-import { db } from '../../firebase';
+import { doc, updateDoc, setDoc, collection, query, where, limit, onSnapshot } from 'firebase/firestore';
+import { db, auth } from '../../firebase';
+import { ACTIVE_STORE_ID } from '../../config/store';
 import {
   useAllPwaPageConfigs,
   useRewardClaims,
-  submitCustomerClaim,
 } from '../../services/pwaPageConfigService';
 
 export const WA_ADMIN_CS_URL =
@@ -212,7 +212,7 @@ export const ClientPwaProfilePages: React.FC<ClientPwaProfilePagesProps> = ({
   useEffect(() => {
     if (catalogProducts && catalogProducts.length > 0) return;
     const unsub = onSnapshot(
-      collection(db, 'products'),
+      query(collection(db, 'products'), where('storeId', '==', ACTIVE_STORE_ID), limit(250)),
       (snap) => {
         const list: any[] = [];
         snap.forEach((d) => {
@@ -289,7 +289,7 @@ export const ClientPwaProfilePages: React.FC<ClientPwaProfilePagesProps> = ({
     window.addEventListener('storage', refreshLocalTargets);
 
     const unsubReward = onSnapshot(
-      collection(db, 'reward_targets'),
+      query(collection(db, 'reward_targets'), limit(20)),
       (snap) => {
         const list: any[] = [];
         snap.forEach((d) => {
@@ -301,7 +301,7 @@ export const ClientPwaProfilePages: React.FC<ClientPwaProfilePagesProps> = ({
     );
 
     const unsubMarketing = onSnapshot(
-      collection(db, 'marketing_targets'),
+      query(collection(db, 'marketing_targets'), limit(20)),
       (snap) => {
         const list: any[] = [];
         snap.forEach((d) => {
@@ -654,11 +654,12 @@ export const ClientPwaProfilePages: React.FC<ClientPwaProfilePagesProps> = ({
     ];
     setSavedAddresses(nextList);
     onUpdateMember({ ...member, address: newAddrText.trim(), addressNotes: newAddrNotes.trim() });
-    if (customerId && customerId !== 'guest') {
+    if (customerId && customerId !== 'guest' && auth.currentUser) {
       try {
         await setDoc(
           doc(db, 'customers', customerId),
           {
+            customerUid: auth.currentUser.uid,
             address: newAddrText.trim(),
             addressNotes: newAddrNotes.trim(),
             savedAddresses: nextList,
@@ -697,38 +698,90 @@ export const ClientPwaProfilePages: React.FC<ClientPwaProfilePagesProps> = ({
     achievedQty?: number;
     targetQty?: number;
   }) => {
+    if (!auth.currentUser) {
+      showToast(tr('Please verify OTP first!', 'Silakan verifikasi OTP terlebih dahulu!'));
+      return;
+    }
     if (params.pointsCost > activePoints) {
       showToast(tr('Insufficient points balance!', 'Saldo poin Anda belum mencukupi!'));
       return;
     }
     setSubmittingClaimId(params.itemId);
     try {
-      const res = await submitCustomerClaim({
+      const now = new Date().toISOString();
+      const claimId = `CLM-${Date.now()}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
+      const isVoucher = params.claimType === 'voucher';
+      const generatedCode =
+        params.voucherCode ||
+        (isVoucher ? `VCH-${Math.random().toString(36).substring(2, 7).toUpperCase()}` : undefined);
+      const customerNameVal = member.storeName
+        ? `${member.ownerName || member.name} (${member.storeName})`
+        : member.name || 'Member PWA';
+
+      const record = {
+        id: claimId,
+        storeId: ACTIVE_STORE_ID,
+        customerUid: auth.currentUser.uid,
         customerId,
-        customerName: member.storeName ? `${member.ownerName || member.name} (${member.storeName})` : member.name || 'Member PWA',
+        customerName: customerNameVal,
         customerPhone: member.phone,
+        normalizedPhone: normalizedPhoneKey,
         claimType: params.claimType,
         itemId: params.itemId,
         itemTitle: params.itemTitle,
-        pointsCost: params.pointsCost,
-        voucherCode: params.voucherCode,
-        discountValueIdr: params.discountValueIdr,
-        minOrderIdr: params.minOrderIdr,
-        targetRequiredIdr: params.targetRequiredIdr,
-        currentSpentIdr: params.currentSpentIdr ?? computedTotalSpent,
-        rewardProductName: params.rewardProductName,
-        currentCustomerPoints: activePoints,
-        targetPromoId: params.targetPromoId,
-        targetPromoName: params.targetPromoName,
-        bonusProductId: params.bonusProductId,
-        bonusProductSku: params.bonusProductSku,
-        bonusProductName: params.bonusProductName,
-        bonusQty: params.bonusQty,
-        bonusCostPrice: params.bonusCostPrice,
-        achievedQty: params.achievedQty,
-        targetQty: params.targetQty,
-      });
-      showToast(res.message);
+        pointsCost: Number(params.pointsCost || 0),
+        voucherCode: generatedCode || '',
+        discountValueIdr: Number(params.discountValueIdr || 0),
+        minOrderIdr: Number(params.minOrderIdr || 0),
+        targetRequiredIdr: Number(params.targetRequiredIdr || 0),
+        currentSpentIdr: Number(params.currentSpentIdr ?? computedTotalSpent),
+        rewardProductName: params.rewardProductName || params.itemTitle,
+        status: isVoucher ? 'approved' : 'pending_pos',
+        createdAt: now,
+        updatedAt: now,
+        targetPromoId: params.targetPromoId || params.itemId,
+        targetPromoName: params.targetPromoName || params.itemTitle,
+        bonusProductId: params.bonusProductId || '',
+        bonusProductSku: params.bonusProductSku || '',
+        bonusProductName: params.bonusProductName || params.rewardProductName || params.itemTitle,
+        bonusQty: Number(params.bonusQty || 1),
+        bonusCostPrice: Number(params.bonusCostPrice || 0),
+        achievedQty: Number(params.achievedQty || 0),
+        targetQty: Number(params.targetQty || 0),
+      };
+
+      await setDoc(doc(db, 'reward_claims', claimId), record, { merge: true });
+      await setDoc(doc(db, `stores/${ACTIVE_STORE_ID}/reward_claims`, claimId), record, { merge: true });
+
+      if (params.pointsCost > 0 && customerId && customerId !== 'guest') {
+        const ledgerId = `PTL-${Date.now()}`;
+        await setDoc(
+          doc(db, 'point_ledger', ledgerId),
+          {
+            id: ledgerId,
+            storeId: ACTIVE_STORE_ID,
+            customerUid: auth.currentUser.uid,
+            customerId,
+            customerName: customerNameVal,
+            customerPhone: member.phone,
+            type: 'redeem',
+            pointsDelta: -Math.abs(params.pointsCost),
+            reason: `Klaim ${params.itemTitle} (${claimId})`,
+            claimId,
+            createdAt: now,
+          },
+          { merge: true }
+        );
+      }
+
+      showToast(
+        isVoucher
+          ? `Voucher ${generatedCode} berhasil diklaim!`
+          : 'Klaim hadiah berhasil dikirim ke Kasir POS!'
+      );
+    } catch (err) {
+      console.warn('Submit claim error:', err);
+      showToast(tr('Failed to submit claim.', 'Gagal mengirim klaim.'));
     } finally {
       setSubmittingClaimId(null);
     }
@@ -742,10 +795,11 @@ export const ClientPwaProfilePages: React.FC<ClientPwaProfilePagesProps> = ({
     }
     setSavingPin(true);
     try {
-      if (customerId && customerId !== 'guest') {
+      if (customerId && customerId !== 'guest' && auth.currentUser) {
         await setDoc(
           doc(db, 'customers', customerId),
           {
+            customerUid: auth.currentUser.uid,
             pin: newPinInput.trim(),
             password: newPinInput.trim(),
             updatedAt: new Date().toISOString(),

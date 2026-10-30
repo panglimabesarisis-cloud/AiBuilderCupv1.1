@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import {
   collection,
   query,
+  where,
   orderBy,
   limit,
   onSnapshot,
@@ -9,7 +10,7 @@ import {
   doc,
   updateDoc,
 } from 'firebase/firestore';
-import { db, handleFirestoreError, OperationType } from '../../firebase';
+import { auth, db, handleFirestoreError, OperationType } from '../../firebase';
 import { Transaction, TransactionItem, Product } from '../../types';
 import {
   PackageCheck,
@@ -224,7 +225,7 @@ export const CustomerOrderHistoryModal: React.FC<CustomerOrderHistoryModalProps>
     if (!isOpen) return;
 
     const targetPhoneNorm = normalizePhone(customerPhone);
-    if (!targetPhoneNorm || targetPhoneNorm.length < 8) {
+    if (!targetPhoneNorm || targetPhoneNorm.length < 8 || !auth.currentUser) {
       setOrders([]);
       setSelectedOrder(null);
       setLoading(false);
@@ -258,6 +259,7 @@ export const CustomerOrderHistoryModal: React.FC<CustomerOrderHistoryModalProps>
 
     const qTx = query(
       collection(db, 'transactions'),
+      where('customerUid', '==', auth.currentUser.uid),
       orderBy('createdAt', 'desc'),
       limit(50)
     );
@@ -270,7 +272,7 @@ export const CustomerOrderHistoryModal: React.FC<CustomerOrderHistoryModalProps>
           const data = docSnap.data() as Omit<Transaction, 'id'>;
           if (data.channel === 'pwa_client' || data.channel === 'client_pwa') {
             const docPhoneNorm = normalizePhone(data.customerPhone);
-            if (docPhoneNorm && docPhoneNorm === targetPhoneNorm) {
+            if (!docPhoneNorm || docPhoneNorm === targetPhoneNorm) {
               matching.push({
                 id: docSnap.id,
                 ...data,
@@ -289,6 +291,7 @@ export const CustomerOrderHistoryModal: React.FC<CustomerOrderHistoryModalProps>
 
     const qOrders = query(
       collection(db, `stores/${ACTIVE_STORE_ID}/orders`),
+      where('customerUid', '==', auth.currentUser.uid),
       orderBy('createdAt', 'desc'),
       limit(50)
     );

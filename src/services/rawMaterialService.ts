@@ -19,6 +19,7 @@ import {
   syncDocToDatabase,
   deleteDocFromDatabase,
 } from '../utils/dbSync';
+import { safeSetCache } from '../utils/safeStorage';
 
 export interface RawMaterialItem {
   id: string;
@@ -1404,7 +1405,7 @@ export function ensureArabianFoodMasterSynced(): Promise<void> {
         });
       }
       const mergedProds = Array.from(prodMap.values());
-      localStorage.setItem('riskcart_cache_products', JSON.stringify(mergedProds));
+      safeSetCache('riskcart_cache_products', mergedProds);
     } catch {}
   })();
 

@@ -38,6 +38,7 @@ import {
   getDynamicLayoutGridClass,
 } from '../common/AIShortcutCharts';
 import { AiRunControlBar, useAiFeatureControl } from '../common/AiRunControlBar';
+import { apiFetch } from '../../services/firebaseSession';
 
 export const RestockAdvisor: React.FC = () => {
   const { language, tr } = useLanguage();
@@ -169,7 +170,7 @@ export const RestockAdvisor: React.FC = () => {
         dailyAverageVelocity: p.dailyVelocity,
       }));
 
-      const res = await fetch('/api/ai/restock-advisor', {
+      const res = await apiFetch('/api/ai/restock-advisor', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         signal,

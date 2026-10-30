@@ -61,7 +61,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onToggleSidebar,
 }) => {
   const { currencyMode, setCurrencyMode, toggleCurrency, exchangeRate, isRateLive, tr } = useLanguage();
-  const { isDemoMode, resetDemoData, activeRoleId, logout, lockPosSession } = useAccessControl();
+  const { isDemoMode, resetDemoData, logout } = useAccessControl();
   const { transactions } = useAppData();
   const navigate = useNavigate();
   const [resetToast, setResetToast] = useState<boolean>(false);
@@ -236,23 +236,17 @@ export const Navbar: React.FC<NavbarProps> = ({
           </AppLink>
         </div>
 
-        {/* Right CTA: Sandbox Demo Indicator, Shift Action Button (Tutup Shift / Mulai Shift Baru), Install App & Logout */}
+        {/* Right CTA: Reset Demo Button, Shift Action Button (Tutup Shift / Mulai Shift Baru), Install App & Logout */}
         <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
           {isDemoMode && (
-            <div className="flex items-center gap-1.5 px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-xl bg-amber-500/15 border border-amber-400/60 shadow-[0_0_12px_rgba(245,158,11,0.18)]">
-              <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse shrink-0" />
-              <span className="text-[11px] font-black tracking-wider text-amber-300 uppercase whitespace-nowrap">
-                SANDBOX DEMO {activeRoleId === 'cashier' ? '(KASIR)' : '(ADMIN)'}
-              </span>
-              <button
-                type="button"
-                onClick={handleResetDemo}
-                className="ml-1 px-2 py-0.5 rounded-lg bg-amber-400/20 hover:bg-amber-400/35 border border-amber-300/50 text-amber-100 text-[11px] font-bold transition cursor-pointer whitespace-nowrap"
-                title="Kembalikan data sesi Sandbox Demo ke kondisi awal tanpa mengubah Cloud Firestore"
-              >
-                {resetToast ? '✓ Data Direset' : '↻ Reset Data Demo'}
-              </button>
-            </div>
+            <button
+              type="button"
+              onClick={handleResetDemo}
+              className="px-2.5 py-1 rounded-xl bg-amber-400/20 hover:bg-amber-400/35 border border-amber-300/50 text-amber-100 text-[11px] font-bold transition cursor-pointer whitespace-nowrap"
+              title="Kembalikan data sesi Sandbox Demo ke kondisi awal tanpa mengubah Cloud Firestore"
+            >
+              {resetToast ? '✓ Data Direset' : '↻ Reset Data Demo'}
+            </button>
           )}
 
           {/* Shift Status Action Button: "Tutup Shift" if activeShift is open, otherwise "Mulai Shift Baru" */}

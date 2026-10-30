@@ -3,7 +3,13 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { useAccessControl, hasValidAuthSession } from '../../context/AccessControlContext';
 
 export const LoginPage: React.FC = () => {
-  const { isAuthenticated, activeRoleId, activeCashier, loginWithCredentials } = useAccessControl();
+  const {
+    isAuthenticated,
+    activeRoleId,
+    activeCashier,
+    loginWithCredentials,
+    loginWithDemoRole,
+  } = useAccessControl();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -20,6 +26,7 @@ export const LoginPage: React.FC = () => {
     const emailLower = String(loginEmail || email || activeCashier?.email || '').toLowerCase();
     const isCashierRole =
       roleLower === 'cashier' ||
+      roleLower === 'demo_cashier' ||
       roleLower === 'kasir' ||
       emailLower.includes('kasir');
 
@@ -58,42 +65,33 @@ export const LoginPage: React.FC = () => {
     }
   }, [isAuthenticated, navigate]);
 
-  const handleFillDemo = () => {
-    setEmail('panglimabesarisis@gmail.com');
-    setPassword('Demo123');
-    setStatusMessage({
-      text: 'Kredensial Owner Utama terisi (panglimabesarisis@gmail.com | Pass: Demo123 atau PIN: 123456). Klik Sign In untuk masuk.',
-      type: 'info',
-    });
-  };
-
-  const handleQuickDemoLogin = async (roleType: 'owner' | 'admin' | 'kasir') => {
-    const targetEmail =
-      roleType === 'owner'
-        ? 'panglimabesarisis@gmail.com'
-        : roleType === 'admin'
-        ? 'demo@mayamandiri.com'
-        : 'kasir@mayamandiri.com';
-    const targetPass = 'Demo123';
-    setEmail(targetEmail);
-    setPassword(targetPass);
+  const handleDemoLogin = async (role: 'owner' | 'cashier') => {
     setIsSubmitting(true);
     setStatusMessage(null);
     try {
-      const result = await loginWithCredentials(targetEmail, targetPass);
+      const res = await fetch('/api/auth/demo-login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ role }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data?.ok) {
+        setStatusMessage({
+          text: String(data?.message || data?.error || 'Gagal masuk ke Mode Demo Juri.'),
+          type: 'error',
+        });
+        return;
+      }
+      const result = await loginWithDemoRole(role, data);
       if (result.ok) {
         setStatusMessage({ text: result.message, type: 'ok' });
-        const targetDest =
-          roleType === 'kasir'
-            ? '/pos'
-            : getRedirectDestination(result.roleId, targetEmail);
-        navigate(targetDest, { replace: true });
+        navigate(role === 'cashier' ? '/pos' : '/dashboard', { replace: true });
       } else {
         setStatusMessage({ text: result.message, type: 'error' });
       }
     } catch {
       setStatusMessage({
-        text: 'Terjadi kesalahan saat masuk ke akun. Silakan coba lagi.',
+        text: 'Terjadi kesalahan saat masuk ke Mode Demo Juri.',
         type: 'error',
       });
     } finally {
@@ -790,7 +788,7 @@ export const LoginPage: React.FC = () => {
                       setEmail(e.target.value);
                       if (statusMessage) setStatusMessage(null);
                     }}
-                    placeholder="panglimabesarisis@gmail.com / demo@mayamandiri.com"
+                    placeholder="Masukkan Email atau Username"
                     autoComplete="username"
                     required
                   />
@@ -813,7 +811,7 @@ export const LoginPage: React.FC = () => {
                       setPassword(e.target.value);
                       if (statusMessage) setStatusMessage(null);
                     }}
-                    placeholder="Masukkan Password (Demo123) atau PIN (123456)"
+                    placeholder="Masukkan Password atau PIN"
                     autoComplete="current-password"
                     required
                   />
@@ -841,23 +839,6 @@ export const LoginPage: React.FC = () => {
                 </div>
               </div>
 
-              <div className="demo-forgot-row">
-                <div className="demo-info">
-                  <span className="demo-title">AKSES CEPAT OWNER & DEMO</span>
-                  <span className="demo-pin">
-                    Pass: <strong>Demo123</strong> | PIN POS: <strong>123456</strong>
-                  </span>
-                </div>
-                <button
-                  type="button"
-                  className="forgot"
-                  id="forgotLink"
-                  onClick={handleFillDemo}
-                >
-                  Isi Form Owner
-                </button>
-              </div>
-
               {statusMessage && (
                 <div
                   className={`status ${
@@ -874,55 +855,28 @@ export const LoginPage: React.FC = () => {
                 </div>
               )}
 
-              {/* Pintasan 1-Klik Login Cepat Owner Utama & Akun Demo */}
               <div className="mb-3 p-3 rounded-xl border border-amber-400/35 bg-amber-500/5 space-y-2">
-                <div className="text-[11px] font-extrabold uppercase tracking-wider text-amber-300 text-center">
-                  🔑 Login Cepat 1-Klik (Owner Live Database & Demo)
-                </div>
-                <button
-                  type="button"
-                  id="masterOwnerBtn"
-                  disabled={isSubmitting}
-                  onClick={() => void handleQuickDemoLogin('owner')}
-                  className="btn-demo !mb-0 !h-auto w-full py-2.5 px-3 flex flex-col items-center justify-center text-center border-amber-400/70 bg-amber-500/15 hover:bg-amber-500/25"
-                  title="Login 1-Klik sebagai Owner Utama Live Database (panglimabesarisis@gmail.com | Demo123 / 123456)"
-                >
-                  <span className="text-xs font-extrabold text-amber-200 leading-tight">
-                    ⚡ Login Owner Utama (Live Database)
-                  </span>
-                  <span className="text-[10px] font-mono text-amber-100/85">
-                    panglimabesarisis@gmail.com • Pass: Demo123 / PIN: 123456
-                  </span>
-                </button>
                 <div className="grid grid-cols-2 gap-2">
                   <button
                     type="button"
-                    id="demoAdminBtn"
+                    id="demoOwnerJuriBtn"
                     disabled={isSubmitting}
-                    onClick={() => void handleQuickDemoLogin('admin')}
-                    className="btn-demo !mb-0 !h-auto py-2 px-2.5 flex flex-col items-center justify-center text-center"
-                    title="Login 1-Klik sebagai Demo Admin / Owner (demo@mayamandiri.com | Demo123)"
+                    onClick={() => void handleDemoLogin('owner')}
+                    className="btn-demo !mb-0 !h-auto py-2.5 px-3 flex items-center justify-center text-center"
                   >
                     <span className="text-xs font-extrabold text-amber-200 leading-tight">
-                      👑 Demo Admin / Owner
-                    </span>
-                    <span className="text-[10px] font-mono text-amber-100/75">
-                      demo@mayamandiri.com
+                      Demo Owner (Juri)
                     </span>
                   </button>
                   <button
                     type="button"
-                    id="demoKasirBtn"
+                    id="demoKasirJuriBtn"
                     disabled={isSubmitting}
-                    onClick={() => void handleQuickDemoLogin('kasir')}
-                    className="btn-demo !mb-0 !h-auto py-2 px-2.5 flex flex-col items-center justify-center text-center"
-                    title="Login 1-Klik sebagai Demo Kasir (kasir@mayamandiri.com | Demo123)"
+                    onClick={() => void handleDemoLogin('cashier')}
+                    className="btn-demo !mb-0 !h-auto py-2.5 px-3 flex items-center justify-center text-center"
                   >
                     <span className="text-xs font-extrabold text-emerald-300 leading-tight">
-                      🛒 Demo Kasir POS
-                    </span>
-                    <span className="text-[10px] font-mono text-amber-100/75">
-                      kasir@mayamandiri.com
+                      Demo Kasir (Juri)
                     </span>
                   </button>
                 </div>

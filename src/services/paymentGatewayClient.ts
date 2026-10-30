@@ -143,18 +143,5 @@ export const paymentGatewayApi = {
       }
     }
   },
-  simulatePaid: async (transactionId: string, orderId?: string) => {
-    try {
-      return await call<{ success: boolean; message: string }>('/api/payments/dummy/simulate-pay', {
-        method: 'POST',
-        body: JSON.stringify({ transactionId, orderId: orderId || transactionId }),
-      });
-    } catch {
-      return await call<{ success: boolean; message: string }>('/api/payments/simulate-paid', {
-        method: 'POST',
-        body: JSON.stringify({ transactionId }),
-      });
-    }
-  },
 };
 

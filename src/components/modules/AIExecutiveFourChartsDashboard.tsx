@@ -33,6 +33,7 @@ import { useAppData } from '../../context/AppDataContext';
 import { useTheme } from '../../context/ThemeContext';
 import { useLanguage } from '../../context/LanguageContext';
 import { useFirestoreList } from '../../hooks/useFirestoreList';
+import { apiFetch } from '../../services/firebaseSession';
 import { useRawMaterials, useRawMaterialPOs, useRawMaterialSuppliers } from '../../services/rawMaterialService';
 import {
   findAgentInstructionConfig,
@@ -699,7 +700,7 @@ export const AIExecutiveFourChartsDashboard: React.FC<AIExecutiveFourChartsDashb
         },
       };
 
-      const res = await fetch('/api/ai/agent-run', {
+      const res = await apiFetch('/api/ai/agent-run', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

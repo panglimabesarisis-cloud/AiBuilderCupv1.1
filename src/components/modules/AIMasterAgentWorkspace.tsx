@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { apiFetch } from '../../services/firebaseSession';
 import {
   ArrowLeft,
   Sparkles,
@@ -998,7 +999,7 @@ export const AIMasterAgentWorkspace: React.FC<AIMasterAgentWorkspaceProps> = ({
     )}\n\nINSTRUKSI / PERTANYAAN PENGGUNA UNTUK ${activeAgent.nameId.toUpperCase()}:\n${queryText}`;
 
     try {
-      const res = await fetch('/api/ai/agent-run', {
+      const res = await apiFetch('/api/ai/agent-run', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         signal,

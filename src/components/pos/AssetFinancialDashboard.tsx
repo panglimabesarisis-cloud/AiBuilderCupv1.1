@@ -1,7 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { collection, onSnapshot } from 'firebase/firestore';
-import { db, handleFirestoreError, OperationType } from '../../firebase';
-import { Product, Transaction } from '../../types';
+import React, { useMemo } from 'react';
 import {
   TrendingUp,
   DollarSign,
@@ -18,39 +15,7 @@ import { evaluateProductExpiry } from '../../utils/expiryUtils';
 
 export const AssetFinancialDashboard: React.FC = () => {
   const { currencyMode: globalCurrencyMode } = useLanguage();
-  const { products: contextProducts, transactions: contextTransactions } = useAppData();
-  const [products, setProducts] = useState<Product[]>([]);
-  const [transactions, setTransactions] = useState<Transaction[]>([]);
-
-  useEffect(() => {
-    const unsubProducts = onSnapshot(
-      collection(db, 'products'),
-      (snapshot) => {
-        const prods: Product[] = [];
-        snapshot.forEach((doc) => prods.push({ id: doc.id, ...(doc.data() as Omit<Product, 'id'>) }));
-        setProducts(prods);
-      },
-      (error) => handleFirestoreError(error, OperationType.GET, 'products')
-    );
-
-    const unsubTransactions = onSnapshot(
-      collection(db, 'transactions'),
-      (snapshot) => {
-        const txs: Transaction[] = [];
-        snapshot.forEach((doc) => txs.push({ id: doc.id, ...(doc.data() as Omit<Transaction, 'id'>) }));
-        setTransactions(txs);
-      },
-      (error) => handleFirestoreError(error, OperationType.GET, 'transactions')
-    );
-
-    return () => {
-      unsubProducts();
-      unsubTransactions();
-    };
-  }, []);
-
-  const activeProducts = products.length > 0 ? products : contextProducts;
-  const activeTransactions = transactions.length > 0 ? transactions : contextTransactions;
+  const { products: activeProducts, transactions: activeTransactions } = useAppData();
   const formatCurrency = (val: number) => formatMoney(val, globalCurrencyMode);
 
   // Compute Asset & Financial Metrics

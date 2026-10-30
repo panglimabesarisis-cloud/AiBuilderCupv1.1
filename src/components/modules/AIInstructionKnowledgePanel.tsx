@@ -26,6 +26,7 @@ import { useLanguage } from '../../context/LanguageContext';
 import { useAppData } from '../../context/AppDataContext';
 import { useTheme } from '../../context/ThemeContext';
 import { AppLink, useAppNavigation } from '../../router';
+import { apiFetch } from '../../services/firebaseSession';
 import {
   AIAgentInstructionConfig,
   AIOutputMode,
@@ -389,7 +390,7 @@ export const AIInstructionKnowledgePanel: React.FC<AIInstructionKnowledgePanelPr
             ? customUserPrompt.trim()
             : `Jalankan instruksi agen "${targetAgent.nameId}" secara menyeluruh berdasarkan ringkasan dailyStats dari modul acuan (${targetAgent.moduleRoute}):\n${instructionText}`;
 
-        const res = await fetch('/api/ai/agent-run', {
+        const res = await apiFetch('/api/ai/agent-run', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           signal,
@@ -630,7 +631,7 @@ export const AIInstructionKnowledgePanel: React.FC<AIInstructionKnowledgePanelPr
     );
 
     try {
-      const res = await fetch('/api/ai/agent-run', {
+      const res = await apiFetch('/api/ai/agent-run', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

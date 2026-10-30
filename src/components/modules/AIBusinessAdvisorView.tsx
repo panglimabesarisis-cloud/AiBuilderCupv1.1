@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { apiFetch } from '../../services/firebaseSession';
 import {
   Sparkles,
   TrendingUp,
@@ -941,7 +942,7 @@ ${JSON.stringify(advisorDataSnapshot, null, 2)}
 PERTANYAAN / FOKUS ANALISIS:
 ${promptTopic}`;
 
-      const res = await fetch('/api/ai/agent-run', {
+      const res = await apiFetch('/api/ai/agent-run', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         signal,

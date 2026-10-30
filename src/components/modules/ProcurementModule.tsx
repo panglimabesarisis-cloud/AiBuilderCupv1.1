@@ -171,76 +171,67 @@ export const ProcurementModule: React.FC<ProcurementModuleProps> = ({
     setTimeout(() => setToastMsg(null), 4000);
   };
 
-  // 1. Real-time Products list for "Cari Produk" auto-complete & stock update
-  const { upsertProductLocal } = useAppData();
+  // 1. Products list from AppDataContext shared listener for "Cari Produk" auto-complete & stock update
+  const { products: appProducts, upsertProductLocal } = useAppData();
   const [products, setProducts] = useState<Product[]>([]);
   useEffect(() => {
-    const unsub = onSnapshot(
-      collection(db, 'products'),
-      (snap) => {
-        const list: Product[] = [];
-        snap.forEach((d) => {
-          const data = d.data() as any;
-          const costVal = Number(
-            data.costPrice ??
-              data.costPerCarton ??
-              data.costPerUnit ??
-              data.buyPrice ??
-              data.hargaModal ??
-              data.modal ??
-              0
-          );
-          const sellVal = Number(
-            data.sellPrice ??
-              data.price ??
-              data.posPrice ??
-              data.sellingPrice ??
-              data.pricePerCarton ??
-              data.pricePerUnit ??
-              data.hargaJual ??
-              0
-          );
-          const onlineVal = Number(
-            data.pwaPrice ?? data.onlinePrice ?? data.hargaOnline ?? sellVal
-          );
-          const ppc = Math.max(
-            1,
-            Number(data.isiPerDus ?? data.piecesPerCarton ?? data.itemsPerCarton ?? 24)
-          );
-          list.push({
-            ...data,
-            id: d.id,
-            storeId: data.storeId || ACTIVE_STORE_ID,
-            name: data.name || data.groupName || '',
-            sku: data.sku || d.id,
-            category: data.category || 'MINERAL',
-            brand: data.brand || '',
-            barcode: data.barcode || '',
-            piecesPerCarton: ppc,
-            isiPerDus: ppc,
-            stockInUnits: Number(data.stockInUnits ?? data.stock ?? 0),
-            costPerUnit: costVal,
-            costPrice: costVal,
-            costPerCarton: costVal,
-            pricePerUnit: sellVal,
-            pricePerCarton: sellVal,
-            sellPrice: sellVal,
-            posPrice: sellVal,
-            pwaPrice: onlineVal,
-            minStockAlert: Number(data.minStockAlert ?? 10),
-            imageUrl: data.imageUrl || '',
-            storageLocation: data.storageLocation || 'Rak Toko',
-            productionDate: data.productionDate || data.tanggalProduksi || '',
-            expiryDate: data.expiryDate || data.tanggalKadaluarsa || '',
-            batches: Array.isArray(data.batches) ? data.batches : [],
-          } as Product);
-        });
-        setProducts(list);
-      },
-      (err) => console.warn('Products sync warning in ProcurementModule:', err)
-    );
-    return () => unsub();
-  }, []);
+    const list: Product[] = (Array.isArray(appProducts) ? appProducts : []).map((data: any) => {
+      const costVal = Number(
+        data.costPrice ??
+          data.costPerCarton ??
+          data.costPerUnit ??
+          data.buyPrice ??
+          data.hargaModal ??
+          data.modal ??
+          0
+      );
+      const sellVal = Number(
+        data.sellPrice ??
+          data.price ??
+          data.posPrice ??
+          data.sellingPrice ??
+          data.pricePerCarton ??
+          data.pricePerUnit ??
+          data.hargaJual ??
+          0
+      );
+      const onlineVal = Number(
+        data.pwaPrice ?? data.onlinePrice ?? data.hargaOnline ?? sellVal
+      );
+      const ppc = Math.max(
+        1,
+        Number(data.isiPerDus ?? data.piecesPerCarton ?? data.itemsPerCarton ?? 24)
+      );
+      return {
+        ...data,
+        id: data.id,
+        storeId: data.storeId || ACTIVE_STORE_ID,
+        name: data.name || data.groupName || '',
+        sku: data.sku || data.id,
+        category: data.category || 'MINERAL',
+        brand: data.brand || '',
+        barcode: data.barcode || '',
+        piecesPerCarton: ppc,
+        isiPerDus: ppc,
+        stockInUnits: Number(data.stockInUnits ?? data.stock ?? 0),
+        costPerUnit: costVal,
+        costPrice: costVal,
+        costPerCarton: costVal,
+        pricePerUnit: sellVal,
+        pricePerCarton: sellVal,
+        sellPrice: sellVal,
+        posPrice: sellVal,
+        pwaPrice: onlineVal,
+        minStockAlert: Number(data.minStockAlert ?? 10),
+        imageUrl: data.imageUrl || '',
+        storageLocation: data.storageLocation || 'Rak Toko',
+        productionDate: data.productionDate || data.tanggalProduksi || '',
+        expiryDate: data.expiryDate || data.tanggalKadaluarsa || '',
+        batches: Array.isArray(data.batches) ? data.batches : [],
+      } as Product;
+    });
+    setProducts(list);
+  }, [appProducts]);
 
   // 2. Suppliers from Firestore via useFirestoreList
   const {

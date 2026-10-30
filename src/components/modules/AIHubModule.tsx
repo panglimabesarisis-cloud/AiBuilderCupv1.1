@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { checkAndRecordAiCooldown } from '../../utils/aiCooldown';
+import { apiFetch } from '../../services/firebaseSession';
 import {
   Cpu,
   Sparkles,
@@ -81,6 +82,7 @@ import { useAppData } from '../../context/AppDataContext';
 import { useAppNavigation, AppLink, getPathForTab } from '../../router';
 import { getDefaultMinStock } from '../../services/posRuntime';
 import { saveProductDocToAllPaths } from '../../services/productService';
+import { safeSetCache } from '../../utils/safeStorage';
 
 export type AIAgentSlug =
   | 'anti-fraud-sentinel'
@@ -492,9 +494,7 @@ export const AIHubModule: React.FC<AIHubModuleProps> = ({
           .map((d) => ({ id: d.id, ...(d.data() as any) }))
           .sort((a, b) => String(b.startTime || '').localeCompare(String(a.startTime || '')));
         setStoreShifts(list);
-        try {
-          localStorage.setItem('riskcart_cache_shifts', JSON.stringify(list));
-        } catch {}
+        safeSetCache('riskcart_cache_shifts', list);
       },
       (err) => console.warn('shifts listener notice (using cached shifts):', err)
     );
@@ -503,9 +503,7 @@ export const AIHubModule: React.FC<AIHubModuleProps> = ({
       (snap) => {
         const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
         setStoreStaff(list);
-        try {
-          localStorage.setItem('riskcart_cache_staff', JSON.stringify(list));
-        } catch {}
+        safeSetCache('riskcart_cache_staff', list);
       },
       (err) => console.warn('staff listener notice (using cached staff):', err)
     );
@@ -754,7 +752,7 @@ export const AIHubModule: React.FC<AIHubModuleProps> = ({
     });
 
     try {
-      const res = await fetch('/api/ai/agent-run', {
+      const res = await apiFetch('/api/ai/agent-run', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1327,7 +1325,7 @@ export const AIHubModule: React.FC<AIHubModuleProps> = ({
     if (!testOrderText.trim()) return;
     setIsParsing(true);
     try {
-      const res = await fetch('/api/ai/parse-order', {
+      const res = await apiFetch('/api/ai/parse-order', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1557,7 +1555,7 @@ export const AIHubModule: React.FC<AIHubModuleProps> = ({
     const query = `ATURAN WAJIB: WAJIB gunakan HANYA nama produk, jumlah stok, dan nominal Rupiah yang ada di dalam JSON Data Aktual Firestore yang dilampirkan. DILARANG KERAS mengarang nama produk (seperti Cooking Oil, Rice, Sugar) atau angka di luar data tersebut. Jika produk di database hanya ada 1 (misal: Test Produk Verifikasi), sebutkan hanya produk tersebut dan angkanya apa adanya!\n\nJSON Data Aktual Firestore (POS & Client PWA):\n${realFirestoreJson}\n\nUser Question:\n${questionText}`;
 
     try {
-      const res = await fetch('/api/ai/agent-run', {
+      const res = await apiFetch('/api/ai/agent-run', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1986,7 +1984,7 @@ export const AIHubModule: React.FC<AIHubModuleProps> = ({
 
       setThinMarginAIReport(fallbackReport);
 
-      const response = await fetch('/api/ai/agent-run', {
+      const response = await apiFetch('/api/ai/agent-run', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -5518,7 +5516,7 @@ export const AIHubModule: React.FC<AIHubModuleProps> = ({
                   onClick={async () => {
                     if (!testVoiceText.trim() || storeProducts.length === 0) return;
                     try {
-                      const res = await fetch('/api/ai/parse-order', {
+                      const res = await apiFetch('/api/ai/parse-order', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({

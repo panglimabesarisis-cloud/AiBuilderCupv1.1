@@ -62,6 +62,7 @@ import {
   deleteDocFromDatabase,
   autoResyncLocalCachesToServer,
 } from '../../utils/dbSync';
+import { safeSetCache } from '../../utils/safeStorage';
 
 export type TableShape = 'round' | 'rectangle' | 'square';
 export type TableStatus = 'occupied' | 'available' | 'reserved' | 'billing';
@@ -1623,9 +1624,7 @@ export const TableLayoutModule: React.FC<TableLayoutModuleProps> = ({
           }
           return finalDoc;
         });
-        try {
-          localStorage.setItem(LOCAL_STORAGE_TABLES_KEY, JSON.stringify(nextList));
-        } catch {}
+        safeSetCache(LOCAL_STORAGE_TABLES_KEY, nextList);
         return nextList;
       });
     },
@@ -1764,9 +1763,7 @@ export const TableLayoutModule: React.FC<TableLayoutModuleProps> = ({
 
     setTables((prev) => {
       const next = [...prev, newTable];
-      try {
-        localStorage.setItem(LOCAL_STORAGE_TABLES_KEY, JSON.stringify(next));
-      } catch {}
+      safeSetCache(LOCAL_STORAGE_TABLES_KEY, next);
       return next;
     });
     setSelectedTableId(newTable.id);
@@ -2153,9 +2150,7 @@ export const TableLayoutModule: React.FC<TableLayoutModuleProps> = ({
       };
       setDineInHistory((prev) => {
         const next = [newHistoryRec, ...prev];
-        try {
-          localStorage.setItem(LOCAL_STORAGE_DINEIN_HISTORY_KEY, JSON.stringify(next));
-        } catch {}
+        safeSetCache(LOCAL_STORAGE_DINEIN_HISTORY_KEY, next);
         return next;
       });
       void persistDineInRecord(newHistoryRec);
@@ -2295,9 +2290,7 @@ export const TableLayoutModule: React.FC<TableLayoutModuleProps> = ({
 
     setReservations((prev) => {
       const next = [newRes, ...prev];
-      try {
-        localStorage.setItem(LOCAL_STORAGE_RESERVATIONS_KEY, JSON.stringify(next));
-      } catch {}
+      safeSetCache(LOCAL_STORAGE_RESERVATIONS_KEY, next);
       return next;
     });
     void persistReservationDoc(newRes);
@@ -2319,9 +2312,7 @@ export const TableLayoutModule: React.FC<TableLayoutModuleProps> = ({
     };
     setDineInHistory((prev) => {
       const next = [newBookingRecord, ...prev];
-      try {
-        localStorage.setItem(LOCAL_STORAGE_DINEIN_HISTORY_KEY, JSON.stringify(next));
-      } catch {}
+      safeSetCache(LOCAL_STORAGE_DINEIN_HISTORY_KEY, next);
       return next;
     });
     void persistDineInRecord(newBookingRecord);
@@ -2487,9 +2478,7 @@ export const TableLayoutModule: React.FC<TableLayoutModuleProps> = ({
         }
         return updated;
       });
-      try {
-        localStorage.setItem(LOCAL_STORAGE_RESERVATIONS_KEY, JSON.stringify(next));
-      } catch {}
+      safeSetCache(LOCAL_STORAGE_RESERVATIONS_KEY, next);
       return next;
     });
     setStatusFeedback(`Status reservasi berhasil diperbarui menjadi ${nextStatus.toUpperCase()}.`);
@@ -2499,9 +2488,7 @@ export const TableLayoutModule: React.FC<TableLayoutModuleProps> = ({
     addDeletedIdsToStorage(LOCAL_STORAGE_DELETED_RESERVATIONS_KEY, [resId]);
     setReservations((prev) => {
       const next = prev.filter((r) => r.id !== resId);
-      try {
-        localStorage.setItem(LOCAL_STORAGE_RESERVATIONS_KEY, JSON.stringify(next));
-      } catch {}
+      safeSetCache(LOCAL_STORAGE_RESERVATIONS_KEY, next);
       return next;
     });
     try {

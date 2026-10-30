@@ -33,6 +33,7 @@ import {
 } from 'lucide-react';
 import { useSidebarMenu } from '../../hooks/useSidebarMenu';
 import { useLanguage } from '../../context/LanguageContext';
+import { apiFetch } from '../../services/firebaseSession';
 import { useAppData } from '../../context/AppDataContext';
 import { useAppNavigation } from '../../router';
 import {
@@ -309,7 +310,7 @@ export const SidebarMenuBuilder: React.FC = () => {
           .slice(0, 48) ||
         'Halaman Kustom AI';
 
-      const response = await fetch('/api/ai-page-builder/generate', {
+      const response = await apiFetch('/api/ai-page-builder/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         signal,

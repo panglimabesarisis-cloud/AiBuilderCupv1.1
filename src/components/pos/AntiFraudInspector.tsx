@@ -30,6 +30,7 @@ import { useLanguage } from '../../context/LanguageContext';
 import { useAppData } from '../../context/AppDataContext';
 import { checkAndRecordAiCooldown } from '../../utils/aiCooldown';
 import { AiRunControlBar, useAiFeatureControl } from '../common/AiRunControlBar';
+import { apiFetch } from '../../services/firebaseSession';
 
 export interface CartVoidEvidenceLog {
   id: string;
@@ -254,7 +255,7 @@ export const AntiFraudInspector: React.FC = () => {
         createdAt: v.createdAt,
       }));
 
-      const res = await fetch('/api/ai/fraud-audit', {
+      const res = await apiFetch('/api/ai/fraud-audit', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         signal,

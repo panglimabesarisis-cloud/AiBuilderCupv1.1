@@ -33,6 +33,7 @@ import { CustomerItem } from '../../types';
 import { useAppNavigation } from '../../router';
 import { useAppData } from '../../context/AppDataContext';
 import { formatCurrency } from '../../utils/money';
+import { apiFetch } from '../../services/firebaseSession';
 import { openTransactionDetailModal } from '../common/GlobalModals';
 import {
   usePwaPageConfig,
@@ -276,7 +277,7 @@ export const CustomerModule: React.FC<CustomerModuleProps> = ({
     setIsSendingWa(true);
     setWaFeedback(null);
     try {
-      const res = await fetch('/api/whatsapp/send', {
+      const res = await apiFetch('/api/whatsapp/send', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

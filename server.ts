@@ -23,8 +23,14 @@ import {
   getDocs,
   setDoc,
   deleteDoc,
+  deleteField,
   serverTimestamp,
+  query,
+  where,
+  limit,
 } from 'firebase/firestore';
+import { FieldValue, getFirestore as getAdminFirestore } from 'firebase-admin/firestore';
+import { getAdminApp } from './payments/serverStore.ts';
 
 import {
   requireAuth,
@@ -44,6 +50,10 @@ import {
 } from './src/db/users.ts';
 
 dotenv.config();
+if (String(process.env.OTP_HMAC_SECRET || '').trim().length < 32) {
+  console.error('OTP_HMAC_SECRET wajib diisi minimal 32 karakter');
+  process.exit(1);
+}
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -140,6 +150,7 @@ try {
 const firestoreDb = firestoreDbInstance;
 
 const app = express();
+app.set('trust proxy', true);
 const PORT = Number(process.env.PORT) || 3000;
 
 // Security headers (Helmet-equivalent baseline) & reduced JSON body limit
@@ -243,9 +254,131 @@ app.post(['/api/auth/firebase-token', '/api/auth/firebase-custom-token'], requir
   }
 });
 
-// Endpoint Login Terpadu (/api/auth/login): Verifikasi ke koleksi `users` & `staff` di database server + fallback Master Admin/Owner & Demo
+async function migrateAndPersistStaffSecretHashes(
+  docPaths: string[],
+  baseDoc: Record<string, any>,
+  updates: { passwordHash?: string; pinHash?: string }
+): Promise<void> {
+  const cleanedDoc: Record<string, any> = {
+    ...baseDoc,
+    ...updates,
+    updatedAt: new Date().toISOString(),
+  };
+  delete cleanedDoc.password;
+  delete cleanedDoc.pin;
+
+  const adminAppInstance = getAdminApp();
+  const adminFs = adminAppInstance
+    ? getAdminFirestore(adminAppInstance, targetServerDbId)
+    : null;
+
+  await Promise.all(
+    docPaths.map(async (docPath) => {
+      await serverStore.setDoc(docPath, cleanedDoc, { merge: false }).catch(() => {});
+      if (adminFs) {
+        await adminFs
+          .doc(docPath)
+          .update({
+            ...(updates.passwordHash ? { passwordHash: updates.passwordHash } : {}),
+            ...(updates.pinHash ? { pinHash: updates.pinHash } : {}),
+            password: FieldValue.delete(),
+            pin: FieldValue.delete(),
+          })
+          .catch(() => {});
+      } else {
+        await setDoc(
+          doc(firestoreDb, docPath),
+          {
+            ...(updates.passwordHash ? { passwordHash: updates.passwordHash } : {}),
+            ...(updates.pinHash ? { pinHash: updates.pinHash } : {}),
+            password: deleteField(),
+            pin: deleteField(),
+          },
+          { merge: true }
+        ).catch(() => {});
+      }
+    })
+  );
+}
+
+app.post('/api/auth/demo-login', async (req, res) => {
+  try {
+    if (!enforceRateLimit(`demo_ip:${req.ip}`, 5, 10 * 60 * 1000)) {
+      return res.status(429).json({
+        ok: false,
+        valid: false,
+        message: 'Terlalu banyak permintaan Demo Login. Silakan tunggu beberapa menit.',
+      });
+    }
+
+    const rawRole = String(req.body?.role || '').trim().toLowerCase();
+    if (rawRole !== 'owner' && rawRole !== 'cashier') {
+      return res.status(400).json({
+        ok: false,
+        valid: false,
+        message: 'Role demo harus owner atau cashier.',
+      });
+    }
+
+    const uid = rawRole === 'owner' ? 'demo_owner' : 'demo_cashier';
+    const sessionToken = createSignedSessionToken({
+      uid,
+      role: uid,
+      expiresInMs: 2 * 60 * 60 * 1000,
+    });
+
+    let customToken: string | undefined;
+    try {
+      const adminAuthSdk = getAdminAuthOrNull();
+      if (adminAuthSdk) {
+        customToken = await adminAuthSdk.createCustomToken(uid, {
+          role: uid,
+          isDemo: true,
+          storeId: 'store_001',
+        });
+      }
+    } catch {}
+
+    const demoUser = {
+      id: uid,
+      name: rawRole === 'owner' ? 'Demo Owner (Juri)' : 'Demo Kasir (Juri)',
+      role: uid,
+      outlet: 'Cabang Utama (Sandbox Demo)',
+      shift: 'Full-Time / All Shift',
+    };
+
+    return res.json({
+      ok: true,
+      valid: true,
+      isDemo: true,
+      roleId: uid,
+      role: uid,
+      user: demoUser,
+      token: sessionToken,
+      sessionToken,
+      customToken,
+      message: `Mode Demo Juri (${demoUser.name}) aktif.`,
+    });
+  } catch (err: any) {
+    return res.status(500).json({
+      ok: false,
+      valid: false,
+      message: err?.message || 'Gagal memulai sesi Demo Juri.',
+    });
+  }
+});
+
+// Endpoint Login Terpadu (/api/auth/login): Verifikasi hash ke koleksi `users` & `staff` di database server
 app.post('/api/auth/login', async (req, res) => {
   try {
+    if (!enforceRateLimit(`login_ip:${req.ip}`, 10, 10 * 60 * 1000)) {
+      return res.status(429).json({
+        ok: false,
+        valid: false,
+        message: 'Terlalu banyak percobaan login. Silakan tunggu 10 menit.',
+      });
+    }
+
     const { email, username, password, pin } = req.body || {};
     const cleanId = String(email || username || '').trim().toLowerCase();
     const cleanSecret = String(password || pin || '').trim();
@@ -258,253 +391,146 @@ app.post('/api/auth/login', async (req, res) => {
       });
     }
 
-    // 1. Cek Akun Demo Sandbox (Admin / Kasir)
-    if (
-      (cleanId === 'demo@mayamandiri.com' || cleanId === 'demo' || cleanId === 'demo@riskcart.ai') &&
-      (cleanSecret === 'Demo123' || cleanSecret === 'demo123' || cleanSecret === '123456')
-    ) {
-      const demoAdmin = {
-        id: 'demo_admin_001',
-        name: 'Demo Admin / Owner',
-        email: 'demo@mayamandiri.com',
-        role: 'Owner / Super Admin',
-        outlet: 'Cabang Utama (Sandbox Demo)',
-        phone: '0812-0000-0001',
-        shift: 'Full-Time / All Shift',
-      };
-      const sessionToken = createSignedSessionToken({ uid: demoAdmin.id, role: 'owner' });
-      return res.json({
-        ok: true,
-        valid: true,
-        isDemo: true,
-        roleId: 'owner',
-        user: demoAdmin,
-        token: sessionToken,
-        sessionToken,
-        message: 'Login Demo Admin / Owner berhasil! Mode Isolasi Sandbox aktif.',
-      });
-    }
-
-    if (
-      (cleanId === 'kasir@mayamandiri.com' || cleanId === 'demo_kasir' || cleanId === 'kasir@riskcart.ai') &&
-      (cleanSecret === 'Demo123' || cleanSecret === 'demo123' || cleanSecret === '123456')
-    ) {
-      const demoKasir = {
-        id: 'demo_kasir_001',
-        name: 'Demo Kasir POS',
-        email: 'kasir@mayamandiri.com',
-        role: 'Cashier',
-        outlet: 'Cabang Utama (Sandbox Demo)',
-        phone: '0812-0000-0002',
-        shift: 'Pagi (07:30 - 15:00)',
-      };
-      const sessionToken = createSignedSessionToken({ uid: demoKasir.id, role: 'cashier' });
-      return res.json({
-        ok: true,
-        valid: true,
-        isDemo: true,
-        roleId: 'cashier',
-        user: demoKasir,
-        token: sessionToken,
-        sessionToken,
-        message: 'Login Demo Kasir berhasil!',
-      });
-    }
-
-    // 2. Cek Akun Master Owner / Admin Utama
-    const MASTER_OWNER_IDS = new Set([
-      'panglimabesarisis@gmail.com',
-      'dedefajarkurniawan@gmail.com',
-      'owner@riskcart.ai',
-      'owner@riskcart.com',
-      'admin@riskcart.ai',
-      'admin@riskcart.com',
-      'dede.kasir@riskcart.com',
-      'owner',
-      'admin',
-      'dede fajar kurniawan',
-    ]);
-    const DEFAULT_OWNER_SECRETS = new Set([
-      '123456',
-      'Demo123',
-      'demo123',
-      'Owner123',
-      'owner123',
-      'Admin123',
-      'admin123',
-      'RiskCart2026',
-      'riskcart123',
-    ]);
-    const envOwnerPin = String(process.env.OWNER_PIN || '').trim();
-    const envOwnerPass = String(process.env.OWNER_AUTH_PASSWORD || '').trim();
-    if (envOwnerPin) DEFAULT_OWNER_SECRETS.add(envOwnerPin);
-    if (envOwnerPass) DEFAULT_OWNER_SECRETS.add(envOwnerPass);
-
-    // Ambil daftar users & staff dari serverStore
     const [usersDocs, staffDocs, storeStaffDocs] = await Promise.all([
       serverStore.listDocs('users').catch(() => []),
       serverStore.listDocs('staff').catch(() => []),
       serverStore.listDocs('stores/store_001/staff').catch(() => []),
     ]);
 
-    const allAccountDocs: Array<Record<string, any>> = [];
-    [usersDocs, staffDocs, storeStaffDocs].forEach((list) => {
+    const accountMap = new Map<string, { data: Record<string, any>; paths: Set<string> }>();
+    const collectDocs = (colPrefix: string, list: any[]) => {
       list.forEach((docSnap) => {
-        allAccountDocs.push({ id: docSnap.id, ...(docSnap.data() as any) });
+        const d = (docSnap.data() || {}) as Record<string, any>;
+        const id = String(docSnap.id || d.id || '').trim();
+        if (!id) return;
+        const entry = accountMap.get(id) || { data: { id }, paths: new Set<string>() };
+        entry.data = { ...entry.data, ...d, id };
+        entry.paths.add(`${colPrefix}/${id}`);
+        accountMap.set(id, entry);
       });
-    });
+    };
 
-    if (MASTER_OWNER_IDS.has(cleanId)) {
-      const ownerDoc = allAccountDocs.find(
-        (d) =>
-          String(d.id || '') === 'staff_001' ||
-          String(d.email || '').trim().toLowerCase() === cleanId ||
-          String(d.role || '').toLowerCase().includes('owner')
-      );
-      const customPass = String(ownerDoc?.password || '').trim();
-      const customPin = String(ownerDoc?.pin || '').trim();
+    collectDocs('stores/store_001/staff', storeStaffDocs);
+    collectDocs('users', usersDocs);
+    collectDocs('staff', staffDocs);
 
-      if (
-        DEFAULT_OWNER_SECRETS.has(cleanSecret) ||
-        (customPass && cleanSecret === customPass) ||
-        (customPin && cleanSecret === customPin)
-      ) {
-        const ownerProfile = {
-          id: 'staff_001',
-          name: String(ownerDoc?.name || 'Dede Fajar Kurniawan'),
-          email: cleanId.includes('@') ? cleanId : 'panglimabesarisis@gmail.com',
-          role: 'Owner / Super Admin',
-          outlet: String(ownerDoc?.outlet || 'Cabang Utama (Pusat)'),
-          phone: String(ownerDoc?.phone || '0811-1000-001'),
-          shift: String(ownerDoc?.shift || 'Full-Time / All Shift'),
-        };
-
-        const ownerRecord = {
-          ...ownerProfile,
-          pin: customPin || '123456',
-          password: customPass || 'Demo123',
-          status: 'active',
-          updatedAt: new Date().toISOString(),
-        };
-        await Promise.all([
-          serverStore.setDoc('staff/staff_001', ownerRecord, { merge: true }).catch(() => {}),
-          serverStore.setDoc('stores/store_001/staff/staff_001', ownerRecord, { merge: true }).catch(() => {}),
-          serverStore.setDoc('users/staff_001', ownerRecord, { merge: true }).catch(() => {}),
-        ]);
-
-        const sessionToken = createSignedSessionToken({ uid: 'staff_001', role: 'owner' });
-        let customToken: string | undefined;
-        try {
-          const adminAuthSdk = getAdminAuthOrNull();
-          if (adminAuthSdk) {
-            customToken = await adminAuthSdk.createCustomToken('staff_001', {
-              role: 'owner',
-              email: ownerProfile.email,
-              storeId: 'store_001',
-            });
-          }
-        } catch {}
-
-        return res.json({
-          ok: true,
-          valid: true,
-          isDemo: false,
-          roleId: 'owner',
-          user: ownerProfile,
-          token: sessionToken,
-          sessionToken,
-          customToken,
-          message: `Selamat datang kembali, ${ownerProfile.name} (Owner / Full Access)!`,
-        });
-      }
-    }
-
-    // 3. Cek Akun Staff / Users di Database Server
-    const matchedAccount = allAccountDocs.find((d) => {
-      if (String(d.status || '').toLowerCase() === 'nonaktif') return false;
+    let matchedEntry: { data: Record<string, any>; paths: Set<string> } | undefined;
+    for (const entry of accountMap.values()) {
+      const d = entry.data;
+      if (String(d.status || '').toLowerCase() === 'nonaktif') continue;
       const dEmail = String(d.email || '').trim().toLowerCase();
       const dUser = String(d.username || '').trim().toLowerCase();
       const dName = String(d.name || '').trim().toLowerCase();
       const dPhone = String(d.phone || '').trim().toLowerCase();
-      return (
+      if (
         (dEmail && dEmail === cleanId) ||
         (dUser && dUser === cleanId) ||
         (dName && dName === cleanId) ||
         (dPhone && dPhone !== '-' && dPhone === cleanId)
-      );
-    });
-
-    if (matchedAccount) {
-      const storedPass = String(matchedAccount.password || '').trim();
-      const storedPin = String(matchedAccount.pin || '').trim();
-      const roleStr = String(matchedAccount.role || 'Cashier');
-      const isOwnerRole = roleStr.toLowerCase().includes('owner') || roleStr.toLowerCase().includes('super admin');
-      const hasNoSecret = !storedPass && !storedPin;
-
-      const secretValid =
-        (storedPass && cleanSecret === storedPass) ||
-        (storedPin && cleanSecret === storedPin) ||
-        (isOwnerRole && DEFAULT_OWNER_SECRETS.has(cleanSecret)) ||
-        (hasNoSecret && (DEFAULT_OWNER_SECRETS.has(cleanSecret) || cleanSecret === 'Staff#123'));
-
-      if (!secretValid) {
-        return res.status(401).json({
-          ok: false,
-          valid: false,
-          message: 'Password atau PIN yang Anda masukkan tidak sesuai.',
-        });
+      ) {
+        matchedEntry = entry;
+        break;
       }
+    }
 
-      const staffProfile = {
-        id: String(matchedAccount.id || 'staff_user'),
-        name: String(matchedAccount.name || 'Staff RiskCart'),
-        email: String(matchedAccount.email || cleanId),
-        role: roleStr,
-        outlet: String(matchedAccount.outlet || 'Cabang Utama (Pusat)'),
-        phone: String(matchedAccount.phone || '-'),
-        shift: String(matchedAccount.shift || 'Pagi (07:30 - 15:00)'),
-      };
-
-      const resolvedRole = isOwnerRole
-        ? 'owner'
-        : /admin|supervisor|manager|manajer/i.test(roleStr)
-        ? 'admin_toko'
-        : 'cashier';
-
-      const sessionToken = createSignedSessionToken({
-        uid: staffProfile.id,
-        role: isOwnerRole ? 'owner' : resolvedRole === 'admin_toko' ? 'supervisor' : 'cashier',
-      });
-
-      let customToken: string | undefined;
-      try {
-        const adminAuthSdk = getAdminAuthOrNull();
-        if (adminAuthSdk) {
-          customToken = await adminAuthSdk.createCustomToken(staffProfile.id, {
-            role: isOwnerRole ? 'owner' : 'staff',
-            email: staffProfile.email,
-            storeId: 'store_001',
-          });
-        }
-      } catch {}
-
-      return res.json({
-        ok: true,
-        valid: true,
-        isDemo: false,
-        roleId: resolvedRole,
-        user: staffProfile,
-        token: sessionToken,
-        sessionToken,
-        customToken,
-        message: `Selamat datang kembali, ${staffProfile.name}!`,
+    if (!matchedEntry) {
+      return res.status(401).json({
+        ok: false,
+        valid: false,
+        message: 'Email/Username atau Password tidak ditemukan. Periksa kembali kredensial Anda.',
       });
     }
 
-    return res.status(401).json({
-      ok: false,
-      valid: false,
-      message: 'Email/Username atau Password tidak ditemukan. Periksa kembali kredensial Anda.',
+    const matchedAccount = matchedEntry.data;
+    const inputHash = hashServerSecretWithSalt(cleanSecret);
+    const safeCompareHex = (aHex: string, bHex: string): boolean => {
+      if (!aHex || !bHex || aHex.length !== bHex.length) return false;
+      try {
+        return crypto.timingSafeEqual(Buffer.from(aHex, 'hex'), Buffer.from(bHex, 'hex'));
+      } catch {
+        return false;
+      }
+    };
+
+    const storedPassHash = String(matchedAccount.passwordHash || '').trim();
+    const storedPinHash = String(matchedAccount.pinHash || '').trim();
+    const plainPass = String(matchedAccount.password || '').trim();
+    const plainPin = String(matchedAccount.pin || '').trim();
+
+    let secretValid =
+      (storedPassHash && safeCompareHex(storedPassHash, inputHash)) ||
+      (storedPinHash && safeCompareHex(storedPinHash, inputHash));
+
+    if (!secretValid && (plainPass || plainPin)) {
+      const matchesPlainPass = Boolean(plainPass && cleanSecret === plainPass);
+      const matchesPlainPin = Boolean(plainPin && cleanSecret === plainPin);
+      if (matchesPlainPass || matchesPlainPin) {
+        secretValid = true;
+        const nextPassHash = plainPass ? hashServerSecretWithSalt(plainPass) : storedPassHash || undefined;
+        const nextPinHash = plainPin ? hashServerSecretWithSalt(plainPin) : storedPinHash || undefined;
+        const targetPaths = Array.from(matchedEntry.paths);
+        await migrateAndPersistStaffSecretHashes(targetPaths, matchedAccount, {
+          ...(nextPassHash ? { passwordHash: nextPassHash } : {}),
+          ...(nextPinHash ? { pinHash: nextPinHash } : {}),
+        });
+      }
+    }
+
+    if (!secretValid) {
+      return res.status(401).json({
+        ok: false,
+        valid: false,
+        message: 'Password atau PIN yang Anda masukkan tidak sesuai.',
+      });
+    }
+
+    const roleStr = String(matchedAccount.role || 'Cashier');
+    const isOwnerRole =
+      roleStr.toLowerCase().includes('owner') || roleStr.toLowerCase().includes('super admin');
+
+    const staffProfile = {
+      id: String(matchedAccount.id || 'staff_user'),
+      name: String(matchedAccount.name || 'Staff RiskCart'),
+      email: String(matchedAccount.email || cleanId),
+      role: roleStr,
+      outlet: String(matchedAccount.outlet || 'Cabang Utama (Pusat)'),
+      phone: String(matchedAccount.phone || '-'),
+      shift: String(matchedAccount.shift || 'Pagi (07:30 - 15:00)'),
+    };
+
+    const resolvedRole = isOwnerRole
+      ? 'owner'
+      : /admin|supervisor|manager|manajer/i.test(roleStr)
+      ? 'admin_toko'
+      : 'cashier';
+
+    const sessionToken = createSignedSessionToken({
+      uid: staffProfile.id,
+      role: isOwnerRole ? 'owner' : resolvedRole === 'admin_toko' ? 'supervisor' : 'cashier',
+    });
+
+    let customToken: string | undefined;
+    try {
+      const adminAuthSdk = getAdminAuthOrNull();
+      if (adminAuthSdk) {
+        customToken = await adminAuthSdk.createCustomToken(staffProfile.id, {
+          role: isOwnerRole ? 'owner' : 'staff',
+          email: staffProfile.email,
+          storeId: 'store_001',
+        });
+      }
+    } catch {}
+
+    return res.json({
+      ok: true,
+      valid: true,
+      isDemo: false,
+      roleId: resolvedRole,
+      user: staffProfile,
+      token: sessionToken,
+      sessionToken,
+      customToken,
+      message: `Selamat datang kembali, ${staffProfile.name}!`,
     });
   } catch (err: any) {
     console.error('[/api/auth/login Error]', err);
@@ -866,11 +892,18 @@ async function getAgentConfiguredModel(agentKey: string, requestedModel?: string
 }
 
 // 1. API: Anti-Fraud Anomaly Detection
-app.post('/api/ai/anti-fraud', async (req, res) => {
-  const startTime = Date.now();
-  const agentKey = req.body.agentKey || 'agent_1';
-  let promptContext = '';
-  const lang = resolveLanguage(req);
+app.post(
+  '/api/ai/anti-fraud',
+  requireAuth,
+  requireRole(['owner', 'admin', 'supervisor', 'manager', 'cashier', 'staff', 'demo_owner', 'demo_cashier']),
+  async (req: AuthRequest, res) => {
+    if (!enforceRateLimit(`ai:${req.user.uid}`, 20, 10 * 60 * 1000)) {
+      return res.status(429).json({ error: 'Terlalu banyak permintaan AI. Silakan coba lagi nanti.' });
+    }
+    const startTime = Date.now();
+    const agentKey = req.body.agentKey || 'agent_1';
+    let promptContext = '';
+    const lang = resolveLanguage(req);
   try {
     const {
       channel,
@@ -1041,7 +1074,10 @@ Analyze the transaction and output:
 });
 
 // 2. API: Typo-Tolerant Natural Language Order Parser for Client PWA
-app.post('/api/ai/parse-order', async (req, res) => {
+app.post('/api/ai/parse-order', requireAuth, async (req: AuthRequest, res) => {
+  if (!enforceRateLimit(`ai:${req.user.uid}`, 20, 10 * 60 * 1000)) {
+    return res.status(429).json({ error: 'Terlalu banyak permintaan AI. Silakan coba lagi nanti.' });
+  }
   const startTime = Date.now();
   const agentKey = req.body.agentKey || 'agent_2';
   let promptContext = '';
@@ -1151,12 +1187,19 @@ ${getLanguagePromptInstruction(lang)}
 });
 
 // 3. API: AI Advisor for Restock (Powered by Google Gemini 2.5 Flash for Demand Planning)
-app.post('/api/ai/restock-advisor', async (req, res) => {
-  const startTime = Date.now();
-  const agentKey = req.body.agentKey || 'agent_3';
-  let promptContext = '';
-  const lang = resolveLanguage(req);
-  const isId = lang === 'id';
+app.post(
+  '/api/ai/restock-advisor',
+  requireAuth,
+  requireRole(['owner', 'admin', 'supervisor', 'manager', 'cashier', 'staff', 'demo_owner', 'demo_cashier']),
+  async (req: AuthRequest, res) => {
+    if (!enforceRateLimit(`ai:${req.user.uid}`, 20, 10 * 60 * 1000)) {
+      return res.status(429).json({ error: 'Terlalu banyak permintaan AI. Silakan coba lagi nanti.' });
+    }
+    const startTime = Date.now();
+    const agentKey = req.body.agentKey || 'agent_3';
+    let promptContext = '';
+    const lang = resolveLanguage(req);
+    const isId = lang === 'id';
   try {
     const {
       currentStockLevels = [],
@@ -1393,7 +1436,10 @@ Return a structured JSON response conforming strictly to the requested schema.
 });
 
 // 4. API: Generic AI Agent Runner & Sandbox Test (Records ai_logs) — also aliased to /api/ai/chat and /api/gemini
-const handleAiAgentRunRequest = async (req: express.Request, res: express.Response) => {
+const handleAiAgentRunRequest = async (req: AuthRequest, res: express.Response) => {
+  if (!enforceRateLimit(`ai:${req.user.uid}`, 20, 10 * 60 * 1000)) {
+    return res.status(429).json({ error: 'Terlalu banyak permintaan AI. Silakan coba lagi nanti.' });
+  }
   const startTime = Date.now();
   const lang = resolveLanguage(req);
   const {
@@ -1501,15 +1547,37 @@ const handleAiAgentRunRequest = async (req: express.Request, res: express.Respon
   }
 };
 
-app.post('/api/ai/agent-run', handleAiAgentRunRequest);
-app.post('/api/ai/chat', handleAiAgentRunRequest);
-app.post('/api/gemini', handleAiAgentRunRequest);
+app.post(
+  '/api/ai/agent-run',
+  requireAuth,
+  requireRole(['owner', 'admin', 'supervisor', 'manager', 'cashier', 'staff', 'demo_owner', 'demo_cashier']),
+  handleAiAgentRunRequest
+);
+app.post(
+  '/api/ai/chat',
+  requireAuth,
+  requireRole(['owner', 'admin', 'supervisor', 'manager', 'cashier', 'staff', 'demo_owner', 'demo_cashier']),
+  handleAiAgentRunRequest
+);
+app.post(
+  '/api/gemini',
+  requireAuth,
+  requireRole(['owner', 'admin', 'supervisor', 'manager', 'cashier', 'staff', 'demo_owner', 'demo_cashier']),
+  handleAiAgentRunRequest
+);
 
 // API: Fraud Audit on batch POS transactions and inventory variance logs
-app.post('/api/ai/fraud-audit', async (req, res) => {
-  const startTime = Date.now();
-  const agentKey = req.body.agentKey || 'agent_fraud_audit';
-  const lang = resolveLanguage(req);
+app.post(
+  '/api/ai/fraud-audit',
+  requireAuth,
+  requireRole(['owner', 'admin', 'supervisor', 'manager', 'cashier', 'staff', 'demo_owner', 'demo_cashier']),
+  async (req: AuthRequest, res) => {
+    if (!enforceRateLimit(`ai:${req.user.uid}`, 20, 10 * 60 * 1000)) {
+      return res.status(429).json({ error: 'Terlalu banyak permintaan AI. Silakan coba lagi nanti.' });
+    }
+    const startTime = Date.now();
+    const agentKey = req.body.agentKey || 'agent_fraud_audit';
+    const lang = resolveLanguage(req);
   try {
     const {
       transactions = [],
@@ -1691,12 +1759,18 @@ function normalizeServerPhone(rawPhone: string): string {
 // 4. API: Fonnte WhatsApp OTP Gateway for Client PWA Member Verification (Server-Side OTP Generation)
 app.post('/api/fonnte/send-otp', async (req, res) => {
   try {
+    if (!enforceRateLimit(`otp_send_ip:${req.ip}`, 5, 10 * 60 * 1000)) {
+      return res.status(429).json({ error: 'Terlalu banyak permintaan OTP dari IP ini. Silakan coba lagi dalam 10 menit.' });
+    }
     const { phone, customerName = 'Customer' } = req.body;
     const token = process.env.FONNTE_TOKEN || '';
 
     const cleanPhone = normalizeServerPhone(phone);
     if (!cleanPhone || cleanPhone.length < 9) {
       return res.status(400).json({ error: 'Valid WhatsApp phone number is required' });
+    }
+    if (!enforceRateLimit(`otp_send_phone:${cleanPhone}`, 3, 10 * 60 * 1000)) {
+      return res.status(429).json({ error: 'Terlalu banyak pengiriman OTP ke nomor ini. Silakan coba lagi dalam 10 menit.' });
     }
 
     // Generate 6-digit OTP exclusively on the server
@@ -1770,6 +1844,13 @@ app.post('/api/fonnte/send-otp', async (req, res) => {
 // 4b. API: Verify WhatsApp OTP Server-Side
 app.post('/api/fonnte/verify-otp', async (req, res) => {
   try {
+    if (!enforceRateLimit(`otp_verify_ip:${req.ip}`, 10, 10 * 60 * 1000)) {
+      return res.status(429).json({
+        success: false,
+        verified: false,
+        error: 'Terlalu banyak percobaan verifikasi OTP dari IP ini. Silakan coba lagi dalam 10 menit.',
+      });
+    }
     const { phone, code } = req.body;
     const cleanPhone = normalizeServerPhone(phone);
     const submittedCode = String(code || '').trim();
@@ -1872,8 +1953,12 @@ app.post('/api/fonnte/verify-otp', async (req, res) => {
 });
 
 // API: Send WhatsApp notification / billing reminder via Fonnte Gateway
-app.post('/api/whatsapp/send', async (req, res) => {
-  try {
+app.post(
+  '/api/whatsapp/send',
+  requireAuth,
+  requireRole(['owner', 'admin', 'supervisor', 'manager', 'cashier', 'staff']),
+  async (req: AuthRequest, res) => {
+    try {
     if (!enforceRateLimit(`wa_send_ip:${req.ip}`, 15, 10 * 60 * 1000)) {
       return res.status(429).json({ error: 'Terlalu banyak pengiriman pesan WhatsApp. Coba lagi nanti.' });
     }
@@ -1931,8 +2016,15 @@ app.post('/api/whatsapp/send', async (req, res) => {
 });
 
 // API: AI Bahan Baku & BOM Stock Controller (/dashboard/bahan-baku/ai)
-app.post('/api/ai/raw-materials-advisor', async (req, res) => {
-  try {
+app.post(
+  '/api/ai/raw-materials-advisor',
+  requireAuth,
+  requireRole(['owner', 'admin', 'supervisor', 'manager', 'cashier', 'staff', 'demo_owner', 'demo_cashier']),
+  async (req: AuthRequest, res) => {
+    if (!enforceRateLimit(`ai:${req.user.uid}`, 20, 10 * 60 * 1000)) {
+      return res.status(429).json({ error: 'Terlalu banyak permintaan AI. Silakan coba lagi nanti.' });
+    }
+    try {
     const {
       question = '',
       rawMaterials = [],
@@ -2066,8 +2158,12 @@ Kembalikan JSON dengan format:
 });
 
 // API: Real Payment Gateway Connection & Webhook Validation (Xendit, DOKU, Midtrans)
-app.post('/api/payment-gateway/test', async (req, res) => {
-  try {
+app.post(
+  '/api/payment-gateway/test',
+  requireAuth,
+  requireRole(['owner', 'admin']),
+  async (req: AuthRequest, res) => {
+    try {
     const { provider, mode = 'sandbox', publicKey = '', secretKey = '' } = req.body;
     const cleanProvider = String(provider || '').toLowerCase();
     const trimPublic = String(publicKey || '').trim();
@@ -2612,6 +2708,7 @@ app.post(['/api/settings/pin/verify', '/api/auth/verify-pin'], async (req, res) 
     }
 
     // 3. Check staff, stores/store_001/staff, and users collections on server if not matched yet
+    let matchedStaffProfile: Record<string, any> | undefined;
     if (!isValid) {
       try {
         const [staffSnap, storeStaffSnap, usersSnap] = await Promise.all([
@@ -2619,11 +2716,17 @@ app.post(['/api/settings/pin/verify', '/api/auth/verify-pin'], async (req, res) 
           serverStore.listDocs(`stores/${storeId}/staff`).catch(() => []),
           serverStore.listDocs('users').catch(() => []),
         ]);
-        const allStaffDocs = [...staffSnap, ...storeStaffSnap, ...usersSnap];
-        allStaffDocs.forEach((docSnap) => {
-          if (isValid) return;
-          const d = docSnap.data() as any;
-          if (d?.status === 'Nonaktif') return;
+        const allStaffDocs: Array<{ col: string; id: string; data: any }> = [];
+        staffSnap.forEach((d) => allStaffDocs.push({ col: 'staff', id: d.id, data: d.data() }));
+        storeStaffSnap.forEach((d) =>
+          allStaffDocs.push({ col: `stores/${storeId}/staff`, id: d.id, data: d.data() })
+        );
+        usersSnap.forEach((d) => allStaffDocs.push({ col: 'users', id: d.id, data: d.data() }));
+
+        for (const item of allStaffDocs) {
+          if (isValid) break;
+          const d = item.data as any;
+          if (d?.status === 'Nonaktif') continue;
           const staffRole = String(d?.role || '').toLowerCase();
           const roleAllowed =
             cleanRole === 'cashier' ||
@@ -2631,41 +2734,58 @@ app.post(['/api/settings/pin/verify', '/api/auth/verify-pin'], async (req, res) 
             staffRole.includes(cleanRole) ||
             staffRole.includes('owner') ||
             staffRole.includes('admin');
-          if (!roleAllowed) return;
-          const staffPin = String(d?.pin || '').trim();
-          const staffPass = String(d?.password || '').trim();
-          if (
-            (staffPin && safeCompareHex(inputHash, hashServerSecretWithSalt(staffPin))) ||
-            (staffPass && safeCompareHex(inputHash, hashServerSecretWithSalt(staffPass)))
-          ) {
+          if (!roleAllowed) continue;
+
+          const storedPinHash = String(d?.pinHash || '').trim();
+          const storedPassHash = String(d?.passwordHash || '').trim();
+          const plainPin = String(d?.pin || '').trim();
+          const plainPass = String(d?.password || '').trim();
+
+          const matchedByHash =
+            (storedPinHash && safeCompareHex(storedPinHash, inputHash)) ||
+            (storedPassHash && safeCompareHex(storedPassHash, inputHash));
+          const matchedByPlain =
+            !matchedByHash &&
+            ((plainPin && safeCompareHex(inputHash, hashServerSecretWithSalt(plainPin))) ||
+              (plainPass && safeCompareHex(inputHash, hashServerSecretWithSalt(plainPass))));
+
+          if (matchedByHash || matchedByPlain) {
             isValid = true;
-            resolvedUid = String(docSnap.id || d?.id || resolvedUid);
+            resolvedUid = String(item.id || d?.id || resolvedUid);
+            matchedStaffProfile = {
+              id: resolvedUid,
+              name: d?.name,
+              email: d?.email,
+              role: d?.role,
+              outlet: d?.outlet,
+              phone: d?.phone,
+              shift: d?.shift,
+            };
             if (staffRole.includes('owner')) resolvedRole = 'owner';
-            else if (staffRole.includes('supervisor') || staffRole.includes('manager') || staffRole.includes('admin')) {
+            else if (
+              staffRole.includes('supervisor') ||
+              staffRole.includes('manager') ||
+              staffRole.includes('admin')
+            ) {
               resolvedRole = 'supervisor';
             } else {
               resolvedRole = 'cashier';
             }
+            if (matchedByPlain) {
+              const nextPinHash = plainPin ? hashServerSecretWithSalt(plainPin) : storedPinHash || undefined;
+              const nextPassHash = plainPass ? hashServerSecretWithSalt(plainPass) : storedPassHash || undefined;
+              await migrateAndPersistStaffSecretHashes(
+                [`staff/${resolvedUid}`, `stores/${storeId}/staff/${resolvedUid}`, `users/${resolvedUid}`],
+                d,
+                {
+                  ...(nextPinHash ? { pinHash: nextPinHash } : {}),
+                  ...(nextPassHash ? { passwordHash: nextPassHash } : {}),
+                }
+              );
+            }
           }
-        });
+        }
       } catch {}
-    }
-
-    // 4. Allow default Owner/Supervisor/Cashier PIN & password fallback when no custom hash lock overrides it
-    const DEFAULT_VALID_SECRETS = new Set([
-      '123456',
-      'Demo123',
-      'demo123',
-      'Owner123',
-      'owner123',
-      'Admin123',
-      'admin123',
-      'RiskCart2026',
-      'riskcart123',
-    ]);
-    if (!isValid && (!hasCustomConfiguredHash || cleanRole === 'cashier') && DEFAULT_VALID_SECRETS.has(cleanPin)) {
-      isValid = true;
-      resolvedRole = cleanRole === 'owner' ? 'owner' : cleanRole === 'supervisor' ? 'supervisor' : 'cashier';
     }
 
     if (!isValid) {
@@ -2681,6 +2801,7 @@ app.post(['/api/settings/pin/verify', '/api/auth/verify-pin'], async (req, res) 
       valid: true,
       ok: true,
       role: resolvedRole,
+      staff: matchedStaffProfile,
       token: sessionToken,
       sessionToken,
     });
@@ -2690,11 +2811,93 @@ app.post(['/api/settings/pin/verify', '/api/auth/verify-pin'], async (req, res) 
   }
 });
 
+app.post(
+  '/api/staff/set-secret',
+  requireAuth,
+  requireRole(['owner']),
+  async (req: AuthRequest, res) => {
+    try {
+      const { staffId, storeId = 'store_001', password, pin } = req.body || {};
+      const cleanStaffId = String(staffId || '').trim();
+      if (!cleanStaffId) {
+        return res.status(400).json({ ok: false, error: 'staffId wajib diisi.' });
+      }
+      const cleanPass = password !== undefined ? String(password).trim() : '';
+      const cleanPin = pin !== undefined ? String(pin).trim() : '';
+      if (!cleanPass && !cleanPin) {
+        return res.status(400).json({ ok: false, error: 'Password atau PIN baru wajib diisi.' });
+      }
+      if (cleanPass && cleanPass.length < 6) {
+        return res.status(400).json({ ok: false, error: 'Password minimal 6 karakter.' });
+      }
+      if (cleanPin && !/^\d{6}$/.test(cleanPin)) {
+        return res.status(400).json({ ok: false, error: 'PIN wajib 6 angka numerik.' });
+      }
+
+      const existingSnap = await serverStore.getDoc(`staff/${cleanStaffId}`).catch(() => null);
+      const baseData = (existingSnap && existingSnap.exists() ? existingSnap.data() : { id: cleanStaffId }) || {
+        id: cleanStaffId,
+      };
+
+      const updates: { passwordHash?: string; pinHash?: string } = {};
+      if (cleanPass) updates.passwordHash = hashServerSecretWithSalt(cleanPass);
+      if (cleanPin) updates.pinHash = hashServerSecretWithSalt(cleanPin);
+
+      await migrateAndPersistStaffSecretHashes(
+        [`staff/${cleanStaffId}`, `stores/${storeId}/staff/${cleanStaffId}`, `users/${cleanStaffId}`],
+        baseData,
+        updates
+      );
+
+      return res.json({
+        ok: true,
+        staffId: cleanStaffId,
+        message: 'Hash kredensial staf berhasil disimpan di server.',
+      });
+    } catch (err: any) {
+      return res.status(500).json({
+        ok: false,
+        error: err?.message || 'Gagal menyimpan hash kredensial staf.',
+      });
+    }
+  }
+);
+
 // Firestore-backed API Routes for Products & Modal Safes
-app.get('/api/products', async (_req, res) => {
+const productsApiCache = new Map<string, { data: any[]; expiresAt: number }>();
+
+app.get('/api/products', async (req, res) => {
   try {
-    const snap = await serverStore.listDocs('products');
-    const productList = snap.map((d) => ({ id: d.id, ...d.data() }));
+    const storeId = String(req.query?.storeId || 'store_001').trim() || 'store_001';
+    const cached = productsApiCache.get(storeId);
+    if (cached && Date.now() < cached.expiresAt) {
+      return res.json(cached.data);
+    }
+
+    const adminAppInstance = getAdminApp();
+    let productList: any[] = [];
+    if (adminAppInstance) {
+      const adminFs = getAdminFirestore(adminAppInstance, targetServerDbId);
+      const snap = await adminFs
+        .collection('products')
+        .where('storeId', '==', storeId)
+        .limit(250)
+        .get();
+      productList = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    } else {
+      const q = query(
+        collection(firestoreDb, 'products'),
+        where('storeId', '==', storeId),
+        limit(250)
+      );
+      const snap = await getDocs(q);
+      productList = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    }
+
+    productsApiCache.set(storeId, {
+      data: productList,
+      expiresAt: Date.now() + 60 * 1000,
+    });
     res.json(productList);
   } catch (error: any) {
     console.error('Failed to fetch products from Firestore:', error);
@@ -2702,21 +2905,30 @@ app.get('/api/products', async (_req, res) => {
   }
 });
 
-app.get('/api/safes', async (_req, res) => {
-  try {
-    const snap = await serverStore.listDocs('brangkas_modal');
-    const records = snap.map((d) => ({ id: d.id, ...d.data() }));
-    res.json(records);
-  } catch (error: any) {
-    console.error('Failed to fetch modal safe records from Firestore:', error);
-    res.status(500).json({ error: 'Failed to fetch modal safes' });
+app.get(
+  '/api/safes',
+  requireAuth,
+  requireRole(['owner', 'admin', 'supervisor', 'manager', 'cashier', 'staff']),
+  async (_req: AuthRequest, res) => {
+    try {
+      const snap = await serverStore.listDocs('brangkas_modal');
+      const records = snap.map((d) => ({ id: d.id, ...d.data() }));
+      res.json(records);
+    } catch (error: any) {
+      console.error('Failed to fetch modal safe records from Firestore:', error);
+      res.status(500).json({ error: 'Failed to fetch modal safes' });
+    }
   }
-});
+);
 
 // API: Universal AI Page & Database Builder — Multimodal Vision-to-Logic Engine + Auto-Provision Firestore Collection (ext_{slug})
-app.post('/api/ai-page-builder/generate', async (req, res) => {
-  const startTime = Date.now();
-  try {
+app.post(
+  '/api/ai-page-builder/generate',
+  requireAuth,
+  requireRole(['owner', 'admin']),
+  async (req: AuthRequest, res) => {
+    const startTime = Date.now();
+    try {
     const {
       prompt = '',
       pageTitle = '',
@@ -4107,8 +4319,12 @@ const DEFAULT_GOOGLE_APPS_SCRIPT_WEBHOOK_URL = (
   ''
 ).trim();
 
-app.post('/api/google-drive/sync', async (req, res) => {
-  try {
+app.post(
+  '/api/google-drive/sync',
+  requireAuth,
+  requireRole(['owner', 'admin', 'supervisor', 'manager', 'cashier', 'staff']),
+  async (req: AuthRequest, res) => {
+    try {
     const payload = req.body || {};
     const syncType = String(payload.type || 'TRANSACTION_DOC');
     const rawFileName = String(
@@ -4535,8 +4751,12 @@ app.post('/api/google-drive/sync', async (req, res) => {
   }
 });
 
-app.get('/api/google-drive/doc/:id', async (req, res) => {
-  try {
+app.get(
+  '/api/google-drive/doc/:id',
+  requireAuth,
+  requireRole(['owner', 'admin', 'supervisor', 'manager', 'cashier', 'staff']),
+  async (req: AuthRequest, res) => {
+    try {
     const syncId = String(req.params.id || '').trim();
     let record = inMemoryDriveStore.get(syncId);
     if (!record) {
@@ -4592,8 +4812,12 @@ app.get('/api/google-drive/doc/:id', async (req, res) => {
   }
 });
 
-app.get('/api/google-drive/photo/:id', async (req, res) => {
-  try {
+app.get(
+  '/api/google-drive/photo/:id',
+  requireAuth,
+  requireRole(['owner', 'admin', 'supervisor', 'manager', 'cashier', 'staff']),
+  async (req: AuthRequest, res) => {
+    try {
     const syncId = String(req.params.id || '').trim();
     let record = inMemoryDriveStore.get(syncId);
     if (!record) {
@@ -4748,53 +4972,6 @@ const adminDb = {
     };
   },
 };
-
-// Server-side Visitor WhatsApp Notification (reads FONNTE_TOKEN and VISITOR_WA_TARGET exclusively from process.env)
-app.post('/api/visitor/notify', async (req, res) => {
-  try {
-    if (!enforceRateLimit(`visitor_wa_ip:${req.ip}`, 10, 10 * 60 * 1000)) {
-      return res.status(429).json({ status: 'error', message: 'Rate limit exceeded' });
-    }
-    const fonnteToken = (process.env.FONNTE_TOKEN || process.env.FONNTE_API_TOKEN || '').trim();
-    const waTarget = (process.env.VISITOR_WA_TARGET || '').trim();
-    if (!fonnteToken || !waTarget) {
-      return res.status(503).json({
-        status: 'error',
-        message: 'Visitor WhatsApp notification is not configured on the server.',
-      });
-    }
-
-    const { tanggal = '', halamanAkses = '/', statusLogin = 'NO', meta = {} } = req.body || {};
-    const text = [
-      `Viewer Riskcart`,
-      `Tanggal: ${String(tanggal).slice(0, 64)}`,
-      `Halaman Akses: ${String(halamanAkses).slice(0, 200)}`,
-      `Login: ${String(statusLogin).slice(0, 80)}`,
-      `--`,
-      `IP: ${String(meta?.ip || req.ip || '-').slice(0, 64)}`,
-      `Lokasi: ${String(meta?.lokasi || '-').slice(0, 120)}`,
-      `OS: ${String(meta?.os || '-').slice(0, 64)}`,
-      `Operating System: ${String(meta?.operatingSystem || '-').slice(0, 80)}`,
-      `---`,
-    ].join('\n');
-
-    const formData = new URLSearchParams();
-    formData.append('target', waTarget);
-    formData.append('message', text);
-
-    const fonnteRes = await fetch('https://api.fonnte.com/send', {
-      method: 'POST',
-      headers: { Authorization: fonnteToken },
-      body: formData,
-    });
-    if (!fonnteRes.ok) {
-      return res.status(502).json({ status: 'error', message: 'Failed to deliver visitor notification' });
-    }
-    return res.json({ status: 'ok' });
-  } catch (err: any) {
-    return res.status(500).json({ status: 'error', message: err.message });
-  }
-});
 
 // Endpoints for AI Agent Prompts (ai_agents_private & ai_instructions)
 app.get(
@@ -5258,14 +5435,11 @@ app.post(
 
     totalDeleted += wipeCounts.reduce((acc, n) => acc + n, 0);
 
-    // Pastikan dokumen staff default untuk OWNER dan DEMO tetap tersedia dan bersih
     const nowIso = new Date().toISOString();
     const defaultOwnerStaff = {
       id: 'staff_001',
       name: 'Dede Fajar Kurniawan',
       email: 'panglimabesarisis@gmail.com',
-      pin: '123456',
-      password: 'Demo123',
       role: 'Owner',
       outlet: 'Cabang Utama (Pusat)',
       phone: '0811-1000-001',
@@ -5276,30 +5450,11 @@ app.post(
       totalDeliveryCommission: 0,
       updatedAt: nowIso,
     };
-    const defaultDemoStaff = {
-      id: 'staff_demo',
-      name: 'Demo User (Sandbox)',
-      email: 'demo@riskcart.ai',
-      pin: '123456',
-      password: 'Demo123',
-      role: 'DEMO',
-      isDemo: true,
-      outlet: 'Cabang Utama (Pusat)',
-      phone: '-',
-      shift: 'Demo Sandbox',
-      kpiScore: 100,
-      status: 'active',
-      totalDeliveries: 0,
-      totalDeliveryCommission: 0,
-      updatedAt: nowIso,
-    };
 
     await Promise.all([
       serverStore.set('staff/staff_001', defaultOwnerStaff, { merge: true }).catch(() => {}),
       serverStore.set('stores/store_001/staff/staff_001', defaultOwnerStaff, { merge: true }).catch(() => {}),
-      serverStore.set('staff/staff_demo', defaultDemoStaff, { merge: true }).catch(() => {}),
       serverStore.set('users/staff_001', defaultOwnerStaff, { merge: true }).catch(() => {}),
-      serverStore.set('users/staff_demo', defaultDemoStaff, { merge: true }).catch(() => {}),
     ]);
 
     return res.json({

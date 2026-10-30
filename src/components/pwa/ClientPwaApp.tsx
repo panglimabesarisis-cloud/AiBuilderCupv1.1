@@ -7,16 +7,18 @@ import {
   getDoc,
   setDoc,
   query,
+  where,
   orderBy,
   limit,
 } from 'firebase/firestore';
-import { db, handleFirestoreError, OperationType, ensureFirebaseSession } from '../../firebase';
+import { db, auth, handleFirestoreError, OperationType, ensureFirebaseSession } from '../../firebase';
 import { Product, PackageType, CartItem, Transaction, TransactionItem } from '../../types';
 import { ACTIVE_STORE_ID } from '../../config/store';
 import { useSettingsDoc } from '../../hooks/useFirestoreData';
 import { PWASettings, DEFAULT_PWA_SETTINGS } from '../../types/settings';
 import { DEFAULT_STORE_CONFIG, isLegacyMockOrderOrTx } from '../../services/dataSeeder';
 import { ThemeToggleButton } from '../common/ThemeToggleButton';
+import { apiFetch } from '../../services/firebaseSession';
 import confetti from 'canvas-confetti';
 import {
   Sparkles,
@@ -630,7 +632,7 @@ export const ClientPwaApp: React.FC = () => {
     };
 
     const unsub1 = onSnapshot(
-      collection(db, 'reward_targets'),
+      query(collection(db, 'reward_targets'), limit(20)),
       (snap) => {
         rewardList = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
         mergeAndPublish();
@@ -638,7 +640,7 @@ export const ClientPwaApp: React.FC = () => {
       () => {}
     );
     const unsub2 = onSnapshot(
-      collection(db, 'marketing_targets'),
+      query(collection(db, 'marketing_targets'), limit(20)),
       (snap) => {
         marketingList = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
         mergeAndPublish();
@@ -766,23 +768,27 @@ export const ClientPwaApp: React.FC = () => {
     }
   }, [isAuthenticatedMember, rawScreen, location.pathname, location.search, navigate]);
 
-  // Subscribe to Firestore customers collection for real-time member lookup & POS sync
+  // Load only the logged-in customer document via getDoc (never listen to entire customers collection)
   useEffect(() => {
-    const unsubCustomers = onSnapshot(
-      collection(db, 'customers'),
-      (snap) => {
-        const list: any[] = [];
-        snap.forEach((d) => {
-          list.push({ id: d.id, ...d.data() });
-        });
-        setRegisteredCustomers(list);
-      },
-      (err) => {
-        console.warn('Firestore customers listener notice:', err);
-      }
-    );
-    return () => unsubCustomers();
-  }, []);
+    const normPhone = normalizePhone(member.phone);
+    if (!member.isVerified || !normPhone || normPhone.length < 8 || !auth.currentUser) {
+      setRegisteredCustomers([]);
+      return;
+    }
+    let cancelled = false;
+    void getDoc(doc(db, 'customers', normPhone))
+      .then((snap) => {
+        if (!cancelled && snap.exists()) {
+          setRegisteredCustomers([{ id: snap.id, ...snap.data() }]);
+        }
+      })
+      .catch((err) => {
+        console.warn('Firestore customer getDoc notice:', err);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [member.phone, member.isVerified]);
 
   // Helper to persist/update Member Profile in Cloud Firestore 'customers' collection keyed by normalized phone
   const syncMemberToFirestore = async (
@@ -837,10 +843,12 @@ export const ClientPwaApp: React.FC = () => {
       '123456';
 
     const targetDocId = existing?.id || docId;
+    const currentUid = auth.currentUser?.uid;
 
-    const customerPayload = {
+    const customerPayload: Record<string, any> = {
       id: targetDocId,
       storeId: ACTIVE_STORE_ID,
+      ...(currentUid ? { customerUid: currentUid } : {}),
       storeName: mergedProfile.storeName,
       ownerName: mergedProfile.ownerName,
       name: mergedProfile.name,
@@ -872,13 +880,15 @@ export const ClientPwaApp: React.FC = () => {
       updatedAt: nowIso,
     };
 
-    try {
-      await setDoc(doc(db, 'customers', targetDocId), customerPayload, { merge: true });
-      if (typeof window !== 'undefined') {
-        window.localStorage.setItem('riskcart_current_customer', JSON.stringify(customerPayload));
+    if (auth.currentUser) {
+      try {
+        await setDoc(doc(db, 'customers', targetDocId), customerPayload, { merge: true });
+        if (typeof window !== 'undefined') {
+          window.localStorage.setItem('riskcart_current_customer', JSON.stringify(customerPayload));
+        }
+      } catch (err) {
+        console.warn('Firestore customers sync notice:', err);
       }
-    } catch (err) {
-      console.warn('Firestore customers sync notice:', err);
     }
 
     return mergedProfile;
@@ -989,7 +999,7 @@ export const ClientPwaApp: React.FC = () => {
 
   useEffect(() => {
     const targetPhoneNorm = normalizePhone(member.phone);
-    if (!member.isVerified || !targetPhoneNorm || targetPhoneNorm.length < 8) {
+    if (!member.isVerified || !targetPhoneNorm || targetPhoneNorm.length < 8 || !auth.currentUser) {
       setUserOrders([]);
       setActiveOrdersCount(0);
       setLatestActiveOrder(null);
@@ -1023,6 +1033,7 @@ export const ClientPwaApp: React.FC = () => {
 
     const qTx = query(
       collection(db, 'transactions'),
+      where('customerUid', '==', auth.currentUser.uid),
       orderBy('createdAt', 'desc'),
       limit(50)
     );
@@ -1054,6 +1065,7 @@ export const ClientPwaApp: React.FC = () => {
 
     const qOrders = query(
       collection(db, `stores/${ACTIVE_STORE_ID}/orders`),
+      where('customerUid', '==', auth.currentUser.uid),
       orderBy('createdAt', 'desc'),
       limit(50)
     );
@@ -1106,7 +1118,7 @@ export const ClientPwaApp: React.FC = () => {
   // Subscribe to real-time products from Firestore (tanpa data dummy)
   useEffect(() => {
     const unsub = onSnapshot(
-      collection(db, 'products'),
+      query(collection(db, 'products'), where('storeId', '==', ACTIVE_STORE_ID), limit(250)),
       (snapshot) => {
         const prods: Product[] = [];
         snapshot.forEach((d) => {
@@ -1782,7 +1794,7 @@ export const ClientPwaApp: React.FC = () => {
     setOtpTimerActive(true);
 
     try {
-      const res = await fetch('/api/fonnte/send-otp', {
+      const res = await apiFetch('/api/fonnte/send-otp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1827,7 +1839,7 @@ export const ClientPwaApp: React.FC = () => {
     setIsSendingOtp(true);
 
     try {
-      const res = await fetch('/api/fonnte/send-otp', {
+      const res = await apiFetch('/api/fonnte/send-otp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1876,7 +1888,7 @@ export const ClientPwaApp: React.FC = () => {
     setOtpStatusText(tr('Verifying with server...', 'Memverifikasi dengan server...'));
 
     try {
-      const res = await fetch('/api/fonnte/verify-otp', {
+      const res = await apiFetch('/api/fonnte/verify-otp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -2157,9 +2169,21 @@ export const ClientPwaApp: React.FC = () => {
     setAiInputText('');
     setIsAiProcessing(true);
 
+    if (auth.currentUser) {
+      void addDoc(collection(db, 'pwa_chats'), {
+        storeId: ACTIVE_STORE_ID,
+        customerUid: auth.currentUser.uid,
+        customerName: member.name || 'Member PWA',
+        customerPhone: member.phone || '',
+        sender: 'user',
+        text: promptToSend,
+        createdAt: new Date().toISOString(),
+      }).catch(() => {});
+    }
+
     try {
       // Call AI parse endpoint with Gemini
-      const response = await fetch('/api/ai/parse-order', {
+      const response = await apiFetch('/api/ai/parse-order', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -2528,9 +2552,16 @@ export const ClientPwaApp: React.FC = () => {
             : 18,
       };
 
+      const currentUid = auth.currentUser?.uid;
+      if (!currentUid) {
+        setIsPlacingOrder(false);
+        return;
+      }
+
       const orderPayload = {
         storeId: ACTIVE_STORE_ID,
         outletId: 'out_1',
+        customerUid: currentUid,
         orderNumber: orderNum,
         channel: 'pwa',
         customerName: member.name || 'Member PWA Terdaftar',
@@ -2570,6 +2601,7 @@ export const ClientPwaApp: React.FC = () => {
       try {
         const orderDocRef = await addDoc(collection(db, 'stores', ACTIVE_STORE_ID, 'orders'), {
           ...orderPayload,
+          customerUid: currentUid,
           canonicalSyncKey,
           stockReconciled: false,
         });
@@ -2579,6 +2611,7 @@ export const ClientPwaApp: React.FC = () => {
           doc(db, 'orders', createdOrderDocId),
           {
             ...orderPayload,
+            customerUid: currentUid,
             id: createdOrderDocId,
             orderId: createdOrderDocId,
             transactionId: createdOrderDocId,
@@ -2595,6 +2628,7 @@ export const ClientPwaApp: React.FC = () => {
       const txPayload: Omit<Transaction, 'id'> & Record<string, any> = {
         storeId: ACTIVE_STORE_ID,
         outletId: 'out_1',
+        customerUid: currentUid,
         channel: 'pwa_client',
         source: 'Client PWA',
         orderNumber: orderPayload.orderNumber,
@@ -2630,17 +2664,17 @@ export const ClientPwaApp: React.FC = () => {
       try {
         const canonicalDocId = createdOrderDocId || finalTxId;
         await Promise.all([
-          setDoc(doc(db, 'transactions', canonicalDocId), { ...txPayload, id: canonicalDocId }, { merge: true }),
+          setDoc(doc(db, 'transactions', canonicalDocId), { ...txPayload, id: canonicalDocId, customerUid: currentUid }, { merge: true }),
           setDoc(
             doc(db, 'stores', ACTIVE_STORE_ID, 'transactions', canonicalDocId),
-            { ...txPayload, id: canonicalDocId },
+            { ...txPayload, id: canonicalDocId, customerUid: currentUid },
             { merge: true }
           ),
         ]);
         if (createdOrderDocId) {
           await setDoc(
             doc(db, 'stores', ACTIVE_STORE_ID, 'orders', createdOrderDocId),
-            { id: createdOrderDocId, orderId: createdOrderDocId, transactionId: canonicalDocId },
+            { id: createdOrderDocId, orderId: createdOrderDocId, transactionId: canonicalDocId, customerUid: currentUid },
             { merge: true }
           );
         }
@@ -2650,6 +2684,7 @@ export const ClientPwaApp: React.FC = () => {
           try {
             await addDoc(collection(db, 'transactions', canonicalDocId, 'items'), {
               ...item,
+              customerUid: currentUid,
               transactionId: canonicalDocId,
             });
           } catch (e) {
@@ -2673,6 +2708,7 @@ export const ClientPwaApp: React.FC = () => {
           {
             id: custDocId,
             storeId: ACTIVE_STORE_ID,
+            customerUid: currentUid,
             name: member.name || 'Member PWA',
             phone: member.phone || '',
             email: member.email || '',
@@ -2684,7 +2720,6 @@ export const ClientPwaApp: React.FC = () => {
             type: existingCust?.type || 'Member PWA',
             typeCode: existingCust?.typeCode || 'CUST-REG',
             isVerified: true,
-            points: (existingCust?.points ?? 0) + earnedPoints,
             totalSpent: (existingCust?.totalSpent ?? 0) + totalPayable,
             totalOrders: (existingCust?.totalOrders ?? 0) + 1,
             lastTransactionDate: new Date().toLocaleDateString('id-ID', {
@@ -2692,11 +2727,22 @@ export const ClientPwaApp: React.FC = () => {
               month: 'short',
               year: 'numeric',
             }),
-            status: 'active',
             updatedAt: nowTimestamp,
           },
           { merge: true }
         );
+        await addDoc(collection(db, 'point_ledger'), {
+          storeId: ACTIVE_STORE_ID,
+          customerUid: currentUid,
+          customerId: custDocId,
+          customerName: member.name || 'Member PWA',
+          customerPhone: member.phone || '',
+          type: 'earn',
+          pointsDelta: earnedPoints,
+          reason: `Pesanan PWA (${orderPayload.orderNumber})`,
+          orderId: createdOrderDocId || finalTxId,
+          createdAt: nowTimestamp,
+        });
       } catch (custErr) {
         console.warn('Customer stats update notice:', custErr);
       }

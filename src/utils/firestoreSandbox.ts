@@ -6,6 +6,8 @@ export {
   enableNetwork,
   disableNetwork,
   getDocFromServer,
+  getDocFromCache,
+  getDocsFromCache,
   getAggregateFromServer,
   sum,
   count,

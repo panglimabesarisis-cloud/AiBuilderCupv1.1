@@ -32,7 +32,7 @@ import {
 import {
   collection,
   query,
-  orderBy,
+  where,
   limit,
   onSnapshot,
   addDoc,
@@ -43,6 +43,7 @@ import { db } from '../../firebase';
 import { Product, Transaction } from '../../types';
 import { ACTIVE_STORE_ID } from '../../config/store';
 import { useLanguage } from '../../context/LanguageContext';
+import { useAppData } from '../../context/AppDataContext';
 import { useAppNavigation } from '../../router';
 import { formatMoney } from '../../utils/money';
 import {
@@ -140,78 +141,49 @@ export const ProductLogModule: React.FC<ProductLogModuleProps> = ({
     }, 4000);
   };
 
-  // Real-time listener for Products
-  useEffect(() => {
-    const unsub = onSnapshot(
-      collection(db, 'products'),
-      (snap) => {
-        const list: Product[] = [];
-        snap.forEach((d) => {
-          const data = d.data() as any;
-          list.push({
-            id: d.id,
-            storeId: data.storeId || ACTIVE_STORE_ID,
-            name: data.name || '',
-            sku: data.sku || d.id,
-            category: data.category || 'MINERAL',
-            brand: data.brand || '',
-            barcode: data.barcode || '',
-            piecesPerCarton: Number(data.piecesPerCarton || 1),
-            stockInUnits: Number(data.stockInUnits ?? data.stock ?? 0),
-            costPerUnit: Number(data.costPerUnit ?? data.costPrice ?? 0),
-            pricePerUnit: Number(data.pricePerUnit ?? data.price ?? 0),
-            pricePerCarton: Number(data.pricePerCarton ?? data.price ?? 0),
-            minStockAlert: Number(data.minStockAlert ?? 10),
-            imageUrl: data.imageUrl || '',
-            storageLocation: data.storageLocation || 'Rak Toko',
-            productionDate: data.productionDate || data.tanggalProduksi || '',
-            expiryDate: data.expiryDate || data.tanggalKadaluarsa || '',
-            batches: Array.isArray(data.batches) ? data.batches : [],
-          });
-        });
-        setProducts(list);
-        if (list.length > 0 && !newLogProductId) {
-          setNewLogProductId(list[0].id);
-          setNewLogUnitPrice(list[0].costPerUnit || list[0].pricePerUnit || 5000);
-          const defDates = getDefaultProductionAndExpiryDates(list[0]);
-          setNewLogProductionDate(defDates.productionDate);
-          setNewLogExpiryDate(defDates.expiryDate);
-        }
-      },
-      (err) => console.warn('Products sync warning in ProductLogModule:', err)
-    );
-    return () => unsub();
-  }, []);
+  const { products: appProducts, transactions: appTransactions } = useAppData();
 
-  // Real-time listener for Transactions (Barang Keluar / Terjual)
+  // Sync Products & Transactions from AppDataContext (shared listeners)
   useEffect(() => {
-    const q = query(
-      collection(db, 'transactions'),
-      orderBy('createdAt', 'desc'),
-      limit(100)
-    );
-    const unsub = onSnapshot(
-      q,
-      (snap) => {
-        const list: Transaction[] = [];
-        snap.forEach((d) => {
-          list.push({ id: d.id, ...d.data() } as Transaction);
-        });
-        setDbTransactions(list);
-        setIsLoading(false);
-      },
-      (err) => {
-        console.warn('Transactions sync warning in ProductLogModule:', err);
-        setIsLoading(false);
-      }
-    );
-    return () => unsub();
-  }, []);
+    const list: Product[] = (Array.isArray(appProducts) ? appProducts : []).map((data: any) => ({
+      id: data.id,
+      storeId: data.storeId || ACTIVE_STORE_ID,
+      name: data.name || '',
+      sku: data.sku || data.id,
+      category: data.category || 'MINERAL',
+      brand: data.brand || '',
+      barcode: data.barcode || '',
+      piecesPerCarton: Number(data.piecesPerCarton || 1),
+      stockInUnits: Number(data.stockInUnits ?? data.stock ?? 0),
+      costPerUnit: Number(data.costPerUnit ?? data.costPrice ?? 0),
+      pricePerUnit: Number(data.pricePerUnit ?? data.price ?? 0),
+      pricePerCarton: Number(data.pricePerCarton ?? data.price ?? 0),
+      minStockAlert: Number(data.minStockAlert ?? 10),
+      imageUrl: data.imageUrl || '',
+      storageLocation: data.storageLocation || 'Rak Toko',
+      productionDate: data.productionDate || data.tanggalProduksi || '',
+      expiryDate: data.expiryDate || data.tanggalKadaluarsa || '',
+      batches: Array.isArray(data.batches) ? data.batches : [],
+    }));
+    setProducts(list);
+    if (list.length > 0 && !newLogProductId) {
+      setNewLogProductId(list[0].id);
+      setNewLogUnitPrice(list[0].costPerUnit || list[0].pricePerUnit || 5000);
+      const defDates = getDefaultProductionAndExpiryDates(list[0]);
+      setNewLogProductionDate(defDates.productionDate);
+      setNewLogExpiryDate(defDates.expiryDate);
+    }
+  }, [appProducts]);
+
+  useEffect(() => {
+    setDbTransactions(Array.isArray(appTransactions) ? appTransactions : []);
+    setIsLoading(false);
+  }, [appTransactions]);
 
   // Real-time listener for Purchase Orders (Barang Masuk / Pembelian)
   useEffect(() => {
     const unsub = onSnapshot(
-      collection(db, 'purchase_orders'),
+      query(collection(db, 'purchase_orders'), where('storeId', '==', ACTIVE_STORE_ID), limit(100)),
       (snap) => {
         const list: any[] = [];
         snap.forEach((d) => {
@@ -227,7 +199,7 @@ export const ProductLogModule: React.FC<ProductLogModuleProps> = ({
   // Real-time listener for Stock Mutations (Penyesuaian Fisik / Audit)
   useEffect(() => {
     const unsub = onSnapshot(
-      collection(db, 'stock_mutations'),
+      query(collection(db, 'stock_mutations'), where('storeId', '==', ACTIVE_STORE_ID), limit(100)),
       (snap) => {
         const list: any[] = [];
         snap.forEach((d) => {

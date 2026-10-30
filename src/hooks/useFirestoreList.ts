@@ -17,6 +17,7 @@ import { db, isFirestoreQuotaExhausted, markFirestoreQuotaExhausted } from '../f
 import { isDatabaseWipeInProgress } from '../services/dataSeeder';
 import { ACTIVE_STORE_ID } from '../config/store';
 import { enqueuePendingSync } from '../utils/dbSync';
+import { safeSetCache } from '../utils/safeStorage';
 
 const STORE_ID = ACTIVE_STORE_ID || 'store_001';
 
@@ -96,22 +97,14 @@ export function readLocalCache<T>(collectionName: string, defaultData: T[] = [])
     if (typeof window === 'undefined') {
       return defaultData.filter((x: any) => !deletedSet.has(String(x?.id || '')));
     }
-    const candidateKeys = [
-      `riskcart_fs_${collectionName}`,
-      `riskcart_cache_${collectionName}`,
-      `riskcart_fs_${normCol}`,
-      `riskcart_cache_${normCol}`,
-    ];
-    for (const k of candidateKeys) {
-      const raw = window.localStorage.getItem(k);
-      if (raw !== null) {
-        const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          const cleaned = parsed.filter(
-            (x) => !isMockOrDummyItem(x) && !deletedSet.has(String(x?.id || ''))
-          );
-          if (cleaned.length > 0) return cleaned as T[];
-        }
+    const raw = window.localStorage.getItem(`riskcart_cache_${normCol}`);
+    if (raw !== null) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        const cleaned = parsed.filter(
+          (x) => !isMockOrDummyItem(x) && !deletedSet.has(String(x?.id || ''))
+        );
+        if (cleaned.length > 0) return cleaned as T[];
       }
     }
   } catch (e) {
@@ -128,12 +121,7 @@ export function writeLocalCache<T>(collectionName: string, items: T[]): void {
   try {
     if (typeof window === 'undefined') return;
     const normCol = normalizeCollectionKey(collectionName);
-    window.localStorage.setItem(`riskcart_fs_${collectionName}`, JSON.stringify(items));
-    window.localStorage.setItem(`riskcart_cache_${collectionName}`, JSON.stringify(items));
-    if (normCol && normCol !== collectionName) {
-      window.localStorage.setItem(`riskcart_fs_${normCol}`, JSON.stringify(items));
-      window.localStorage.setItem(`riskcart_cache_${normCol}`, JSON.stringify(items));
-    }
+    safeSetCache(`riskcart_cache_${normCol}`, items as any[]);
     window.dispatchEvent(
       new CustomEvent('riskcart_fs_cache_updated', {
         detail: { collectionName, items },
@@ -299,17 +287,6 @@ export function useFirestoreList<T extends { id?: string }>(
         return next;
       });
 
-      if (isFirestoreQuotaExhausted()) {
-        enqueuePendingSync({
-          op: 'set',
-          collectionPath: collectionName,
-          docId: fallbackId,
-          data: payload,
-          merge: true,
-        });
-        return fallbackId;
-      }
-
       try {
         await setDoc(doc(db, collectionName, fallbackId), payload as any, { merge: true });
         return fallbackId;
@@ -345,17 +322,6 @@ export function useFirestoreList<T extends { id?: string }>(
         writeLocalCache(collectionName, next);
         return next;
       });
-
-      if (isFirestoreQuotaExhausted()) {
-        enqueuePendingSync({
-          op: 'set',
-          collectionPath: collectionName,
-          docId: id,
-          data: patchPayload,
-          merge: true,
-        });
-        return true;
-      }
 
       try {
         await setDoc(doc(db, collectionName, id), patchPayload as any, { merge: true });

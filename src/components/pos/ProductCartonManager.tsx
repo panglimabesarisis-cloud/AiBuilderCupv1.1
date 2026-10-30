@@ -91,6 +91,7 @@ import { DiscountPricingModule } from '../modules/DiscountPricingModule';
 import { useLanguage } from '../../context/LanguageContext';
 import { useAccessControl } from '../../context/AccessControlContext';
 import { useAppNavigation, AppLink, getPathForProductSubTab } from '../../router';
+import { safeSetCache } from '../../utils/safeStorage';
 
 export type ProductCartonTabType =
   | 'list'
@@ -241,7 +242,7 @@ export const ProductCartonManager: React.FC<ProductCartonManagerProps> = ({
           setProducts(productsToGroups(firestoreProducts));
           try {
             if (firestoreProducts.length > 0) {
-              localStorage.setItem('riskcart_cache_products', JSON.stringify(firestoreProducts));
+              safeSetCache('riskcart_cache_products', firestoreProducts);
             }
           } catch (e) {}
           setIsLoadingProducts(false);

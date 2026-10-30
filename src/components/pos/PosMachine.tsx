@@ -22,6 +22,7 @@ import { reconcileCompletedTransaction } from '../../services/stockSyncService';
 import { deductProductStockInFirestore, saveProductDocToAllPaths } from '../../services/productService';
 import { useAppData } from '../../context/AppDataContext';
 import { enqueuePendingSync } from '../../utils/dbSync';
+import { safeSetCache } from '../../utils/safeStorage';
 import {
   publishRealtimeEvent,
   subscribeRealtimeEvent,
@@ -30,6 +31,7 @@ import {
 import confetti from 'canvas-confetti';
 import QRCode from 'qrcode';
 import { paymentGatewayApi } from '../../services/paymentGatewayClient';
+import { apiFetch } from '../../services/firebaseSession';
 import { GlobalModals } from '../common/GlobalModals';
 import { ProductGalleryModal } from '../common/ProductGalleryModal';
 import { VariantBreadcrumb } from '../common/VariantBreadcrumb';
@@ -1698,7 +1700,7 @@ export const PosMachine: React.FC<PosMachineProps> = ({
     };
 
     try {
-      const res = await fetch('/api/google-drive/sync', {
+      const res = await apiFetch('/api/google-drive/sync', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(enrichedPayload),
@@ -2327,8 +2329,6 @@ export const PosMachine: React.FC<PosMachineProps> = ({
       void useWebhookEndpoint;
       void txOrderDate;
       void formattedDateStr;
-      const r = await paymentGatewayApi.simulatePaid(sess.transactionId);
-      console.info('[QRIS sandbox]', r.message);
       const tblNum = sess.receiptPayload?.tableNumber || '';
       const tblId = sess.receiptPayload?.tableId || '';
       if (tblNum || tblId) {
@@ -2357,9 +2357,7 @@ export const PosMachine: React.FC<PosMachineProps> = ({
                 }
               : t
           );
-          try {
-            localStorage.setItem('riskcart_restaurant_tables_v1', JSON.stringify(next));
-          } catch {}
+          safeSetCache('riskcart_restaurant_tables_v1', next);
           return next;
         });
         setSelectedDineInSessionKey('');
@@ -2556,7 +2554,7 @@ export const PosMachine: React.FC<PosMachineProps> = ({
               }
               return t;
             });
-            localStorage.setItem('riskcart_restaurant_tables_v1', JSON.stringify(nextTables));
+            safeSetCache('riskcart_restaurant_tables_v1', nextTables);
           }
         }
       } catch {}
@@ -2597,7 +2595,7 @@ export const PosMachine: React.FC<PosMachineProps> = ({
           kitchenCardDoc,
           ...(Array.isArray(prevKitchen) ? prevKitchen.filter((k: any) => k?.id !== orderId) : []),
         ];
-        localStorage.setItem('riskcart_kitchen_orders_v1', JSON.stringify(nextKitchen));
+        safeSetCache('riskcart_kitchen_orders_v1', nextKitchen);
       } catch {}
 
       if (addTransactionLocal) {
@@ -3457,9 +3455,7 @@ export const PosMachine: React.FC<PosMachineProps> = ({
               ? { ...t, ...occupiedTablePayload }
               : t
           );
-          try {
-            localStorage.setItem('riskcart_restaurant_tables_v1', JSON.stringify(next));
-          } catch {}
+          safeSetCache('riskcart_restaurant_tables_v1', next);
           return next;
         });
         setPwaOrdersQueue((prev) => [orderPayload as any, ...prev.filter((o) => o.id !== docRef.id)]);
@@ -3507,9 +3503,7 @@ export const PosMachine: React.FC<PosMachineProps> = ({
                 }
               : t
           );
-          try {
-            localStorage.setItem('riskcart_restaurant_tables_v1', JSON.stringify(next));
-          } catch {}
+          safeSetCache('riskcart_restaurant_tables_v1', next);
           return next;
         });
         setSelectedDineInSessionKey('');

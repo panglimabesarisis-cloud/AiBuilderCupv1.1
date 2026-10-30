@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useRef } from 'react';
 import { checkAndRecordAiCooldown } from '../../utils/aiCooldown';
+import { apiFetch } from '../../services/firebaseSession';
 import {
   Boxes,
   Plus,
@@ -765,7 +766,7 @@ export const RawMaterialModule: React.FC<RawMaterialModuleProps> = ({
 
     setAiLoading(true);
     try {
-      const res = await fetch('/api/ai/raw-materials-advisor', {
+      const res = await apiFetch('/api/ai/raw-materials-advisor', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         signal,

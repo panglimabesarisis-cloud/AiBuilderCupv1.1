@@ -34,6 +34,7 @@ import { ReportCharts, ReportDetailTarget } from './ReportCharts';
 import { ReportDetailPanel } from './ReportDetailPanel';
 import { useAppNavigation } from '../../router';
 import { useAppData } from '../../context/AppDataContext';
+import { safeSetCache } from '../../utils/safeStorage';
 
 interface MultiOutletModuleProps {
   subModule: 'lihat_outlet' | 'warehose';
@@ -114,9 +115,7 @@ export const MultiOutletModule: React.FC<MultiOutletModuleProps> = ({
           docs.push({ id: docSnap.id, ...docSnap.data() } as OutletItem);
         });
         setOutlets(docs);
-        try {
-          localStorage.setItem('riskcart_cache_outlets', JSON.stringify(docs));
-        } catch {}
+        safeSetCache('riskcart_cache_outlets', docs);
       },
       (err) => console.warn('Notice reading outlets (retaining cache):', err)
     );
@@ -129,9 +128,7 @@ export const MultiOutletModule: React.FC<MultiOutletModuleProps> = ({
           docs.push({ id: docSnap.id, ...docSnap.data() } as WarehouseItem);
         });
         setWarehouses(docs);
-        try {
-          localStorage.setItem('riskcart_cache_warehouses', JSON.stringify(docs));
-        } catch {}
+        safeSetCache('riskcart_cache_warehouses', docs);
       },
       (err) => console.warn('Notice reading warehouses (retaining cache):', err)
     );

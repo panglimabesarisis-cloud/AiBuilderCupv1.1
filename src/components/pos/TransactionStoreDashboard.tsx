@@ -1,12 +1,18 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import {
   collection,
+  query,
+  where,
+  limit,
   onSnapshot,
   addDoc,
   serverTimestamp,
   doc,
   deleteDoc,
   updateDoc,
+  getAggregateFromServer,
+  sum,
+  count,
 } from 'firebase/firestore';
 import { db } from '../../firebase';
 import { ACTIVE_STORE_ID } from '../../config/store';
@@ -180,47 +186,7 @@ export const TransactionStoreDashboard: React.FC = () => {
     }
   };
 
-  // 4. Fetch Products from Firestore and map via productToVariant
-  useEffect(() => {
-    let unsubRoot: (() => void) | null = null;
-    const storeCol = collection(db, 'stores', ACTIVE_STORE_ID, 'products');
-
-    const unsubStore = onSnapshot(
-      storeCol,
-      (snap) => {
-        if (!snap.empty) {
-          const list: ProductVariantItem[] = snap.docs.map((d) =>
-            productToVariant({ id: d.id, ...d.data() } as Product)
-          );
-          setProducts(list);
-        } else {
-          // Fallback to root products with properly retained cleanup
-          if (unsubRoot) unsubRoot();
-          const rootCol = collection(db, 'products');
-          unsubRoot = onSnapshot(
-            rootCol,
-            (rootSnap) => {
-              const list: ProductVariantItem[] = rootSnap.docs.map((d) =>
-                productToVariant({ id: d.id, ...d.data() } as Product)
-              );
-              setProducts(list);
-            },
-            (err) => console.warn('Root products listener notice:', err)
-          );
-        }
-      },
-      (err) => {
-        console.warn('Store products subscription notice (retaining existing products):', err);
-      }
-    );
-
-    return () => {
-      unsubStore();
-      if (unsubRoot) unsubRoot();
-    };
-  }, []);
-
-  // Quick lookup map for products by ID, SKU, and lowercase Name
+  // Quick lookup map for products by ID, SKU, and lowercase Name (from useAppData)
   const productLookup = useMemo(() => {
     const map = new Map<string, ProductVariantItem>();
     products.forEach((p) => {
@@ -232,82 +198,79 @@ export const TransactionStoreDashboard: React.FC = () => {
     return map;
   }, [products]);
 
-  // 5. Fetch Transactions from Firestore
+  // 6. Fetch Vault Entries from Firestore (single query where storeId + limit(100))
   useEffect(() => {
-    let unsubRootTx: (() => void) | null = null;
-    const storeTxCol = collection(db, 'stores', ACTIVE_STORE_ID, 'transactions');
+    const vaultQuery = query(
+      collection(db, 'store_vault_entries'),
+      where('storeId', '==', ACTIVE_STORE_ID),
+      limit(100)
+    );
 
     const unsub = onSnapshot(
-      storeTxCol,
+      vaultQuery,
       (snap) => {
-        if (!snap.empty) {
-          const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-          setTransactions(list);
-        } else {
-          // Fallback to root transactions with properly retained cleanup
-          if (unsubRootTx) unsubRootTx();
-          const rootTxCol = collection(db, 'transactions');
-          unsubRootTx = onSnapshot(
-            rootTxCol,
-            (rootSnap) => {
-              const list = rootSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
-              setTransactions(list);
-            },
-            (err) => console.warn('Root tx listener notice:', err)
-          );
-        }
+        const list: VaultEntry[] = snap.docs.map((d) => ({
+          id: d.id,
+          ...(d.data() as any),
+        }));
+        setVaultEntries(list);
       },
       (err) => {
-        console.warn('Transactions subscription notice (retaining existing transactions):', err);
+        console.warn('Vault entries subscription notice:', err);
       }
     );
 
     return () => {
       unsub();
-      if (unsubRootTx) unsubRootTx();
     };
   }, []);
 
-  // 6. Fetch Vault Entries from Firestore (store_vault_entries)
+  // Long-period report totals via getAggregateFromServer (sum/count) without reading all transactions
+  const [aggregateTotals, setAggregateTotals] = useState<{
+    totalSales: number;
+    totalCost: number;
+    count: number;
+  } | null>(null);
+
   useEffect(() => {
-    let unsubRootVault: (() => void) | null = null;
-    const storeVaultCol = collection(db, 'stores', ACTIVE_STORE_ID, 'store_vault_entries');
-
-    const unsub = onSnapshot(
-      storeVaultCol,
-      (snap) => {
-        if (!snap.empty) {
-          const list: VaultEntry[] = snap.docs.map((d) => ({
-            id: d.id,
-            ...(d.data() as any),
-          }));
-          setVaultEntries(list);
-        } else {
-          if (unsubRootVault) unsubRootVault();
-          const rootVaultCol = collection(db, 'store_vault_entries');
-          unsubRootVault = onSnapshot(
-            rootVaultCol,
-            (rootSnap) => {
-              const list: VaultEntry[] = rootSnap.docs.map((d) => ({
-                id: d.id,
-                ...(d.data() as any),
-              }));
-              setVaultEntries(list);
-            },
-            (err) => console.warn('Root vault listener notice:', err)
-          );
+    const todayStr = new Date().toISOString().split('T')[0];
+    if (startDate === todayStr && endDate === todayStr) {
+      setAggregateTotals(null);
+      return;
+    }
+    let cancelled = false;
+    const runAggregate = async () => {
+      try {
+        const startIso = startDate ? `${startDate}T00:00:00.000Z` : '2020-01-01T00:00:00.000Z';
+        const endIso = endDate ? `${endDate}T23:59:59.999Z` : new Date().toISOString();
+        const aggQuery = query(
+          collection(db, 'transactions'),
+          where('storeId', '==', ACTIVE_STORE_ID),
+          where('createdAt', '>=', startIso),
+          where('createdAt', '<=', endIso)
+        );
+        const snap = await getAggregateFromServer(aggQuery, {
+          totalSales: sum('totalAmount'),
+          totalCost: sum('totalCost'),
+          txCount: count(),
+        });
+        if (!cancelled) {
+          const d = snap.data();
+          setAggregateTotals({
+            totalSales: Number(d.totalSales || 0),
+            totalCost: Number(d.totalCost || 0),
+            count: Number(d.txCount || 0),
+          });
         }
-      },
-      (err) => {
-        console.warn('Vault entries subscription notice (retaining existing entries):', err);
+      } catch {
+        if (!cancelled) setAggregateTotals(null);
       }
-    );
-
-    return () => {
-      unsub();
-      if (unsubRootVault) unsubRootVault();
     };
-  }, []);
+    void runAggregate();
+    return () => {
+      cancelled = true;
+    };
+  }, [startDate, endDate]);
 
   // 7. Save Pemasukan Handler
   const handleSaveIncome = async (e: React.FormEvent) => {
@@ -609,17 +572,23 @@ export const TransactionStoreDashboard: React.FC = () => {
       }
     });
 
-    const balance = sales + income - expense;
+    const resolvedSales = aggregateTotals && aggregateTotals.totalSales > sales ? aggregateTotals.totalSales : sales;
+    const resolvedCogs = aggregateTotals && aggregateTotals.totalCost > cogs ? aggregateTotals.totalCost : cogs;
+    const resolvedProfit =
+      aggregateTotals && aggregateTotals.totalSales > sales
+        ? Math.max(0, resolvedSales - resolvedCogs)
+        : profit;
+    const balance = resolvedSales + income - expense;
     return {
-      totalSales: sales,
-      totalProfit: profit,
+      totalSales: resolvedSales,
+      totalProfit: resolvedProfit,
       totalIncome: income,
       totalExpense: expense,
       vaultBalance: balance,
       totalKasAwal: kasAwal,
-      totalModal: cogs,
+      totalModal: resolvedCogs,
     };
-  }, [allChronologicalRows]);
+  }, [allChronologicalRows, aggregateTotals]);
 
   // Filtered Totals for Table Footer
   const footerTotals = useMemo(() => {

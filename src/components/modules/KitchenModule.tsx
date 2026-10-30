@@ -38,6 +38,7 @@ import {
   ACTIVE_KITCHEN_PIC_LS_KEY,
 } from '../../services/staffDivisionService';
 import { Shield, Users } from 'lucide-react';
+import { safeSetCache } from '../../utils/safeStorage';
 
 export type KitchenPipelineStage =
   | 'New Order'
@@ -413,9 +414,7 @@ export const KitchenModule: React.FC = () => {
 
   // Save kitchen orders list to localStorage
   const saveToLocalCache = useCallback((list: KitchenOrderCardDoc[]) => {
-    try {
-      localStorage.setItem(LOCAL_STORAGE_KITCHEN_ORDERS_KEY, JSON.stringify(list));
-    } catch {}
+    safeSetCache(LOCAL_STORAGE_KITCHEN_ORDERS_KEY, list);
   }, []);
 
   // Persist single kitchen order to Firestore (`kitchen_orders`, `stores/{id}/kitchen_orders`, and sync stage to `orders`, `transactions`, and `restaurant_tables`)

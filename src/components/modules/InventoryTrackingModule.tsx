@@ -25,7 +25,7 @@ import {
   Eye,
   Trash2,
 } from 'lucide-react';
-import { collection, onSnapshot, doc, updateDoc, deleteDoc } from 'firebase/firestore';
+import { doc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { db } from '../../firebase';
 import { Product } from '../../types';
 import { ACTIVE_STORE_ID } from '../../config/store';
@@ -35,6 +35,7 @@ import { useAppNavigation } from '../../router';
 import { formatMoney } from '../../utils/money';
 import { evaluateProductExpiry, getSortedFefoBatches } from '../../utils/expiryUtils';
 import { getDefaultMinStock } from '../../services/posRuntime';
+import { useAppData } from '../../context/AppDataContext';
 
 interface InventoryTrackingModuleProps {
   subModule: 'inventory' | 'kartu_stok' | 'stok_minimum' | 'stok_opname' | 'produk_restock';
@@ -57,6 +58,7 @@ export const InventoryTrackingModule: React.FC<InventoryTrackingModuleProps> = (
     navigateTab('module_inventory', next);
   };
 
+  const { products: appProducts } = useAppData();
   const [products, setProducts] = useState<Product[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedLocation, setSelectedLocation] = useState<string>('ALL');
@@ -73,46 +75,32 @@ export const InventoryTrackingModule: React.FC<InventoryTrackingModuleProps> = (
   const [createdFrom, setCreatedFrom] = useState<string>('');
   const [createdTo, setCreatedTo] = useState<string>('');
 
-  // Firestore Products real-time listener from 'products'
+  // Sync Products from AppDataContext (shared listener)
   useEffect(() => {
-    try {
-      const unsubscribe = onSnapshot(
-        collection(db, 'products'),
-        (snapshot) => {
-          const list = snapshot.docs.map((d) => {
-            const data = d.data() as any;
-            return {
-              id: d.id,
-              storeId: data.storeId || ACTIVE_STORE_ID,
-              name: data.name || '',
-              sku: data.sku || d.id,
-              category: data.category || 'MINERAL',
-              brand: data.brand || '',
-              barcode: data.barcode || '',
-              piecesPerCarton: Number(data.piecesPerCarton || 1),
-              stockInUnits: Number(data.stockInUnits ?? data.stock ?? 0),
-              costPerUnit: Number(data.costPerUnit ?? data.costPrice ?? 0),
-              pricePerUnit: Number(data.pricePerUnit ?? data.price ?? 0),
-              pricePerCarton: Number(data.pricePerCarton ?? data.price ?? 0),
-              minStockAlert: Number(data.minStockAlert ?? data.minStock ?? getDefaultMinStock()),
-              imageUrl: data.imageUrl || '',
-              storageLocation: data.storageLocation || 'Rak A-01 / Flagship',
-              productionDate: data.productionDate || data.tanggalProduksi || '',
-              expiryDate: data.expiryDate || data.tanggalKadaluarsa || '',
-              batches: Array.isArray(data.batches) ? data.batches : [],
-              createdAt: data.createdAt,
-              updatedAt: data.updatedAt,
-            };
-          }) as Product[];
-          setProducts(list);
-        },
-        (err) => console.warn('Offline fallback products in inventory module:', err)
-      );
-      return () => unsubscribe();
-    } catch (e) {
-      console.warn(e);
-    }
-  }, []);
+    const list = (Array.isArray(appProducts) ? appProducts : []).map((data: any) => ({
+      id: data.id,
+      storeId: data.storeId || ACTIVE_STORE_ID,
+      name: data.name || '',
+      sku: data.sku || data.id,
+      category: data.category || 'MINERAL',
+      brand: data.brand || '',
+      barcode: data.barcode || '',
+      piecesPerCarton: Number(data.piecesPerCarton || 1),
+      stockInUnits: Number(data.stockInUnits ?? data.stock ?? 0),
+      costPerUnit: Number(data.costPerUnit ?? data.costPrice ?? 0),
+      pricePerUnit: Number(data.pricePerUnit ?? data.price ?? 0),
+      pricePerCarton: Number(data.pricePerCarton ?? data.price ?? 0),
+      minStockAlert: Number(data.minStockAlert ?? data.minStock ?? getDefaultMinStock()),
+      imageUrl: data.imageUrl || '',
+      storageLocation: data.storageLocation || 'Rak A-01 / Flagship',
+      productionDate: data.productionDate || data.tanggalProduksi || '',
+      expiryDate: data.expiryDate || data.tanggalKadaluarsa || '',
+      batches: Array.isArray(data.batches) ? data.batches : [],
+      createdAt: data.createdAt,
+      updatedAt: data.updatedAt,
+    })) as Product[];
+    setProducts(list);
+  }, [appProducts]);
 
   // Stock Movement Ledger (Kartu Stok) from Firestore
   const {

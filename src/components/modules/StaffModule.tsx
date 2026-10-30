@@ -7,7 +7,7 @@ import {
   deleteDoc,
   serverTimestamp,
 } from 'firebase/firestore';
-import { db } from '../../firebase';
+import { db, getServerToken } from '../../firebase';
 import {
   UserCheck,
   Shield,
@@ -177,8 +177,7 @@ export const DEFAULT_STAFF_MEMBERS: StaffMemberItem[] = [
     id: 'staff_001',
     name: 'Dede Fajar Kurniawan',
     email: 'panglimabesarisis@gmail.com',
-    password: 'Demo123',
-    pin: String(import.meta.env.VITE_OWNER_PIN || '123456'),
+    pin: '',
     role: 'Owner',
     outlet: 'Cabang Utama (Pusat)',
     phone: '0811-1000-001',
@@ -281,18 +280,6 @@ export const StaffModule: React.FC<StaffModuleProps> = ({
             await setDoc(
               doc(db, 'staff', docSnap.id),
               { name: updatedName, updatedAt: serverTimestamp() },
-              { merge: true }
-            );
-          }
-          if (docSnap.id === 'staff_001' && (!d?.pin || !d?.password)) {
-            await setDoc(
-              doc(db, 'staff', 'staff_001'),
-              {
-                pin: d?.pin || '123456',
-                password: d?.password || 'Demo123',
-                email: d?.email === 'dede.kasir@riskcart.com' ? 'panglimabesarisis@gmail.com' : (d?.email || 'panglimabesarisis@gmail.com'),
-                updatedAt: serverTimestamp(),
-              },
               { merge: true }
             );
           }
@@ -458,11 +445,9 @@ export const StaffModule: React.FC<StaffModuleProps> = ({
       `💼 Jabatan: ${stf.role}\n` +
       `🏪 Outlet: ${stf.outlet}\n` +
       `📧 Email: ${stf.email || '-'}\n` +
-      `🔑 Password: ${stf.password || '-'}\n` +
-      `🔢 PIN POS (6 Digit): ${stf.pin || '-'}\n` +
       `⏰ Shift: ${stf.shift || '-'}\n` +
       `━━━━━━━━━━━━━━━━━━━━━━━━\n` +
-      `Gunakan email & password untuk login Dashboard, atau masukkan 6-digit PIN pada terminal kasir POS.`;
+      `Gunakan email & password akun Anda untuk login Dashboard, atau masukkan 6-digit PIN pada terminal kasir POS.`;
     navigator.clipboard.writeText(text);
     setCopiedKey(`all_${stf.id}`);
     setTimeout(() => setCopiedKey(null), 3000);
@@ -472,9 +457,8 @@ export const StaffModule: React.FC<StaffModuleProps> = ({
     setEditingStaff(null);
     setNewStaffName('');
     setNewStaffEmail('');
-    setNewStaffPassword('Staff#123');
-    // Pre-generate unique 6-digit PIN
-    setNewStaffPin(Math.floor(100000 + Math.random() * 900000).toString());
+    setNewStaffPassword('');
+    setNewStaffPin('');
     const defaultDiv = staffDivisions[0] || {
       id: 'div_kitchen',
       roles: [{ name: 'Executive Chef', defaultStation: 'Pass & Command Center' }],
@@ -495,8 +479,8 @@ export const StaffModule: React.FC<StaffModuleProps> = ({
     setEditingStaff(stf);
     setNewStaffName(stf.name || '');
     setNewStaffEmail(stf.email || '');
-    setNewStaffPassword(stf.password || '');
-    setNewStaffPin(stf.pin || '');
+    setNewStaffPassword('');
+    setNewStaffPin('');
     const inferred = inferDivisionFromRole(stf.role, staffDivisions);
     setNewStaffDivisionId(stf.divisionId || inferred.divisionId);
     setNewStaffRole(stf.role || 'Executive Chef');
@@ -645,12 +629,20 @@ export const StaffModule: React.FC<StaffModuleProps> = ({
       setStaffFormError('Email login staf wajib diisi dengan format valid (misal: nama@riskcart.com).');
       return;
     }
-    if (!password || password.length < 6) {
+    if (!editingStaff && (!password || password.length < 6)) {
       setStaffFormError('Password login staf minimal harus 6 karakter.');
       return;
     }
-    if (!/^\d{6}$/.test(pin)) {
-      setStaffFormError('PIN keamanan wajib persis 6 angka numerik (contoh: 123456).');
+    if (password && password.length < 6) {
+      setStaffFormError('Password login staf minimal harus 6 karakter.');
+      return;
+    }
+    if (!editingStaff && !/^\d{6}$/.test(pin)) {
+      setStaffFormError('PIN keamanan wajib persis 6 angka numerik.');
+      return;
+    }
+    if (pin && !/^\d{6}$/.test(pin)) {
+      setStaffFormError('PIN keamanan wajib persis 6 angka numerik.');
       return;
     }
 
@@ -663,8 +655,7 @@ export const StaffModule: React.FC<StaffModuleProps> = ({
       id: staffId,
       name,
       email,
-      password,
-      pin,
+      pin: '',
       divisionId: newStaffDivisionId,
       divisionName,
       role: newStaffRole,
@@ -690,9 +681,6 @@ export const StaffModule: React.FC<StaffModuleProps> = ({
             merge: true,
           }).catch(() => {}),
         ]);
-        setSyncMessage(
-          `Data staf "${name}" (${divisionName} - ${newStaffRole}) berhasil diperbarui & tersinkronisasi ke /kitchen dan POS!`
-        );
       } else {
         await Promise.all([
           setDoc(doc(db, 'staff', staffId), payload, { merge: true }),
@@ -700,10 +688,34 @@ export const StaffModule: React.FC<StaffModuleProps> = ({
             merge: true,
           }).catch(() => {}),
         ]);
-        setSyncMessage(
-          `Karyawan baru "${name}" (${divisionName} - ${newStaffRole}) berhasil disimpan ke Firestore & langsung muncul di /kitchen dan POS!`
-        );
       }
+
+      if (password || pin) {
+        const token = getServerToken();
+        const secretRes = await fetch('/api/staff/set-secret', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({
+            staffId,
+            storeId: ACTIVE_STORE_ID,
+            password: password || undefined,
+            pin: pin || undefined,
+          }),
+        });
+        if (!secretRes.ok) {
+          const errJson = await secretRes.json().catch(() => ({}));
+          throw new Error(errJson?.error || errJson?.message || 'Gagal menyimpan hash password/PIN staf di server.');
+        }
+      }
+
+      setSyncMessage(
+        editingStaff
+          ? `Data staf "${name}" (${divisionName} - ${newStaffRole}) berhasil diperbarui & tersinkronisasi!`
+          : `Karyawan baru "${name}" (${divisionName} - ${newStaffRole}) berhasil disimpan!`
+      );
 
       setNewStaffName('');
       setNewStaffEmail('');

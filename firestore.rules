@@ -1,201 +1,39 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    function isSignedIn() {
-      return request.auth != null;
-    }
+    function signedIn() { return request.auth != null; }
+    function role() { return signedIn() && ('role' in request.auth.token) && request.auth.token.role is string ? request.auth.token.role : ''; }
+    function isAnon() { return signedIn() && request.auth.token.firebase.sign_in_provider == 'anonymous'; }
+    function isStaff() { return signedIn() && !isAnon() && role() in ['owner','super_admin','admin','admin_toko','supervisor','manager','cashier','staff']; }
+    function isOwner() { return isStaff() && role() in ['owner','super_admin']; }
+    function isDemo() { return signedIn() && !isAnon() && role() in ['demo_owner','demo_cashier']; }
+    function isCustomer() { return signedIn() && !isAnon() && role() == 'customer'; }
+    function serverOnly(col, id) { return col in ['otp_sessions','ai_agents_private','payment_gateway_secrets'] || (col == 'settings' && id == 'payment_gateway_secrets'); }
+    function publicCatalog(col) { return col in ['products','categories','brands','promotions','promo_banners','stores','pwa_page_configs','reward_targets','marketing_targets','ui_text_overrides','ui_layout_overrides']; }
+    function customerCol(col) { return col in ['customers','orders','transactions','pwa_chats','reward_claims','point_ledger']; }
+    function staffOnlyRead(col) { return col in ['staff','users','settings','staff_roles','staff_divisions','audit_logs']; }
+    function ownerDeleteOnly(col) { return col in ['transactions','orders','staff','users','settings','shifts','shift_history','cash_logs','cash_flows','cash_mutations','brangkas_toko_logs','brangkas_modal','safe_deposits','pos_incomes','expenses','audit_logs','dailyStats']; }
+    function ownsExisting() { return isCustomer() && resource.data.customerUid == request.auth.uid; }
+    function createsOwn() { return isCustomer() && request.resource.data.customerUid == request.auth.uid; }
+    function customerSafeUpdate() { return ownsExisting() && request.resource.data.customerUid == request.auth.uid && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['status','paymentStatus','fulfillmentStatus','totalAmount','paidAt','points']); }
+    function canRead(col, id) { return !serverOnly(col, id) && (publicCatalog(col) || isStaff() || (isDemo() && !staffOnlyRead(col)) || (customerCol(col) && ownsExisting())); }
+    function canCreate(col, id) { return !serverOnly(col, id) && (isStaff() || (customerCol(col) && createsOwn())); }
+    function canUpdate(col, id) { return !serverOnly(col, id) && (isStaff() || (customerCol(col) && customerSafeUpdate())); }
+    function canDelete(col, id) { return !serverOnly(col, id) && (isOwner() || (isStaff() && !ownerDeleteOnly(col))); }
 
-    // Safe role helper (checks map key existence first to prevent CEL evaluation errors)
-    function getUserRole() {
-      return !isSignedIn() ? ''
-        : ('role' in request.auth.token && request.auth.token.role is string)
-          ? request.auth.token.role
-          : '';
+    match /{col}/{id} {
+      allow read: if canRead(col, id);
+      allow create: if canCreate(col, id);
+      allow update: if canUpdate(col, id);
+      allow delete: if canDelete(col, id);
+      match /{sub=**} { allow read, write: if !serverOnly(col, id) && isStaff(); }
     }
-
-    function isOwnerOrAdmin() {
-      return (isSignedIn() && 'email' in request.auth.token && request.auth.token.email == 'panglimabesarisis@gmail.com')
-        || getUserRole() in ['owner', 'admin', 'Owner / Super Admin', 'super_admin', 'OWNER', 'DEMO'];
-    }
-
-    function isStaff() {
-      return isOwnerOrAdmin() || (isSignedIn() && getUserRole() != '' && getUserRole() != 'customer');
-    }
-
-    // Wajib autentikasi untuk staf/client operasional (tanpa request.auth == null)
-    function isAppClientOrStaff() {
-      return isSignedIn() || isStaff();
-    }
-
-    // Koleksi rahasia yang HANYA boleh diakses Firebase Admin SDK di server
-    function serverOnly(c) {
-      return c in ['otp_sessions', 'ai_agents_private', 'payment_gateway_secrets'];
-    }
-
-    match /otp_sessions/{phone} {
-      allow read, write: if false;
-    }
-    match /ai_agents_private/{agentId} {
-      allow read, write: if false;
-    }
-    match /payment_gateway_secrets/{p} {
-      allow read, write: if false;
-    }
-
-    // Katalog Publik (allow read: if true khusus katalog: products, categories, brands, stores, promotions)
-    match /products/{productId} {
-      allow read: if true;
-      allow write: if isAppClientOrStaff();
-    }
-    match /categories/{categoryId} {
-      allow read: if true;
-      allow write: if isAppClientOrStaff();
-    }
-    match /brands/{brandId} {
-      allow read: if true;
-      allow write: if isAppClientOrStaff();
-    }
-    match /promotions/{promoId} {
-      allow read: if true;
-      allow write: if isAppClientOrStaff();
-    }
-    match /stores/{storeId} {
-      allow read: if true;
-      allow write: if isAppClientOrStaff();
-    }
-    match /stores/{storeId}/products/{productId} {
-      allow read: if true;
-      allow write: if isAppClientOrStaff();
-    }
-    match /stores/{storeId}/categories/{categoryId} {
-      allow read: if true;
-      allow write: if isAppClientOrStaff();
-    }
-    match /stores/{storeId}/brands/{brandId} {
-      allow read: if true;
-      allow write: if isAppClientOrStaff();
-    }
-    match /stores/{storeId}/promotions/{promoId} {
-      allow read: if true;
-      allow write: if isAppClientOrStaff();
-    }
-
-    // Pengaturan (melindungi dokumen rahasia payment_gateway_secrets)
-    match /settings/{docId} {
-      allow read: if isAppClientOrStaff() && docId != 'payment_gateway_secrets';
-      allow write: if isAppClientOrStaff() && docId != 'payment_gateway_secrets';
-    }
-
-    // Koleksi Table Layout, Denah Meja, Reservasi & Riwayat Dine-In
-    match /restaurant_tables/{tableId} {
-      allow read, write: if isAppClientOrStaff();
-    }
-    match /tables/{tableId} {
-      allow read, write: if isAppClientOrStaff();
-    }
-    match /table_layouts/{layoutId} {
-      allow read, write: if isAppClientOrStaff();
-    }
-    match /table_reservations/{resId} {
-      allow read, write: if isAppClientOrStaff();
-    }
-    match /reservations/{resId} {
-      allow read, write: if isAppClientOrStaff();
-    }
-    match /table_dinein_history/{recId} {
-      allow read, write: if isAppClientOrStaff();
-    }
-
-    // Koleksi Bahan Baku (BOM), Pembelian & Gudang (Wajib Autentikasi)
-    match /raw_materials/{rmId} {
-      allow read, write: if isAppClientOrStaff();
-    }
-    match /bahan_baku/{rmId} {
-      allow read, write: if isAppClientOrStaff();
-    }
-    match /raw_material_suppliers/{supId} {
-      allow read, write: if isAppClientOrStaff();
-    }
-    match /raw_material_purchase_orders/{poId} {
-      allow read, write: if isAppClientOrStaff();
-    }
-    match /raw_material_purchase_requests/{prId} {
-      allow read, write: if isAppClientOrStaff();
-    }
-    match /raw_material_movements/{movId} {
-      allow read, write: if isAppClientOrStaff();
-    }
-    match /purchase_orders/{poId} {
-      allow read, write: if isAppClientOrStaff();
-    }
-    match /procurements/{procId} {
-      allow read, write: if isAppClientOrStaff();
-    }
-    match /stock_movements/{movId} {
-      allow read, write: if isAppClientOrStaff();
-    }
-
-    // Koleksi Transaksi POS, Pesanan Online, Kas, Shift & Brangkas (Wajib Autentikasi)
-    match /dailyStats/{statId} {
-      allow read, write: if isAppClientOrStaff();
-    }
-    match /transactions/{txId} {
-      allow read, write: if isAppClientOrStaff();
-    }
-    match /orders/{orderId} {
-      allow read, write: if isAppClientOrStaff();
-    }
-    match /pos_orders/{orderId} {
-      allow read, write: if isAppClientOrStaff();
-    }
-    match /shifts/{shiftId} {
-      allow read, write: if isAppClientOrStaff();
-    }
-    match /shift_history/{shiftId} {
-      allow read, write: if isAppClientOrStaff();
-    }
-    match /cashier_shifts/{shiftId} {
-      allow read, write: if isAppClientOrStaff();
-    }
-    match /cash_logs/{logId} {
-      allow read, write: if isAppClientOrStaff();
-    }
-    match /cash_flows/{flowId} {
-      allow read, write: if isAppClientOrStaff();
-    }
-    match /cash_mutations/{mutId} {
-      allow read, write: if isAppClientOrStaff();
-    }
-    match /pos_incomes/{incId} {
-      allow read, write: if isAppClientOrStaff();
-    }
-    match /incomes/{incId} {
-      allow read, write: if isAppClientOrStaff();
-    }
-    match /expenses/{expId} {
-      allow read, write: if isAppClientOrStaff();
-    }
-    match /brangkas_toko_logs/{logId} {
-      allow read, write: if isAppClientOrStaff();
-    }
-    match /safe_deposits/{depId} {
-      allow read, write: if isAppClientOrStaff();
-    }
-
-    // Data per toko lainnya: stores/store_001/{transactions|orders|settings|...} (Wajib Autentikasi)
-    match /stores/{storeId}/{sub}/{docId} {
-      allow read, write: if isAppClientOrStaff();
-      match /{rest=**} {
-        allow read, write: if isAppClientOrStaff();
-      }
-    }
-
-    // Fallback data operasional top-level lainnya (customers, users, staff, ai_activity_logs, dsb.)
-    match /{collection}/{docId} {
-      allow read, write: if isAppClientOrStaff() && !serverOnly(collection) && collection != 'settings';
-      match /{rest=**} {
-        allow read, write: if isAppClientOrStaff() && !serverOnly(collection) && collection != 'stores';
-      }
+    match /stores/{storeId}/{col}/{id} {
+      allow read: if canRead(col, id);
+      allow create: if canCreate(col, id);
+      allow update: if canUpdate(col, id);
+      allow delete: if canDelete(col, id);
+      match /{sub=**} { allow read, write: if isStaff(); }
     }
   }
 }

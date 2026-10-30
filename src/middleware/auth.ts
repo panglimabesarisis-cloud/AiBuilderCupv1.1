@@ -10,23 +10,13 @@ export interface AuthRequest extends Request {
   };
 }
 
-function getCandidateSigningSecrets(): string[] {
-  const candidates = [
-    process.env.OTP_HMAC_SECRET,
-    process.env.PIN_SALT,
-    process.env.GEMINI_API_KEY,
-    'riskcart-server-session-hmac-v1',
-  ]
-    .map((s) => String(s || '').trim())
-    .filter(Boolean);
-  return Array.from(new Set(candidates));
-}
-
 function getSessionSigningSecret(): string {
-  return getCandidateSigningSecrets()[0] || 'riskcart-server-session-hmac-v1';
+  const s = String(process.env.OTP_HMAC_SECRET || '').trim();
+  if (s.length < 32) throw new Error('OTP_HMAC_SECRET wajib diisi minimal 32 karakter');
+  return s;
 }
 
-const DEFAULT_SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
+const DEFAULT_SESSION_TTL_MS = 24 * 60 * 60 * 1000;
 
 export function createSignedSessionToken(payload: {
   uid: string;
@@ -38,7 +28,7 @@ export function createSignedSessionToken(payload: {
   const body = Buffer.from(
     JSON.stringify({
       uid: payload.uid,
-      role: String(payload.role || 'cashier').toLowerCase(),
+      role: String(payload.role || '').toLowerCase(),
       email: payload.email || '',
       exp,
     })
@@ -50,54 +40,18 @@ export function createSignedSessionToken(payload: {
   return `rcs.${body}.${sig}`;
 }
 
-export function verifySignedSessionToken(
-  token: string
-): { uid: string; role: string; email?: string } | null {
+export function verifySignedSessionToken(token: string): { uid: string; role: string; email?: string } | null {
   if (!token || !token.startsWith('rcs.')) return null;
   const parts = token.split('.');
-  if (parts.length !== 3) return null;
+  if (parts.length !== 3 || !parts[1] || !parts[2]) return null;
   const [, body, sig] = parts;
-  if (!body || !sig) return null;
-
-  const secrets = getCandidateSigningSecrets();
-  let signatureValid = false;
-  for (const secret of secrets) {
-    const expectedSig = crypto
-      .createHmac('sha256', secret)
-      .update(body)
-      .digest('base64url');
-    if (
-      sig.length === expectedSig.length &&
-      crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expectedSig))
-    ) {
-      signatureValid = true;
-      break;
-    }
-  }
-
+  const expected = crypto.createHmac('sha256', getSessionSigningSecret()).update(body).digest('base64url');
+  if (sig.length !== expected.length || !crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected))) return null;
   try {
-    const parsed = JSON.parse(Buffer.from(body, 'base64url').toString('utf-8'));
-    if (!parsed || typeof parsed !== 'object') {
-      return null;
-    }
-    // Allow 30-day grace window on signed tokens so active POS shifts don't fail after 12h
-    if (
-      typeof parsed.exp === 'number' &&
-      Date.now() > parsed.exp + DEFAULT_SESSION_TTL_MS
-    ) {
-      return null;
-    }
-    if (!signatureValid && !parsed.uid) {
-      return null;
-    }
-    return {
-      uid: String(parsed.uid || 'authenticated_user'),
-      role: String(parsed.role || 'cashier').toLowerCase(),
-      email: parsed.email ? String(parsed.email) : undefined,
-    };
-  } catch {
-    return null;
-  }
+    const p = JSON.parse(Buffer.from(body, 'base64url').toString('utf-8'));
+    if (!p || !p.uid || typeof p.exp !== 'number' || Date.now() > p.exp) return null;
+    return { uid: String(p.uid), role: String(p.role || '').toLowerCase(), email: p.email ? String(p.email) : undefined };
+  } catch { return null; }
 }
 
 export const requireAuth = async (
@@ -128,11 +82,14 @@ export const requireAuth = async (
   // 2. Verify Firebase ID Token via Firebase Admin Auth
   try {
     const decodedToken = await adminAuth.verifyIdToken(token);
-    const claimRole = String((decodedToken as any).role || '').toLowerCase();
+    const claimRole = String((decodedToken as any).role || '').trim().toLowerCase();
+    if (decodedToken.firebase?.sign_in_provider === 'anonymous' || !claimRole) {
+      return res.status(401).json({ status: 'error', error: 'Unauthorized: Anonymous or missing role claim' });
+    }
     req.user = {
       ...decodedToken,
       uid: decodedToken.uid,
-      role: claimRole || 'cashier',
+      role: claimRole,
     };
     return next();
   } catch {

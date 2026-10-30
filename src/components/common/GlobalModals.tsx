@@ -23,11 +23,12 @@ import {
   RotateCcw,
 } from 'lucide-react';
 import { db } from '../../firebase';
-import { addDoc, collection, doc, onSnapshot, setDoc, updateDoc } from 'firebase/firestore';
+import { addDoc, collection, doc, limit, onSnapshot, orderBy, query, setDoc, updateDoc } from 'firebase/firestore';
 import { ACTIVE_STORE_ID } from '../../config/store';
 import { useLanguage } from '../../context/LanguageContext';
 import { useAppData } from '../../context/AppDataContext';
 import { isLegacyMockOrderOrTx } from '../../services/dataSeeder';
+import { apiFetch } from '../../services/firebaseSession';
 
 export type UniversalTransactionCategory = 'SALE' | 'PURCHASE' | 'CASH_IN' | 'CASH_OUT';
 
@@ -239,48 +240,44 @@ export const GlobalModals: React.FC<GlobalModalsProps> = ({
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   useEffect(() => {
-    const unsubCust = onSnapshot(collection(db, 'customers'), (snap) => {
-      const loaded = snap.docs.map((d) => {
-        const data = d.data() as any;
-        return {
-          id: d.id,
-          name: data.name || data.storeName || d.id,
-          phone: data.phone || '-',
-          type: data.tier || data.type || 'Member',
-          points: Number(data.points) || 0,
-          address: data.address || '-',
-        };
-      });
-      setCustomerList(loaded);
-    });
+    const loaded = (Array.isArray(appCustomers) ? appCustomers : []).map((data: any) => ({
+      id: data.id,
+      name: data.name || data.storeName || data.id,
+      phone: data.phone || '-',
+      type: data.tier || data.type || 'Member',
+      points: Number(data.points) || 0,
+      address: data.address || '-',
+    }));
+    setCustomerList(loaded);
+  }, [appCustomers]);
 
-    const unsubTx = onSnapshot(collection(db, 'transactions'), (snap) => {
-      let cashSum = 0;
-      let digitalSum = 0;
-      let latestPwa: any = null;
-      snap.forEach((d) => {
-        const data = d.data() as any;
-        if (isLegacyMockOrderOrTx(data, d.id)) return;
-        if (data.status === 'completed') {
-          if (data.paymentMethod === 'cash') cashSum += Number(data.totalAmount) || 0;
-          else digitalSum += Number(data.totalAmount) || 0;
+  useEffect(() => {
+    let cashSum = 0;
+    let digitalSum = 0;
+    let latestPwa: any = null;
+    (Array.isArray(appTransactions) ? appTransactions : []).forEach((data: any) => {
+      if (isLegacyMockOrderOrTx(data, data.id)) return;
+      if (data.status === 'completed') {
+        if (data.paymentMethod === 'cash') cashSum += Number(data.totalAmount) || 0;
+        else digitalSum += Number(data.totalAmount) || 0;
+      }
+      const st = String(data.status || '').toLowerCase();
+      const isPending =
+        st === 'pending' || st === 'pending_approval' || st === 'menunggu' || st === 'antrean';
+      if (data.channel === 'pwa_client' && isPending) {
+        if (!latestPwa || String(data.createdAt || '') > String(latestPwa.createdAt || '')) {
+          latestPwa = { ...data };
         }
-        const st = String(data.status || '').toLowerCase();
-        const isPending =
-          st === 'pending' || st === 'pending_approval' || st === 'menunggu' || st === 'antrean';
-        if (data.channel === 'pwa_client' && isPending) {
-          if (!latestPwa || String(data.createdAt || '') > String(latestPwa.createdAt || '')) {
-            latestPwa = { id: d.id, ...data };
-          }
-        }
-      });
-      setCurrentCashSales(cashSum);
-      setCurrentDigitalSales(digitalSum);
-      setLatestPwaOrder(latestPwa);
+      }
     });
+    setCurrentCashSales(cashSum);
+    setCurrentDigitalSales(digitalSum);
+    setLatestPwaOrder(latestPwa);
+  }, [appTransactions]);
 
+  useEffect(() => {
     const unsubChats = onSnapshot(
-      collection(db, 'pwa_chats'),
+      query(collection(db, 'pwa_chats'), orderBy('updatedAt', 'desc'), limit(20)),
       (snap) => {
         const docs = snap.docs
           .map((d) => ({ id: d.id, ...(d.data() as any) }))
@@ -348,8 +345,6 @@ export const GlobalModals: React.FC<GlobalModalsProps> = ({
     );
 
     return () => {
-      unsubCust();
-      unsubTx();
       unsubChats();
       unsubStore();
     };
@@ -1474,7 +1469,7 @@ export const GlobalModals: React.FC<GlobalModalsProps> = ({
             .filter(Boolean)
             .join('\n');
 
-          fetch('/api/whatsapp/send', {
+          apiFetch('/api/whatsapp/send', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ phone: waPhone, message: textLines }),

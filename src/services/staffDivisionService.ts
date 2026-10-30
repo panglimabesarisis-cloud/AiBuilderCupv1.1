@@ -300,8 +300,7 @@ export const DEFAULT_STAFF_DIVISION_ROSTER: StaffDivisionMember[] = [
     name: 'Dede Fajar Kurniawan',
     email: 'panglimabesarisis@gmail.com',
     phone: '0811-1000-001',
-    pin: '123456',
-    password: 'Demo123',
+    pin: '',
     divisionId: 'div_cashier',
     divisionName: 'Divisi Front Office / Kasir',
     role: 'Owner',
@@ -718,8 +717,7 @@ export async function saveStaffMemberWithDivisionInDb(
     pin:
       member.pin && /^\d{6}$/.test(String(member.pin))
         ? String(member.pin)
-        : '123456',
-    ...(member.password ? { password: member.password } : {}),
+        : '',
     divisionId: targetDiv?.id || member.divisionId || inferred.divisionId,
     divisionName: targetDiv?.name || member.divisionName || inferred.divisionName,
     role: member.role.trim(),
@@ -948,8 +946,7 @@ export function useStaffDivisionsAndRoles() {
               name: normalizedName,
               email: raw.email || '',
               phone: raw.phone || '-',
-              pin: raw.pin || '123456',
-              ...(raw.password ? { password: raw.password } : {}),
+              pin: '',
               divisionId: divId,
               divisionName: divName,
               role,

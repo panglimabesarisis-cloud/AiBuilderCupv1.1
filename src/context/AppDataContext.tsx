@@ -7,6 +7,7 @@ import {
   limit,
   doc,
   getDocs,
+  getDocsFromCache,
   setDoc,
   updateDoc,
   deleteDoc,
@@ -55,8 +56,6 @@ import {
   isLegacyMockOrderOrTx,
 } from '../services/dataSeeder';
 import {
-  ARABIAN_FOOD_CATEGORIES,
-  ARABIAN_FOOD_PRODUCTS,
   ensureArabianFoodMasterSynced,
 } from '../services/rawMaterialService';
 import {
@@ -267,20 +266,15 @@ export interface AppDataContextValue {
 const AppDataContext = createContext<AppDataContextValue | null>(null);
 
 export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  // Cache-First initialization from localStorage with fallback to master catalog
+  // Cache-First initialization from localStorage without dummy/sample fallback
   const [products, setProducts] = useState<Product[]>(() =>
-    getLocalCache<Product[]>('products', ARABIAN_FOOD_PRODUCTS as unknown as Product[])
+    getLocalCache<Product[]>('products', [])
   );
   const [categories, setCategories] = useState<string[]>(() =>
-    getLocalCache<string[]>('categories', [...ARABIAN_FOOD_CATEGORIES])
+    getLocalCache<string[]>('categories', [])
   );
   const [brands, setBrands] = useState<string[]>(() =>
-    getLocalCache<string[]>('brands', [
-      'Al-Barakah Kitchen',
-      'La Bella Italia Kitchen',
-      'Merlion Singapore Kitchen',
-      'Selera Nusantara Kitchen',
-    ])
+    getLocalCache<string[]>('brands', [])
   );
   const [transactions, setTransactions] = useState<Transaction[]>(() =>
     getLocalCache<Transaction[]>('transactions', [])
@@ -381,6 +375,33 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
   });
   const [dismissQuotaBanner, setDismissQuotaBanner] = useState<boolean>(false);
   const [isReconnecting, setIsReconnecting] = useState<boolean>(false);
+  const [lastReconnectAt, setLastReconnectAt] = useState<number>(() => {
+    try {
+      return Number(localStorage.getItem('riskcart_last_reconnect_at') || 0);
+    } catch {
+      return 0;
+    }
+  });
+  const [reconnectCooldownSec, setReconnectCooldownSec] = useState<number>(0);
+
+  useEffect(() => {
+    const RECONNECT_COOLDOWN_MS = 5 * 60 * 1000;
+    const updateRemaining = () => {
+      if (!lastReconnectAt) {
+        setReconnectCooldownSec(0);
+        return;
+      }
+      const elapsed = Date.now() - lastReconnectAt;
+      if (elapsed >= RECONNECT_COOLDOWN_MS) {
+        setReconnectCooldownSec(0);
+      } else {
+        setReconnectCooldownSec(Math.ceil((RECONNECT_COOLDOWN_MS - elapsed) / 1000));
+      }
+    };
+    updateRemaining();
+    const interval = setInterval(updateRemaining, 1000);
+    return () => clearInterval(interval);
+  }, [lastReconnectAt]);
 
   const [refreshTrigger, setRefreshTrigger] = useState<number>(0);
   const isListeningRef = useRef<boolean>(false);
@@ -545,33 +566,119 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const handleQuotaDetected = useCallback((err: any, source: string) => {
     if (isQuotaExceededError(err)) {
       console.warn(
-        `[AppDataContext] Firestore quota exceeded on ${source}. Operating 100% from local cache (IndexedDB/LocalStorage).`
+        `[AppDataContext] Firestore quota exceeded on ${source}. Loading from getDocsFromCache then riskcart_cache_*.`
       );
       markFirestoreQuotaExhausted(true);
       setIsQuotaExceeded(true);
-      // Load from local cache immediately so POS cashier & Admin never halt
-      setProducts((prev) =>
-        prev.length > 0
-          ? prev
-          : getLocalCache<Product[]>('products', ARABIAN_FOOD_PRODUCTS as unknown as Product[])
-      );
-      setCategories((prev) =>
-        prev.length > 0 ? prev : getLocalCache<string[]>('categories', [...ARABIAN_FOOD_CATEGORIES])
-      );
-      setBrands((prev) =>
-        prev.length > 0
-          ? prev
-          : getLocalCache<string[]>('brands', [
-              'Al-Barakah Kitchen',
-              'La Bella Italia Kitchen',
-              'Merlion Singapore Kitchen',
-              'Selera Nusantara Kitchen',
-            ])
-      );
-      setTransactions((prev) =>
-        prev.length > 0 ? prev : getLocalCache<Transaction[]>('transactions', [])
-      );
-      setOrders((prev) => (prev.length > 0 ? prev : getLocalCache<any[]>('orders', [])));
+
+      const loadQuotaFallback = async () => {
+        const todayStartIso = `${getTodayDateYmd()}T00:00:00.000Z`;
+        const productsQuery = query(
+          collection(db, 'products'),
+          where('storeId', '==', ACTIVE_STORE_ID),
+          limit(250)
+        );
+        const categoriesQuery = query(
+          collection(db, 'categories'),
+          where('storeId', '==', ACTIVE_STORE_ID),
+          limit(100)
+        );
+        const brandsQuery = query(
+          collection(db, 'brands'),
+          where('storeId', '==', ACTIVE_STORE_ID),
+          limit(100)
+        );
+        const transactionsQuery = query(
+          collection(db, 'transactions'),
+          where('storeId', '==', ACTIVE_STORE_ID),
+          where('createdAt', '>=', todayStartIso),
+          limit(50)
+        );
+        const ordersQuery = query(
+          collection(db, 'orders'),
+          where('storeId', '==', ACTIVE_STORE_ID),
+          limit(50)
+        );
+
+        // 1. Products: getDocsFromCache -> riskcart_cache_products -> []
+        try {
+          const snap = await getDocsFromCache(productsQuery);
+          const fromIdb = snap.docs
+            .map((d) => ({ id: d.id, ...(d.data() as any) } as Product))
+            .filter((p) => p && (p as any).isActive !== false && !isDummySimulationItem(p));
+          if (fromIdb.length > 0) {
+            setProducts(fromIdb);
+          } else {
+            setProducts(getLocalCache<Product[]>('products', []));
+          }
+        } catch {
+          setProducts(getLocalCache<Product[]>('products', []));
+        }
+
+        // 2. Categories: getDocsFromCache -> riskcart_cache_categories -> []
+        try {
+          const snap = await getDocsFromCache(categoriesQuery);
+          const fromIdb = snap.docs
+            .filter((d) => !d.data().deleted && !isFictitiousDoc(d.id, d.data()))
+            .map((d) => String(d.data().name || '').trim())
+            .filter(Boolean);
+          if (fromIdb.length > 0) {
+            setCategories(Array.from(new Set(fromIdb)));
+          } else {
+            setCategories(getLocalCache<string[]>('categories', []));
+          }
+        } catch {
+          setCategories(getLocalCache<string[]>('categories', []));
+        }
+
+        // 3. Brands: getDocsFromCache -> riskcart_cache_brands -> []
+        try {
+          const snap = await getDocsFromCache(brandsQuery);
+          const fromIdb = snap.docs
+            .filter((d) => !d.data().deleted && !isFictitiousDoc(d.id, d.data()))
+            .map((d) => String(d.data().name || '').trim())
+            .filter(Boolean);
+          if (fromIdb.length > 0) {
+            setBrands(Array.from(new Set(fromIdb)));
+          } else {
+            setBrands(getLocalCache<string[]>('brands', []));
+          }
+        } catch {
+          setBrands(getLocalCache<string[]>('brands', []));
+        }
+
+        // 4. Transactions: getDocsFromCache -> riskcart_cache_transactions -> []
+        try {
+          const snap = await getDocsFromCache(transactionsQuery);
+          const fromIdb = snap.docs
+            .map((d) => ({ id: d.id, ...(d.data() as any) } as Transaction))
+            .filter((tx) => !isDummySimulationItem(tx));
+          if (fromIdb.length > 0) {
+            setTransactions(fromIdb);
+          } else {
+            setTransactions(getLocalCache<Transaction[]>('transactions', []));
+          }
+        } catch {
+          setTransactions(getLocalCache<Transaction[]>('transactions', []));
+        }
+
+        // 5. Orders: getDocsFromCache -> riskcart_cache_orders -> []
+        try {
+          const snap = await getDocsFromCache(ordersQuery);
+          const fromIdb = snap.docs
+            .map((d) => ({ id: d.id, ...(d.data() as any) }))
+            .filter((ord) => !isDummySimulationItem(ord));
+          if (fromIdb.length > 0) {
+            setOrders(fromIdb);
+          } else {
+            setOrders(getLocalCache<any[]>('orders', []));
+          }
+        } catch {
+          setOrders(getLocalCache<any[]>('orders', []));
+        }
+      };
+
+      void loadQuotaFallback();
     }
   }, []);
 
@@ -727,18 +834,6 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
     const publishMergedProducts = () => {
       const deletedProducts = getDeletedSet('products');
       const mergedMap = new Map<string, Product>();
-
-      // Baseline Arabian Food BOM catalog (unless deleted by user)
-      for (const seedProd of ARABIAN_FOOD_PRODUCTS) {
-        const mappedSeed = mapDocToProduct(seedProd.id, seedProd);
-        if (
-          mappedSeed &&
-          !deletedProducts.has(seedProd.id) &&
-          !deletedProducts.has(String(seedProd.sku || ''))
-        ) {
-          mergedMap.set(seedProd.id, mappedSeed);
-        }
-      }
 
       storeProductsMap.forEach((p, id) => {
         if (!deletedProducts.has(id) && !deletedProducts.has(String(p.sku || ''))) {
@@ -1023,19 +1118,6 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
         (snapshot) => {
           const deletedSet = getDeletedCategorySlugs();
           const uniqueByNormKey = new Map<string, string>();
-          for (const seedCat of ARABIAN_FOOD_CATEGORIES) {
-            const normKey = normalizeCategoryKey(seedCat);
-            const slug = toCategorySlug(seedCat);
-            if (
-              normKey &&
-              slug &&
-              !deletedSet.has(slug) &&
-              !deletedSet.has(normKey) &&
-              !deletedSet.has(seedCat.toLowerCase())
-            ) {
-              uniqueByNormKey.set(normKey, seedCat);
-            }
-          }
           snapshot.docs
             .filter((d) => !d.data().deleted && !isFictitiousDoc(d.id, d.data()))
             .forEach((d) => {
@@ -1391,6 +1473,21 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
   }, []);
 
   const refreshFirestore = useCallback(async () => {
+    const RECONNECT_COOLDOWN_MS = 5 * 60 * 1000;
+    const now = Date.now();
+    let prevTs = lastReconnectAt;
+    try {
+      const stored = Number(localStorage.getItem('riskcart_last_reconnect_at') || 0);
+      if (stored > prevTs) prevTs = stored;
+    } catch {}
+    if (prevTs && now - prevTs < RECONNECT_COOLDOWN_MS) {
+      return;
+    }
+    setLastReconnectAt(now);
+    try {
+      localStorage.setItem('riskcart_last_reconnect_at', String(now));
+    } catch {}
+
     setIsReconnecting(true);
     try {
       sessionStorage.removeItem('riskcart_quota_exhausted');
@@ -1406,7 +1503,7 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setDismissQuotaBanner(false);
     setRefreshTrigger((prev) => prev + 1);
     setTimeout(() => setIsReconnecting(false), 600);
-  }, []);
+  }, [lastReconnectAt]);
 
   // Two-Way Ecosystem Write & Trigger Sync
   const executeEcosystemWriteAction = useCallback(
@@ -2127,20 +2224,33 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
       {/* Non-intrusive Quota Exceeded / Offline Cache Alert Banner */}
       {isQuotaExceeded && !dismissQuotaBanner && (
         <div className="bg-amber-950/90 border-b border-amber-600/60 px-4 py-2 text-xs text-amber-200 flex items-center justify-between z-50 sticky top-0 backdrop-blur-md shadow-md animate-in fade-in">
-          <div className="flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping" />
-            <span className="font-bold">Mode Offline / Cache Aktif:</span>
-            <span>
-              Kuota baca Cloud Firestore harian tercapai (*Resource Exhausted*). Data transaksi dan katalog produk dimuat dari cache lokal perangkat agar operasional kasir tetap dapat berjalan 100%.
-            </span>
+          <div className="flex flex-col gap-0.5">
+            <div className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping" />
+              <span className="font-bold">Mode Offline / Cache Aktif:</span>
+              <span>
+                Kuota baca Firestore hari ini habis. Data dari cache perangkat terakhir, bisa tidak terbaru. Transaksi baru tetap disimpan. Kuota reset sekitar 14.00–15.00 WIB.
+              </span>
+            </div>
+            {products.length === 0 && (
+              <div className="text-[11px] text-amber-300/90 pl-4">
+                Cache produk dan kategori pada perangkat ini masih kosong. Daftar ditampilkan kosong (tanpa data contoh).
+              </div>
+            )}
           </div>
           <div className="flex items-center gap-2 ml-4 shrink-0">
             <button
               onClick={() => void refreshFirestore()}
-              disabled={isReconnecting}
-              className="px-3 py-1 rounded bg-emerald-600 hover:bg-emerald-500 disabled:opacity-60 text-white font-bold text-[11px] cursor-pointer transition shadow-sm flex items-center gap-1.5"
+              disabled={isReconnecting || reconnectCooldownSec > 0}
+              className="px-3 py-1 rounded bg-emerald-600 hover:bg-emerald-500 disabled:opacity-60 disabled:cursor-not-allowed text-white font-bold text-[11px] cursor-pointer transition shadow-sm flex items-center gap-1.5"
             >
-              {isReconnecting ? 'Menghubungkan...' : 'Hubungkan Ulang ke Cloud'}
+              {isReconnecting
+                ? 'Menghubungkan...'
+                : reconnectCooldownSec > 0
+                ? `Hubungkan Ulang (${Math.floor(reconnectCooldownSec / 60)}:${String(
+                    reconnectCooldownSec % 60
+                  ).padStart(2, '0')})`
+                : 'Hubungkan Ulang ke Cloud'}
             </button>
           </div>
         </div>

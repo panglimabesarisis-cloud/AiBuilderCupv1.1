@@ -9,8 +9,10 @@ import {
   ShieldCheck,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { collection, onSnapshot, query, orderBy, limit } from 'firebase/firestore';
+import { collection, onSnapshot, query, where, limit } from 'firebase/firestore';
 import { db } from '../../firebase';
+import { ACTIVE_STORE_ID } from '../../config/store';
+import { useAppData } from '../../context/AppDataContext';
 import { PWAInstallButton } from './PWAInstallButton';
 import { ThemeToggleButton } from './ThemeToggleButton';
 import { RiskCartLogo } from './RiskCartLogo';
@@ -60,11 +62,24 @@ export const Navbar: React.FC<NavbarProps> = ({
 }) => {
   const { currencyMode, setCurrencyMode, toggleCurrency, exchangeRate, isRateLive, tr } = useLanguage();
   const { isDemoMode, resetDemoData, activeRoleId, logout, lockPosSession } = useAccessControl();
+  const { transactions } = useAppData();
   const navigate = useNavigate();
-  const [pendingPwaCount, setPendingPwaCount] = useState<number>(0);
   const [resetToast, setResetToast] = useState<boolean>(false);
   const [activeShift, setActiveShift] = useState<any | null>(() => readCachedOpenShift());
   const [isAfter18Wib, setIsAfter18Wib] = useState<boolean>(() => getJakartaHourWib() >= 18);
+
+  const pendingPwaCount = React.useMemo(() => {
+    let count = 0;
+    for (const data of transactions) {
+      if (
+        (data as any).channel === 'pwa_client' &&
+        (data.status === 'pending_approval' || data.status === 'pending')
+      ) {
+        count++;
+      }
+    }
+    return count;
+  }, [transactions]);
 
   const handleResetDemo = () => {
     resetDemoData();
@@ -124,7 +139,11 @@ export const Navbar: React.FC<NavbarProps> = ({
     window.addEventListener('storage', syncShiftState);
 
     const unsubShifts = onSnapshot(
-      collection(db, 'shifts'),
+      query(
+        collection(db, 'shifts'),
+        where('storeId', '==', ACTIVE_STORE_ID),
+        limit(10)
+      ),
       (snap) => {
         const openDocs = snap.docs
           .map((d) => ({ id: d.id, ...(d.data() as any) }))
@@ -143,7 +162,6 @@ export const Navbar: React.FC<NavbarProps> = ({
         } else {
           latestFirestoreOpenShift = null;
           const cached = readCachedOpenShift();
-          // Verify cached shift is not explicitly marked closed in Firestore
           const isCachedClosed =
             cached &&
             snap.docs.some(
@@ -173,28 +191,6 @@ export const Navbar: React.FC<NavbarProps> = ({
       window.removeEventListener('storage', syncShiftState);
       unsubShifts();
     };
-  }, []);
-
-  useEffect(() => {
-    const qTx = query(collection(db, 'transactions'), orderBy('createdAt', 'desc'), limit(25));
-    const unsub = onSnapshot(
-      qTx,
-      (snapshot) => {
-        let count = 0;
-        snapshot.forEach((d) => {
-          const data = d.data();
-          if (
-            data.channel === 'pwa_client' &&
-            (data.status === 'pending_approval' || data.status === 'pending')
-          ) {
-            count++;
-          }
-        });
-        setPendingPwaCount(count);
-      },
-      (err) => console.warn('Navbar transactions listener notice:', err)
-    );
-    return () => unsub();
   }, []);
 
   const handleLogout = async () => {

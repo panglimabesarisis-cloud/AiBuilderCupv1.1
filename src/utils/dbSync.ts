@@ -249,10 +249,11 @@ async function mirrorWriteToBackendServer(
       window.sessionStorage?.getItem('riskcart_server_token') ||
       window.localStorage?.getItem('riskcart_server_token') ||
       '';
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (token) {
-      headers.Authorization = `Bearer ${token}`;
-    }
+    if (!token) return false;
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    };
     const res = await fetch('/api/db/sync', {
       method: 'POST',
       headers,
@@ -271,7 +272,7 @@ async function mirrorWriteToBackendServer(
 }
 
 /**
- * Writes a document to Firestore (and mirrors to backend `/api/db/sync`) with full payload sanitization,
+ * Writes a document to Firestore (and mirrors to backend `/api/db/sync` on failure) with full payload sanitization,
  * transparent error logging, and automatic recovery queue fallback if offline.
  */
 export async function syncDocToDatabase(
@@ -309,9 +310,11 @@ export async function syncDocToDatabase(
     }
   }
 
-  try {
-    serverSuccess = await mirrorWriteToBackendServer('set', cleanCol, cleanId, cleanPayload, true);
-  } catch {}
+  if (!clientSuccess) {
+    try {
+      serverSuccess = await mirrorWriteToBackendServer('set', cleanCol, cleanId, cleanPayload, true);
+    } catch {}
+  }
 
   if (!clientSuccess && !serverSuccess) {
     enqueuePendingSync({
@@ -353,9 +356,11 @@ export async function deleteDocFromDatabase(
     }
   }
 
-  try {
-    serverSuccess = await mirrorWriteToBackendServer('delete', cleanCol, cleanId);
-  } catch {}
+  if (!clientSuccess) {
+    try {
+      serverSuccess = await mirrorWriteToBackendServer('delete', cleanCol, cleanId);
+    } catch {}
+  }
 
   if (!clientSuccess && !serverSuccess) {
     enqueuePendingSync({
@@ -384,7 +389,6 @@ export async function safeSetDoc(
 
   try {
     await setDoc(docRef, sanitized, options);
-    void mirrorWriteToBackendServer('set', collectionPath, docId, sanitized, true);
   } catch (err: any) {
     const errCode = String(err?.code || '').toLowerCase();
     const errMsg = String(err?.message || err || '').toLowerCase();

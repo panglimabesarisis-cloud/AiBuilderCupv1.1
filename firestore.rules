@@ -136,6 +136,9 @@ service cloud.firestore {
     }
 
     // Koleksi Transaksi POS, Pesanan Online, Kas, Shift & Brangkas (Wajib Autentikasi)
+    match /dailyStats/{statId} {
+      allow read, write: if isAppClientOrStaff();
+    }
     match /transactions/{txId} {
       allow read, write: if isAppClientOrStaff();
     }

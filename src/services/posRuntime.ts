@@ -21,43 +21,6 @@ export function startPosSettingsSync() {
     const raw = localStorage.getItem('riskcart_pos_settings_cache');
     if (raw) posSettingsCache = JSON.parse(raw) || {};
   } catch {}
-  const mergeAndBroadcast = (patch: Record<string, any>) => {
-    posSettingsCache = { ...posSettingsCache, ...patch };
-    try {
-      localStorage.setItem('riskcart_pos_settings_cache', JSON.stringify(posSettingsCache));
-    } catch {}
-    listeners.forEach((fn) => fn(posSettingsCache));
-  };
-  try {
-    onSnapshot(
-      doc(db, 'stores', 'store_001', 'settings', 'pos'),
-      (snap) => {
-        if (snap.exists()) mergeAndBroadcast(snap.data());
-      },
-      () => {}
-    );
-    onSnapshot(
-      doc(db, 'settings', 'pos'),
-      (snap) => {
-        if (snap.exists()) mergeAndBroadcast(snap.data());
-      },
-      () => {}
-    );
-    onSnapshot(
-      doc(db, 'settings', 'global'),
-      (snap) => {
-        if (snap.exists()) mergeAndBroadcast(snap.data());
-      },
-      () => {}
-    );
-    onSnapshot(
-      doc(db, 'settings', 'store'),
-      (snap) => {
-        if (snap.exists()) mergeAndBroadcast(snap.data());
-      },
-      () => {}
-    );
-  } catch {}
 }
 
 export function getPosSettings(): Record<string, any> {

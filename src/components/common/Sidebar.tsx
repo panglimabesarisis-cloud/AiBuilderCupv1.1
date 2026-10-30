@@ -68,6 +68,7 @@ export interface SidebarProps {
 
 export const Sidebar: React.FC<SidebarProps> = ({
   activeTab,
+  setActiveTab,
   activeSubModule = '',
   isCollapsed,
   toggleCollapsed,
@@ -461,13 +462,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
           {/* Quick Cashier Shortcut Button (Metallic Gold Gradient as in Reference) */}
           <AppLink
-            to={getPathForTab('pos_machine')}
-            onClick={closeMobile}
+            to="/pos"
+            onClick={() => {
+              setActiveTab('pos_machine');
+              closeMobile();
+            }}
             translate="no"
             className={`notranslate w-full flex items-center ${
               collapsed ? 'justify-center p-2' : 'justify-between px-3 py-2.5'
             } rounded-xl font-black transition cursor-pointer ${
-              activeTab === 'pos_machine'
+              activeTab === 'pos_machine' || activeTab === 'pos' || route.view === 'pos'
                 ? 'bg-gradient-to-r from-[#f59e0b] via-[#fbbf24] to-[#d97706] text-black border border-amber-300/60 shadow-[0_0_16px_rgba(245,158,11,0.38)]'
                 : 'bg-gradient-to-r from-[#f59e0b]/90 via-[#fbbf24]/90 to-[#d97706]/90 text-black border border-amber-300/50 shadow-[0_0_14px_rgba(245,158,11,0.28)] hover:brightness-110'
             }`}
@@ -555,6 +559,23 @@ export const Sidebar: React.FC<SidebarProps> = ({
               {!collapsed && openGroups['reservation_table'] !== false && (
                 <div className="rc-sidebar-submenu-box pl-6 pr-2 py-1.5 space-y-1 bg-zinc-950/50 rounded-xl border-l-2 border-amber-500/80 text-[11px] font-medium text-zinc-300">
                   <AppLink
+                    to="/dashboard/layout-table"
+                    onClick={closeMobile}
+                    className={`rc-sidebar-submenu-link ${
+                      (activeTab === 'layout_table' || activeTab === 'table_layout' || activeTab === 'reservation') &&
+                      (!activeSubModule ||
+                        activeSubModule === 'layout' ||
+                        activeSubModule === 'ai_master' ||
+                        (activeSubModule !== 'reservation' &&
+                          activeSubModule !== 'reservation_list' &&
+                          activeSubModule !== 'summary'))
+                        ? 'rc-sidebar-submenu-link-active text-amber-400 font-bold'
+                        : ''
+                    } block py-1 hover:text-amber-400 transition cursor-pointer`}
+                  >
+                    Table Layout
+                  </AppLink>
+                  <AppLink
                     to="/dashboard/reservation"
                     onClick={closeMobile}
                     className={`rc-sidebar-submenu-link ${
@@ -577,18 +598,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     } block py-1 hover:text-amber-400 transition cursor-pointer`}
                   >
                     List Reservasi
-                  </AppLink>
-                  <AppLink
-                    to="/dashboard/layout-table"
-                    onClick={closeMobile}
-                    className={`rc-sidebar-submenu-link ${
-                      (activeTab === 'layout_table' || activeTab === 'table_layout') &&
-                      (!activeSubModule || activeSubModule === 'layout' || activeSubModule === 'ai_master')
-                        ? 'rc-sidebar-submenu-link-active text-amber-400 font-bold'
-                        : ''
-                    } block py-1 hover:text-amber-400 transition cursor-pointer`}
-                  >
-                    Table Layout
                   </AppLink>
                   <AppLink
                     to="/dashboard/layout-table/summary"

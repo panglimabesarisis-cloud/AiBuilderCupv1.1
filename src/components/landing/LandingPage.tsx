@@ -164,51 +164,123 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onNavigate }) => {
         </div>
       </div>
 
-      {/* Feature Highlight Matrix */}
+      {/* Application Flow Matrix */}
       <div className="bg-[#110f0a]/95 border border-amber-500/40 rounded-3xl p-8 sm:p-12 shadow-[0_0_24px_rgba(245,158,11,0.14)]">
         <h2 className="text-2xl font-bold text-amber-50 mb-8 text-center">
-          Engineered for Operational Excellence
+          Application Flow
         </h2>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 text-xs">
-          <div className="p-4 rounded-xl bg-[#0b0906] border border-amber-500/35 space-y-2">
-            <div className="text-emerald-400 font-bold uppercase tracking-wider flex items-center gap-1.5">
-              <Boxes className="w-4 h-4" />
-              Carton-to-Unit Math
+          {/* 1. Waiter */}
+          <div
+            onClick={() => navigateToPath('/waiter')}
+            className="group cursor-pointer p-5 rounded-xl bg-[#0b0906] border border-amber-500/35 hover:border-emerald-400/70 transition flex flex-col justify-between space-y-4"
+          >
+            <div className="space-y-2">
+              <div className="text-emerald-400 font-bold uppercase tracking-wider flex items-center gap-1.5 text-sm">
+                <Boxes className="w-4 h-4" />
+                Waiter
+              </div>
+              <p className="text-amber-100/80 leading-relaxed">
+                Application that allows waiters to serve customers, starting with table selection, menu selection, and entering customer information into the database. Once an order is placed, it is automatically sent to both the Kitchen and Cashier departments.
+              </p>
             </div>
-            <p className="text-amber-100/70 leading-relaxed">
-              1-click &quot;Unpack Dus&quot; action breaks wholesale packages into retail units without inventory accounting errors.
-            </p>
+            <a
+              href="/waiter"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                navigateToPath('/waiter');
+              }}
+              className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-400 group-hover:text-emerald-300 pt-2 border-t border-amber-500/20"
+            >
+              <span>Explore Life</span>
+              <ArrowRight className="w-3.5 h-3.5 transition-transform group-hover:translate-x-0.5" />
+            </a>
           </div>
 
-          <div className="p-4 rounded-xl bg-[#0b0906] border border-amber-500/35 space-y-2">
-            <div className="text-rose-400 font-bold uppercase tracking-wider flex items-center gap-1.5">
-              <Flame className="w-4 h-4" />
-              Mock GPS Interceptor
+          {/* 2. Kitchen */}
+          <div
+            onClick={() => navigateToPath('/kitchen')}
+            className="group cursor-pointer p-5 rounded-xl bg-[#0b0906] border border-amber-500/35 hover:border-rose-400/70 transition flex flex-col justify-between space-y-4"
+          >
+            <div className="space-y-2">
+              <div className="text-rose-400 font-bold uppercase tracking-wider flex items-center gap-1.5 text-sm">
+                <Flame className="w-4 h-4" />
+                Kitchen
+              </div>
+              <p className="text-amber-100/80 leading-relaxed">
+                Application that displays the order processing pipeline in real time, from incoming orders to preparation progress and finally marking orders as ready to be served to customers.
+              </p>
             </div>
-            <p className="text-amber-100/70 leading-relaxed">
-              Detects 0.00m hardware precision anomalies and emulator coordinate jumps before transactions are authorized.
-            </p>
+            <a
+              href="/kitchen"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                navigateToPath('/kitchen');
+              }}
+              className="inline-flex items-center gap-1.5 text-xs font-bold text-rose-400 group-hover:text-rose-300 pt-2 border-t border-amber-500/20"
+            >
+              <span>Explore Life</span>
+              <ArrowRight className="w-3.5 h-3.5 transition-transform group-hover:translate-x-0.5" />
+            </a>
           </div>
 
-          <div className="p-4 rounded-xl bg-[#0b0906] border border-amber-500/35 space-y-2">
-            <div className="text-amber-400 font-bold uppercase tracking-wider flex items-center gap-1.5">
-              <Sparkles className="w-4 h-4" />
-              AI Restock Advisor
+          {/* 3. Cashier */}
+          <div
+            onClick={() => navigateToPath('/pos')}
+            className="group cursor-pointer p-5 rounded-xl bg-[#0b0906] border border-amber-500/35 hover:border-amber-400/80 transition flex flex-col justify-between space-y-4"
+          >
+            <div className="space-y-2">
+              <div className="text-amber-400 font-bold uppercase tracking-wider flex items-center gap-1.5 text-sm">
+                <Sparkles className="w-4 h-4" />
+                Cashier
+              </div>
+              <p className="text-amber-100/80 leading-relaxed">
+                A POS Cashier application that processes payments for both dine-in customers and walk-in takeaway customers.
+              </p>
             </div>
-            <p className="text-amber-100/70 leading-relaxed">
-              Forecasts stockout velocity and recommends purchase orders grouped strictly in whole carton multiples.
-            </p>
+            <a
+              href="/pos"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                navigateToPath('/pos');
+              }}
+              className="inline-flex items-center gap-1.5 text-xs font-bold text-amber-400 group-hover:text-amber-300 pt-2 border-t border-amber-500/20"
+            >
+              <span>Explore Life</span>
+              <ArrowRight className="w-3.5 h-3.5 transition-transform group-hover:translate-x-0.5" />
+            </a>
           </div>
 
-          <div className="p-4 rounded-xl bg-[#0b0906] border border-amber-500/35 space-y-2">
-            <div className="text-amber-300 font-bold uppercase tracking-wider flex items-center gap-1.5">
-              <Lock className="w-4 h-4" />
-              Multi-Tenant RBAC
+          {/* 4. Real-Time Control */}
+          <div
+            onClick={() => navigateToPath('/dashboard')}
+            className="group cursor-pointer p-5 rounded-xl bg-[#0b0906] border border-amber-500/35 hover:border-amber-300/80 transition flex flex-col justify-between space-y-4"
+          >
+            <div className="space-y-2">
+              <div className="text-amber-300 font-bold uppercase tracking-wider flex items-center gap-1.5 text-sm">
+                <Lock className="w-4 h-4" />
+                Real-Time Control
+              </div>
+              <p className="text-amber-100/80 leading-relaxed">
+                A centralized dashboard that allows administrators to monitor all transactions in real time. Every transaction, order status, kitchen progress, and payment update is synchronized and displayed instantly.
+              </p>
             </div>
-            <p className="text-amber-100/70 leading-relaxed">
-              Every single collection has storeId embedded and validated by granular Role-Based Access Control rules.
-            </p>
+            <a
+              href="/dashboard"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                navigateToPath('/dashboard');
+              }}
+              className="inline-flex items-center gap-1.5 text-xs font-bold text-amber-300 group-hover:text-amber-200 pt-2 border-t border-amber-500/20"
+            >
+              <span>Explore Life</span>
+              <ArrowRight className="w-3.5 h-3.5 transition-transform group-hover:translate-x-0.5" />
+            </a>
           </div>
         </div>
       </div>

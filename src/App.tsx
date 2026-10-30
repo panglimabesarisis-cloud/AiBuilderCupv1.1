@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   BrowserRouter,
   Routes,
@@ -28,6 +28,8 @@ import {
   PublicOnlyRoute,
   RequireAuth,
   RootRedirect,
+  pathToView,
+  viewToPath,
 } from './router';
 import { startStockSyncService } from './services/stockSyncService';
 import { LoginPage } from './components/common/LoginPage';
@@ -146,11 +148,71 @@ function DashboardLayout() {
   const setCurrencyMode = rawSetCurrencyMode as any;
   const {
     route,
-    activeTab,
-    activeSubModule,
-    setActiveTab,
-    setActiveSubModule,
+    pathname,
+    activeTab: navActiveTab,
+    activeSubModule: navActiveSubModule,
+    setActiveTab: navSetActiveTab,
+    setActiveSubModule: navSetActiveSubModule,
+    navigateToPath,
   } = useAppNavigation();
+
+  // Lazy Initializer dari URL aktual agar tidak memakai default 'admin' secara buta saat membuka /pos
+  const initialRoute = useMemo(
+    () => pathToView(typeof window !== 'undefined' ? window.location.pathname : pathname),
+    []
+  );
+  const [activeView, setActiveView] = useState<'landing' | 'pos' | 'admin' | 'pwa'>(
+    () => pathToView(typeof window !== 'undefined' ? window.location.pathname : pathname).view || initialRoute.view
+  );
+  const [activeSubModuleState, setActiveSubModuleState] = useState<string | null>(
+    () => pathToView(typeof window !== 'undefined' ? window.location.pathname : pathname).subModule || initialRoute.subModule || null
+  );
+  const [posSubTab, setPosSubTab] = useState<string>(
+    () => pathToView(typeof window !== 'undefined' ? window.location.pathname : pathname).posSubTab || initialRoute.posSubTab || 'kasir'
+  );
+
+  // Sinkronkan activeView, activeSubModuleState, dan posSubTab saat URL berubah tanpa me-redirect /pos ke /dashboard
+  useEffect(() => {
+    const mapped = pathToView(pathname);
+    setActiveView(mapped.view);
+    setActiveSubModuleState(mapped.subModule || navActiveSubModule || null);
+    if (mapped.view === 'pos') {
+      setPosSubTab(mapped.posSubTab || 'kasir');
+    }
+  }, [pathname, navActiveSubModule]);
+
+  const activeTab = activeView === 'pos' ? 'pos_machine' : navActiveTab;
+  const activeSubModule = navActiveSubModule || activeSubModuleState || '';
+
+  const setActiveTab = React.useCallback(
+    (nextTab: string) => {
+      if (nextTab === 'pos' || nextTab === 'pos_machine') {
+        setActiveView('pos');
+        navigateToPath(viewToPath('pos', null, posSubTab));
+        return;
+      }
+      if (nextTab === 'pwa' || nextTab === 'order-pelanggan' || nextTab === 'client-pwa') {
+        setActiveView('pwa');
+        navigateToPath('/client-pwa');
+        return;
+      }
+      if (nextTab === 'landing') {
+        setActiveView('landing');
+      } else {
+        setActiveView('admin');
+      }
+      navSetActiveTab(nextTab);
+    },
+    [navSetActiveTab, navigateToPath, posSubTab]
+  );
+
+  const setActiveSubModule = React.useCallback(
+    (nextSub: string) => {
+      setActiveSubModuleState(nextSub);
+      navSetActiveSubModule(nextSub);
+    },
+    [navSetActiveSubModule]
+  );
 
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(false);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState<boolean>(false);
@@ -178,28 +240,30 @@ function DashboardLayout() {
     setActiveRoleId,
     roles,
     canPerformModuleAction,
-    posPinVerified,
-    lockPosSession,
   } = useAccessControl();
-
-  // Require PIN verification each time the user enters /dashboard/pos from another module
-  useEffect(() => {
-    if (activeTab !== 'pos_machine' && posPinVerified) {
-      lockPosSession();
-    }
-  }, [activeTab, posPinVerified, lockPosSession]);
 
   const isWaiterFlow =
     activeTab === 'waiters' ||
+    activeTab === 'waiter' ||
     activeTab === 'kitchen' ||
     activeSubModule === 'waiter' ||
     (typeof window !== 'undefined' &&
-      (window.location.pathname.toLowerCase().startsWith('/waiters') ||
+      (window.location.pathname.toLowerCase().startsWith('/waiter') ||
         window.location.pathname.toLowerCase().startsWith('/kitchen') ||
         new URLSearchParams(window.location.search).get('waiter') === '1'));
 
+  const isPosRoute =
+    activeView === 'pos' ||
+    activeTab === 'pos_machine' ||
+    activeTab === 'pos' ||
+    pathname === '/pos' ||
+    pathname.startsWith('/pos/') ||
+    pathname === '/dashboard/pos' ||
+    pathname.startsWith('/dashboard/pos/');
+
   const renderActiveModule = () => {
     const isRbacAdminRoute =
+      isPosRoute ||
       isWaiterFlow ||
       activeTab === 'hakdanakses' ||
       activeTab === 'hak_dan_akses' ||
@@ -273,10 +337,22 @@ function DashboardLayout() {
 
       case 'waiters':
       case 'waiter':
+        if (activeSubModule === 'layout' || activeSubModule === 'meja') {
+          return (
+            <PageContainer maxWidth="w-full max-w-none">
+              <TableLayoutModule waiterMode />
+            </PageContainer>
+          );
+        }
         return (
-          <PageContainer maxWidth="w-full max-w-none">
-            <TableLayoutModule waiterMode />
-          </PageContainer>
+          <main className="flex-1 w-full overflow-hidden min-h-0">
+            <PosMachine
+              currencyMode={currencyMode}
+              setCurrencyMode={setCurrencyMode}
+              onNavigateTab={(tab) => setActiveTab(tab)}
+              waiterMode={true}
+            />
+          </main>
         );
 
       case 'kitchen':
@@ -296,10 +372,8 @@ function DashboardLayout() {
           </PageContainer>
         );
 
+      case 'pos':
       case 'pos_machine':
-        if (!posPinVerified && !isWaiterFlow) {
-          return <PosPinGate />;
-        }
         return (
           <main className="flex-1 w-full overflow-hidden min-h-0">
             <PosMachine
@@ -765,19 +839,28 @@ function AppRoutes() {
       {/* Route Mandiri Khusus PWA Pelanggan */}
       <Route path="/client-pwa" element={<ClientPwaStandalone />} />
       <Route path="/client-pwa/*" element={<ClientPwaStandalone />} />
+      <Route path="/order-pelanggan" element={<ClientPwaStandalone />} />
+      <Route path="/order-pelanggan/*" element={<ClientPwaStandalone />} />
       <Route path="/pwa" element={<Navigate to="/client-pwa" replace />} />
       <Route path="/pwa/*" element={<Navigate to="/client-pwa" replace />} />
       <Route path="/clienthome" element={<Navigate to="/client-pwa/clienthome" replace />} />
       <Route path="/clienthome/*" element={<Navigate to="/client-pwa/clienthome" replace />} />
 
-      {/* Semua route Admin / Dashboard / POS / Kitchen / Waiters wajib login melalui ProtectedRoute */}
-      <Route path="/waiters" element={<ProtectedRoute><DashboardLayout /></ProtectedRoute>} />
-      <Route path="/waiters/*" element={<ProtectedRoute><DashboardLayout /></ProtectedRoute>} />
+      {/* Route /waiters langsung masuk ke Terminal Kasir POS tanpa ditahan /login dan tanpa popup PIN */}
+      <Route path="/waiters" element={<DashboardLayout />} />
+      <Route path="/waiters/*" element={<DashboardLayout />} />
+      <Route path="/waiter" element={<DashboardLayout />} />
+      <Route path="/waiter/*" element={<DashboardLayout />} />
+
+      {/* Semua route Admin / Dashboard / POS / Kitchen wajib login melalui ProtectedRoute */}
       <Route path="/kitchen" element={<ProtectedRoute><DashboardLayout /></ProtectedRoute>} />
       <Route path="/kitchen/*" element={<ProtectedRoute><DashboardLayout /></ProtectedRoute>} />
+      <Route path="/pos" element={<ProtectedRoute><DashboardLayout /></ProtectedRoute>} />
+      <Route path="/pos/*" element={<ProtectedRoute><DashboardLayout /></ProtectedRoute>} />
+      <Route path="/dashboard/pos" element={<ProtectedRoute><DashboardLayout /></ProtectedRoute>} />
+      <Route path="/dashboard/pos/*" element={<ProtectedRoute><DashboardLayout /></ProtectedRoute>} />
       <Route path="/dashboard" element={<ProtectedRoute><DashboardLayout /></ProtectedRoute>} />
       <Route path="/dashboard/*" element={<ProtectedRoute><DashboardLayout /></ProtectedRoute>} />
-      <Route path="/pos" element={<ProtectedRoute><DashboardLayout /></ProtectedRoute>} />
       <Route path="*" element={<ProtectedRoute><DashboardLayout /></ProtectedRoute>} />
     </Routes>
   );

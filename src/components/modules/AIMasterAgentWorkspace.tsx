@@ -38,12 +38,15 @@ import {
   query,
   orderBy,
   limit,
+  where,
   serverTimestamp,
 } from 'firebase/firestore';
 import { db } from '../../firebase';
+import { ACTIVE_STORE_ID } from '../../config/store';
 import { useAppData } from '../../context/AppDataContext';
 import { useLanguage } from '../../context/LanguageContext';
 import { useAppNavigation, AppLink } from '../../router';
+import { checkAndRecordAiCooldown } from '../../utils/aiCooldown';
 import {
   AIAgentInstructionConfig,
   GOOGLE_GEMINI_MODELS,
@@ -60,6 +63,8 @@ import {
   buildRealFirestoreContextJson,
 } from '../../services/aiInstructionStore';
 import { getDefaultMinStock } from '../../services/posRuntime';
+import { fetchDailyStatsForAiContext } from '../../services/dailyStatsService';
+import { AiRunControlBar, useAiFeatureControl } from '../common/AiRunControlBar';
 
 export interface AIMasterAgentWorkspaceProps {
   agentSlug: string;
@@ -338,7 +343,11 @@ export const AIMasterAgentWorkspace: React.FC<AIMasterAgentWorkspaceProps> = ({
   const [productLogs, setProductLogs] = useState<any[]>([]);
 
   useEffect(() => {
-    const qTokenLogs = query(collection(db, 'ai_token_logs'), limit(60));
+    const qTokenLogs = query(
+      collection(db, 'ai_token_logs'),
+      where('storeId', '==', ACTIVE_STORE_ID),
+      limit(50)
+    );
     const unsub = onSnapshot(
       qTokenLogs,
       (snap) => {
@@ -387,7 +396,11 @@ export const AIMasterAgentWorkspace: React.FC<AIMasterAgentWorkspaceProps> = ({
     };
 
     const unsubAudit = onSnapshot(
-      query(collection(db, 'audit_logs'), limit(60)),
+      query(
+        collection(db, 'audit_logs'),
+        where('storeId', '==', ACTIVE_STORE_ID),
+        limit(50)
+      ),
       (snap) => {
         const map = new Map<string, any>();
         readLocalVoidLogs().forEach((item) => {
@@ -404,7 +417,11 @@ export const AIMasterAgentWorkspace: React.FC<AIMasterAgentWorkspaceProps> = ({
     );
 
     const unsubProductLogs = onSnapshot(
-      query(collection(db, 'product_logs'), limit(60)),
+      query(
+        collection(db, 'product_logs'),
+        where('storeId', '==', ACTIVE_STORE_ID),
+        limit(50)
+      ),
       (snap) => {
         const list: any[] = [];
         snap.forEach((d) => {
@@ -888,10 +905,20 @@ export const AIMasterAgentWorkspace: React.FC<AIMasterAgentWorkspaceProps> = ({
     return `Berdasarkan pemeriksaan real-time database Firestore toko aktif per periode pelaporan ${nowFormatted} pada modul ${activeAgent.moduleLabel} (${activeAgent.moduleRoute}), (a) Fakta Terhitung dari Database Aktual mencatat Total Omzet POS & Client PWA sebesar ${formatMoney(liveMetrics.totalRevenueIdr)} dari ${transactions.length} Transaksi POS dan ${orders.length} Order PWA, dengan total Harga Pokok Penjualan (HPP) sebesar ${formatMoney(liveMetrics.totalCogsIdr)} serta laba kotor mencapai ${formatMoney(liveMetrics.totalGrossProfitIdr)} (margin ${liveMetrics.avgMarginPct}%). ${catalogSentence} Nilai aset inventori fisik tercatat sebesar ${formatMoney(liveMetrics.totalInventoryAssetIdr)} (nilai jual eceran ${formatMoney(liveMetrics.totalInventoryRetailIdr)}), disertai ${customers.length} pelanggan terdaftar (total piutang ${formatMoney(liveMetrics.totalReceivablesIdr)}) dan ${procurements.length} dokumen Purchase Order. ${critSentence} ${anomalySentence} Menjawab permintaan "${userPrompt}", seluruh temuan dan rekomendasi tindakan di atas dihitung secara deterministik 100% dari koleksi aktual Firestore tanpa data simulasi ${chartTag}`;
   };
 
-  // Send Prompt from Gemini-style bottom bar
-  const handleSendPrompt = async (customPromptText?: string) => {
-    const queryText = (customPromptText ?? promptInput).trim();
+  // Send Prompt from Gemini-style bottom bar (manual trigger + 30s cooldown)
+  const handleSendPrompt = async (customPromptText?: string, signal?: AbortSignal) => {
+    const queryText = (
+      customPromptText ??
+      (promptInput.trim() ||
+        `Berikan analisis ringkasan eksekutif ${activeAgent.nameId} dari dailyStats terbaru`)
+    ).trim();
     if (!queryText || isGenerating) return;
+
+    const cooldown = checkAndRecordAiCooldown(`master-workspace-${activeAgent.slug}`);
+    if (!cooldown.allowed) {
+      showToast(cooldown.message);
+      return;
+    }
 
     if (!customPromptText) {
       setPromptInput('');
@@ -917,8 +944,15 @@ export const AIMasterAgentWorkspace: React.FC<AIMasterAgentWorkspaceProps> = ({
     const startTime = Date.now();
     const systemPrompt = getActiveAgentInstruction(activeAgent.slug);
 
-    // Construct real-time Firestore context payload using buildRealFirestoreContextJson + agent metadata
+    // Fetch dailyStats summary docs instead of reading all transactions/products
+    const dailyStatsDocs = await fetchDailyStatsForAiContext(ACTIVE_STORE_ID, 14);
+    if (signal?.aborted) {
+      setIsGenerating(false);
+      return;
+    }
+
     const baseFirestoreJson = buildRealFirestoreContextJson({
+      dailyStats: dailyStatsDocs,
       products: includeProducts ? products : [],
       transactions: includeTransactions ? transactions : [],
       orders: includeOrders ? orders : [],
@@ -951,13 +985,13 @@ export const AIMasterAgentWorkspace: React.FC<AIMasterAgentWorkspaceProps> = ({
         wajibRestockUnder7Days: liveMetrics.criticalProducts.length,
         totalOmzetPosAndPwa: formatMoney(liveMetrics.totalRevenueIdr),
         totalGrossProfit: formatMoney(liveMetrics.totalGrossProfitIdr),
-        sumberDataTerhubung: `${products.length} Produk, ${transactions.length} Transaksi POS, ${orders.length} Order PWA, ${auditLogs.length} Audit Logs, ${productLogs.length} Mutasi Stok`,
+        sumberDataTerhubung: `${dailyStatsDocs.length} dailyStats summary docs, ${products.length} Produk, ${transactions.length} Transaksi Hari Ini`,
       },
       realFirestoreData: JSON.parse(baseFirestoreJson),
     };
 
     const defaultChartTag = DEFAULT_AGENT_CHART_TAG[canonicalSlug] || '#ExecutiveOverview';
-    const fullQueryForGemini = `${GLOBAL_AI_STANDARD_RULES}\n\nDATA AKTUAL FIRESTORE RISKCART (MATA UANG AKTIF: ${currency}, TAG CHART RELEVAN: ${defaultChartTag}):\n${JSON.stringify(
+    const fullQueryForGemini = `${GLOBAL_AI_STANDARD_RULES}\n\nDATA RINGKASAN DAILYSTATS & KONTEKS RISKCART (MATA UANG AKTIF: ${currency}, TAG CHART RELEVAN: ${defaultChartTag}):\n${JSON.stringify(
       firestoreContextPayload,
       null,
       2
@@ -967,7 +1001,9 @@ export const AIMasterAgentWorkspace: React.FC<AIMasterAgentWorkspaceProps> = ({
       const res = await fetch('/api/ai/agent-run', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        signal,
         body: JSON.stringify({
+          manualTrigger: true,
           agentKey: activeAgent.slug,
           agentName: activeAgent.nameId,
           systemPrompt,
@@ -1078,6 +1114,13 @@ export const AIMasterAgentWorkspace: React.FC<AIMasterAgentWorkspaceProps> = ({
       AGENT_SUGGESTED_PROMPTS['business-copilot']
     );
   }, [canonicalSlug]);
+
+  const aiMasterControl = useAiFeatureControl({
+    featureKey: `ai_master_${canonicalSlug}`,
+    onRun: async (signal) => {
+      await handleSendPrompt(suggestedPrompts[0], signal);
+    },
+  });
 
   const modelInfo = getGoogleGeminiModelInfo(selectedModelId);
 
@@ -1410,24 +1453,33 @@ export const AIMasterAgentWorkspace: React.FC<AIMasterAgentWorkspaceProps> = ({
               </div>
             </div>
 
-            {/* Gemini Model Selector */}
-            <div className="flex items-center gap-2.5 px-3.5 py-2 rounded-xl bg-zinc-950 border border-amber-500/40 shrink-0 self-start">
-              <Cpu className="w-4 h-4 text-amber-400 shrink-0" />
-              <div className="flex flex-col min-w-0">
-                <span className="text-[9px] font-bold uppercase tracking-wider text-amber-300 leading-none">
-                  Model Gemini Aktif
-                </span>
-                <select
-                  value={selectedModelId}
-                  onChange={(e) => void handleModelChange(e.target.value)}
-                  className="bg-transparent text-white font-bold text-xs focus:outline-none cursor-pointer mt-0.5 pr-2"
-                >
-                  {GOOGLE_GEMINI_MODELS.map((m) => (
-                    <option key={m.id} value={m.id} className="bg-zinc-900 text-white">
-                      {m.shortLabel} ({m.id})
-                    </option>
-                  ))}
-                </select>
+            {/* AI Run Control Bar + Gemini Model Selector */}
+            <div className="flex flex-wrap items-center gap-2 shrink-0 self-start">
+              <AiRunControlBar
+                featureLabel={activeAgent.nameId}
+                enabled={aiMasterControl.enabled}
+                isRunning={aiMasterControl.isRunning || isGenerating}
+                onToggle={aiMasterControl.toggleEnabled}
+                onRun={() => void aiMasterControl.runNow()}
+              />
+              <div className="flex items-center gap-2.5 px-3.5 py-2 rounded-xl bg-zinc-950 border border-amber-500/40 shrink-0">
+                <Cpu className="w-4 h-4 text-amber-400 shrink-0" />
+                <div className="flex flex-col min-w-0">
+                  <span className="text-[9px] font-bold uppercase tracking-wider text-amber-300 leading-none">
+                    Model Gemini Aktif
+                  </span>
+                  <select
+                    value={selectedModelId}
+                    onChange={(e) => void handleModelChange(e.target.value)}
+                    className="bg-transparent text-white font-bold text-xs focus:outline-none cursor-pointer mt-0.5 pr-2"
+                  >
+                    {GOOGLE_GEMINI_MODELS.map((m) => (
+                      <option key={m.id} value={m.id} className="bg-zinc-900 text-white">
+                        {m.shortLabel} ({m.id})
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
             </div>
           </div>

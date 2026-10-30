@@ -77,6 +77,8 @@ export const paymentGatewayApi = {
         orderId: string;
         paymentUrl?: string;
         qrString?: string;
+        vaNumber?: string;
+        vaBank?: string;
         token?: string;
         reference?: string;
       }>('/api/payment/create', {
@@ -100,20 +102,22 @@ export const paymentGatewayApi = {
       const mdrFee = Math.round(gross * 0.007);
       return {
         success: true,
-        provider: (directRes.gateway || 'midtrans') as ProviderId,
+        provider: (directRes.gateway || 'doku') as ProviderId,
         mode: directRes.mode || 'sandbox',
         paymentId:
           directRes.reference ||
           directRes.token ||
           `${String(directRes.gateway || 'GW').toUpperCase()}-${String(body.invoiceNumber || body.transactionId).slice(-8)}`,
+        vaNumber: directRes.vaNumber || `88899${String(body.transactionId || Date.now()).replace(/\D/g, '').slice(-8).padStart(8, '0')}`,
+        vaBank: directRes.vaBank || 'Virtual Account (Dummy Sandbox)',
         amount: gross,
         mdrFee,
         netAmount: Math.max(0, gross - mdrFee),
         qrString: directRes.qrString || '',
         checkoutUrl: directRes.paymentUrl || '',
         qrCodeDataUrl,
-        sourceGateway: `${String(directRes.gateway || 'midtrans').toUpperCase()} (${directRes.mode || 'sandbox'})`,
-        expiresAt: new Date(Date.now() + 5 * 60_000).toISOString(),
+        sourceGateway: `${String(directRes.gateway || 'doku').toUpperCase()} (DUMMY SANDBOX)`,
+        expiresAt: new Date(Date.now() + 15 * 60_000).toISOString(),
       };
     } catch (directErr) {
       // Fallback to encrypted server-side /api/payments/create
@@ -123,6 +127,8 @@ export const paymentGatewayApi = {
           provider: ProviderId;
           mode: string;
           paymentId: string;
+          vaNumber?: string;
+          vaBank?: string;
           amount: number;
           mdrFee: number;
           netAmount: number;
@@ -139,19 +145,14 @@ export const paymentGatewayApi = {
   },
   simulatePaid: async (transactionId: string, orderId?: string) => {
     try {
+      return await call<{ success: boolean; message: string }>('/api/payments/dummy/simulate-pay', {
+        method: 'POST',
+        body: JSON.stringify({ transactionId, orderId: orderId || transactionId }),
+      });
+    } catch {
       return await call<{ success: boolean; message: string }>('/api/payments/simulate-paid', {
         method: 'POST',
         body: JSON.stringify({ transactionId }),
-      });
-    } catch {
-      return await call<{ success: boolean; message: string }>('/api/payment/webhook', {
-        method: 'POST',
-        body: JSON.stringify({
-          transactionId,
-          order_id: orderId || transactionId,
-          transaction_status: 'settlement',
-          status: 'PAID',
-        }),
       });
     }
   },

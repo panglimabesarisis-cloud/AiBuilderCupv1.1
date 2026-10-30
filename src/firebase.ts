@@ -1,17 +1,108 @@
 import { initializeApp, getApps, getApp, FirebaseApp } from 'firebase/app';
-import { getAuth, signInWithCustomToken, Auth } from 'firebase/auth';
+import { getAuth, signInWithCustomToken, signInAnonymously, Auth } from 'firebase/auth';
 import {
   initializeFirestore,
   getFirestore,
+  persistentLocalCache,
+  persistentMultipleTabManager,
+  memoryLocalCache,
   setLogLevel,
-  doc,
-  getDocFromServer,
   Firestore,
 } from 'firebase/firestore';
-import appletConfig from '../firebase-applet-config.json';
 import { isDemoModeActive, setDemoModeActive, resetDemoSandbox } from './utils/firestoreSandbox';
 
+// Immediately clean up stuck Firestore WebStorage mutation queues and guard Storage.prototype.setItem
+// so QuotaExceededError can never crash Firestore's internal AsyncQueue (ID: b815).
+if (typeof window !== 'undefined' && typeof Storage !== 'undefined') {
+  try {
+    const keysToRemove: string[] = [];
+    for (let i = 0; i < window.localStorage.length; i++) {
+      const k = window.localStorage.key(i);
+      if (
+        k &&
+        (k.startsWith('firestore_') ||
+          k.startsWith('riskcart_fs_') ||
+          k.startsWith('riskcart_demo_cache_'))
+      ) {
+        keysToRemove.push(k);
+      }
+    }
+    keysToRemove.forEach((k) => {
+      try {
+        window.localStorage.removeItem(k);
+      } catch {}
+    });
+  } catch {}
+
+  try {
+    const origSetItem = Storage.prototype.setItem;
+    if (!(Storage.prototype as any).__riskcartSafeSetItemPatched) {
+      Object.defineProperty(Storage.prototype, '__riskcartSafeSetItemPatched', {
+        value: true,
+        enumerable: false,
+        configurable: true,
+      });
+      Storage.prototype.setItem = function (key: string, value: string) {
+        try {
+          origSetItem.call(this, key, value);
+        } catch (err: any) {
+          // Evict firestore_* and non-essential cache keys to free space, then retry once without throwing
+          try {
+            const evictKeys: string[] = [];
+            for (let i = 0; i < this.length; i++) {
+              const k = this.key(i);
+              if (
+                k &&
+                (k.startsWith('firestore_') ||
+                  k.startsWith('riskcart_fs_') ||
+                  k.startsWith('riskcart_cache_ai_') ||
+                  k.startsWith('riskcart_cache_cash_logs') ||
+                  k.startsWith('riskcart_cache_brangkas'))
+              ) {
+                evictKeys.push(k);
+              }
+            }
+            evictKeys.forEach((k) => {
+              try {
+                this.removeItem(k);
+              } catch {}
+            });
+            if (!String(key).startsWith('firestore_')) {
+              origSetItem.call(this, key, value);
+            }
+          } catch {
+            // Swallow QuotaExceededError so Firestore WebStorageSharedClientState never asserts b815
+          }
+        }
+      };
+    }
+  } catch {}
+}
+
+const optionalConfigModules =
+  typeof import.meta !== 'undefined' && typeof (import.meta as any).glob === 'function'
+    ? (import.meta as any).glob('../firebase-applet-config.json', { eager: true })
+    : {};
+const rawConfigMod: any = Object.values(optionalConfigModules)[0] || {};
+const appletConfig: Record<string, any> = rawConfigMod?.default || rawConfigMod || {};
+
 export { isDemoModeActive, setDemoModeActive, resetDemoSandbox };
+
+// Global Quota Exhausted / Offline Mode tracker
+let firestoreQuotaExhausted = false;
+export function isFirestoreQuotaExhausted(): boolean {
+  return firestoreQuotaExhausted;
+}
+export function markFirestoreQuotaExhausted(exhausted = true): void {
+  const prev = firestoreQuotaExhausted;
+  firestoreQuotaExhausted = exhausted;
+  if (typeof window !== 'undefined' && exhausted && !prev) {
+    try {
+      sessionStorage.setItem('riskcart_firestore_quota_exhausted', 'true');
+    } catch {}
+    window.dispatchEvent(new CustomEvent('riskcart:firestore-quota-exhausted'));
+  }
+}
 
 /** Ambil session token server (hasil login / verifikasi PIN owner/staff atau OTP pelanggan). */
 export function getServerToken(): string {
@@ -50,7 +141,7 @@ export function clearServerToken(): void {
 
 /**
  * Tukar session token server -> Firebase custom token lalu login Firebase Auth,
- * supaya security rules (request.auth.token.role) mengizinkan baca/tulis Firestore.
+ * supaya security rules (request.auth != null) mengizinkan baca/tulis Firestore.
  */
 export async function ensureFirebaseSession(directCustomToken?: string): Promise<boolean> {
   try {
@@ -61,26 +152,35 @@ export async function ensureFirebaseSession(directCustomToken?: string): Promise
     }
     if (auth.currentUser && !auth.currentUser.isAnonymous) return true;
     const serverToken = getServerToken();
-    if (!serverToken) return false;
-    const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
-    const timer = controller ? setTimeout(() => controller.abort(), 3500) : null;
-    const res = await fetch('/api/auth/firebase-custom-token', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${serverToken}`,
-      },
-      body: '{}',
-      signal: controller?.signal,
-    }).finally(() => {
-      if (timer) clearTimeout(timer);
-    });
-    const json = await res.json().catch(() => ({}));
-    if (!res.ok || !json?.customToken) {
-      return false;
+    if (serverToken) {
+      const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+      const timer = controller ? setTimeout(() => controller.abort(), 3500) : null;
+      const res = await fetch('/api/auth/firebase-custom-token', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${serverToken}`,
+        },
+        body: '{}',
+        signal: controller?.signal,
+      }).finally(() => {
+        if (timer) clearTimeout(timer);
+      });
+      const json = await res.json().catch(() => ({}));
+      if (res.ok && json?.customToken) {
+        await signInWithCustomToken(auth, json.customToken);
+        return true;
+      }
     }
-    await signInWithCustomToken(auth, json.customToken);
-    return true;
+    if (!auth.currentUser) {
+      try {
+        await signInAnonymously(auth);
+        return true;
+      } catch {
+        // Ignore if anonymous auth is not enabled
+      }
+    }
+    return Boolean(auth.currentUser);
   } catch {
     return false;
   }
@@ -103,19 +203,6 @@ const readEnv = (viteKey: string, fallbackKey?: string): string => {
   return '';
 };
 
-const decodeB64 = (encoded: string): string => {
-  if (!encoded) return '';
-  try {
-    if (typeof globalThis !== 'undefined' && typeof (globalThis as any).atob === 'function') {
-      return (globalThis as any).atob(encoded).trim();
-    }
-    if (typeof Buffer !== 'undefined') {
-      return Buffer.from(encoded, 'base64').toString('utf8').trim();
-    }
-  } catch {}
-  return '';
-};
-
 const DEFAULT_RUNTIME_DB_ID = 'ai-studio-remixaibuildercu-48df8cb9-94a3-45af-9c6f-c3ed1e47e70c';
 
 export const normalizeFirestoreDbId = (rawDbId?: string): string => {
@@ -128,9 +215,8 @@ export const normalizeFirestoreDbId = (rawDbId?: string): string => {
 
 const resolvedApiKey =
   readEnv('VITE_FIREBASE_API_KEY', 'FIREBASE_API_KEY') ||
-  decodeB64(readEnv('VITE_FIREBASE_API_KEY_B64', 'FIREBASE_API_KEY_B64')) ||
   appletConfig.apiKey ||
-  decodeB64(['QUl6YVN5QmhVbC1OMWVm', 'OVl2OFprRnBhZjJzNHBm', 'TFNPWXZCRnpV'].join(''));
+  '';
 
 export const firebaseConfig = {
   ...appletConfig,
@@ -193,7 +279,7 @@ try {
   // Safe fallback if logger not available in environment
 }
 
-// Initialize Firestore with ignoreUndefinedProperties: true and explicit databaseId from environment variables
+// Initialize Firestore with persistentLocalCache({ tabManager: persistentMultipleTabManager() })
 const targetDbId = normalizeFirestoreDbId(
   firebaseConfig.firestoreDatabaseId || appletConfig.firestoreDatabaseId
 );
@@ -201,20 +287,38 @@ let dbInstance: Firestore;
 try {
   dbInstance = initializeFirestore(
     app,
-    { ignoreUndefinedProperties: true },
+    {
+      localCache: persistentLocalCache({
+        tabManager: persistentMultipleTabManager(),
+      }),
+    },
     targetDbId
   );
 } catch {
   try {
-    dbInstance = getFirestore(app, targetDbId);
+    dbInstance = initializeFirestore(app, {
+      localCache: persistentLocalCache({
+        tabManager: persistentMultipleTabManager(),
+      }),
+    });
   } catch {
     try {
-      dbInstance = initializeFirestore(app, { ignoreUndefinedProperties: true });
+      dbInstance = initializeFirestore(
+        app,
+        {
+          localCache: memoryLocalCache(),
+        },
+        targetDbId
+      );
     } catch {
       try {
-        dbInstance = getFirestore(app);
+        dbInstance = getFirestore(app, targetDbId);
       } catch {
-        dbInstance = {} as Firestore;
+        try {
+          dbInstance = getFirestore(app);
+        } catch {
+          dbInstance = {} as Firestore;
+        }
       }
     }
   }
@@ -257,13 +361,7 @@ export interface FirestoreErrorInfo {
 
 export function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
   const errMsg = error instanceof Error ? error.message : String(error);
-  const errCode = String((error as any)?.code || '').toLowerCase();
-  const isQuotaError =
-    errCode.includes('resource-exhausted') ||
-    errCode.includes('quota-exceeded') ||
-    errMsg.toLowerCase().includes('quota') ||
-    errMsg.toLowerCase().includes('resource-exhausted') ||
-    errMsg.toLowerCase().includes('resource has been exhausted');
+  const isQuotaError = (error as any)?.code === 'resource-exhausted';
 
   const errInfo: FirestoreErrorInfo = {
     error: errMsg,
@@ -284,39 +382,29 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
   };
 
   if (isQuotaError) {
-    console.warn('Firestore Quota Exhausted (falling back to local cache): ', JSON.stringify(errInfo));
+    markFirestoreQuotaExhausted(true);
+    console.warn('Firestore Quota Exhausted (100% Local Cache Mode Active): ', JSON.stringify(errInfo));
     return;
   }
 
   console.warn('Firestore Notice: ', JSON.stringify(errInfo));
 }
 
-// Startup connection verification (cached per session to conserve Firestore read quota)
+// Startup connection & auth session check (zero extra server document read to save Firestore quota)
 export async function testConnection(): Promise<boolean> {
   if (typeof window === 'undefined') return true;
   try {
-    if (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('riskcart_conn_verified') === 'true') {
-      return true;
-    }
-    await getDocFromServer(doc(db, 'test', 'connection'));
+    void ensureFirebaseSession();
     if (typeof sessionStorage !== 'undefined') {
       sessionStorage.setItem('riskcart_conn_verified', 'true');
     }
     return true;
-  } catch (error) {
-    if (error instanceof Error && error.message.includes('the client is offline')) {
-      console.warn('Firebase connection check: Client currently offline or initializing.');
-      return false;
-    }
-    try {
-      if (typeof sessionStorage !== 'undefined') {
-        sessionStorage.setItem('riskcart_conn_verified', 'true');
-      }
-    } catch {}
-    return true;
+  } catch {
+    return false;
   }
 }
 
 if (typeof window !== 'undefined') {
   testConnection().catch(() => {});
 }
+

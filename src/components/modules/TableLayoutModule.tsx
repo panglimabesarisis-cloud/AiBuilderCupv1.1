@@ -247,7 +247,7 @@ function getShapeDisplayLabel(shape?: string): string {
   return 'Kotak';
 }
 
-function normalizeTablesByAreaPrefix(tablesList: RestaurantTableDoc[]): {
+export function normalizeTablesByAreaPrefix(tablesList: RestaurantTableDoc[]): {
   normalized: RestaurantTableDoc[];
   changedDocs: RestaurantTableDoc[];
   idToTableMap: Record<string, RestaurantTableDoc>;
@@ -417,29 +417,46 @@ function doTimeIntervalsOverlap(
 /**
  * Top-down SVG / Visual Renderer for a Table + Chairs (Round, Rectangle, Square)
  */
-const TableTopDownArtwork: React.FC<{
-  shape: TableShape;
-  seats: number;
-  status: TableStatus;
-  tableNumber: string;
+export const TableTopDownArtwork: React.FC<{
+  shape?: TableShape;
+  seats?: number;
+  status?: TableStatus;
+  tableNumber?: string;
   visitorName?: string;
   totalOrder?: number;
   selected?: boolean;
   rotation?: number;
-  currencyMode: CurrencyMode;
+  currencyMode?: CurrencyMode;
   compactPreview?: boolean;
+  table?: any;
+  isSelected?: boolean;
 }> = ({
-  shape,
-  seats,
-  status,
-  tableNumber,
-  visitorName,
-  totalOrder = 0,
-  selected = false,
-  rotation = 0,
-  currencyMode,
+  shape: propShape,
+  seats: propSeats,
+  status: propStatus,
+  tableNumber: propTableNumber,
+  visitorName: propVisitorName,
+  totalOrder: propTotalOrder,
+  selected: propSelected,
+  rotation: propRotation,
+  currencyMode: propCurrencyMode = 'IDR',
   compactPreview = false,
+  table,
+  isSelected,
 }) => {
+  const shape: TableShape = (propShape || table?.shape || 'square') as TableShape;
+  const seats: number = Number(propSeats ?? table?.seats ?? table?.capacity) || 4;
+  const rawStatus = String(propStatus || table?.status || 'available').toLowerCase();
+  const status: TableStatus =
+    rawStatus === 'occupied' || rawStatus === 'reserved' || rawStatus === 'billing'
+      ? (rawStatus as TableStatus)
+      : 'available';
+  const tableNumber: string = String(propTableNumber || table?.tableNumber || 'Indoor 1');
+  const visitorName: string | undefined = propVisitorName ?? table?.visitorName;
+  const totalOrder: number = Number(propTotalOrder ?? table?.totalOrder) || 0;
+  const selected: boolean = Boolean(propSelected ?? isSelected);
+  const rotation: number = Number(propRotation ?? table?.rotation) || 0;
+  const currencyMode: CurrencyMode = propCurrencyMode || 'IDR';
   const statusPalette: Record<
     TableStatus,
     {
@@ -752,18 +769,25 @@ export const TableLayoutModule: React.FC<TableLayoutModuleProps> = ({
   const storeCustomers = Array.isArray(appData?.customers) ? appData.customers : [];
   const addTransactionLocal = appData?.addTransactionLocal;
 
-  // Determine active view mode from URL / subModule
+  // Determine active view mode from URL / subModule (Default = 'layout' / Table Layout)
   const activeView: 'reservation' | 'reservation_list' | 'layout' | 'summary' = useMemo(() => {
     if (waiterMode) return 'layout';
     const cleanPath = (pathname || '').toLowerCase();
+    if (cleanPath.includes('/summary') || subModule === 'summary') {
+      return 'summary';
+    }
+    if (
+      cleanPath.includes('/layout-table') ||
+      cleanPath.includes('/table-layout') ||
+      cleanPath.includes('/denah-meja')
+    ) {
+      return 'layout';
+    }
     if (cleanPath.includes('/reservation/list') || subModule === 'reservation_list') {
       return 'reservation_list';
     }
     if (cleanPath.includes('/reservation') || subModule === 'reservation') {
       return 'reservation';
-    }
-    if (cleanPath.includes('/summary') || subModule === 'summary') {
-      return 'summary';
     }
     return 'layout';
   }, [waiterMode, pathname, subModule]);
@@ -2728,6 +2752,13 @@ export const TableLayoutModule: React.FC<TableLayoutModuleProps> = ({
     if (waiterMode) return null;
     const navItems = [
       {
+        id: 'layout',
+        label: 'Table Layout',
+        path: '/dashboard/layout-table',
+        icon: <LayoutGrid className="w-4 h-4" />,
+        active: activeView === 'layout',
+      },
+      {
         id: 'reservation',
         label: 'Reservasi',
         path: '/dashboard/reservation',
@@ -2741,13 +2772,6 @@ export const TableLayoutModule: React.FC<TableLayoutModuleProps> = ({
         icon: <ListChecks className="w-4 h-4" />,
         active: activeView === 'reservation_list',
         badge: reservations.length,
-      },
-      {
-        id: 'layout',
-        label: 'Table Layout',
-        path: '/dashboard/layout-table',
-        icon: <LayoutGrid className="w-4 h-4" />,
-        active: activeView === 'layout',
       },
       {
         id: 'summary',

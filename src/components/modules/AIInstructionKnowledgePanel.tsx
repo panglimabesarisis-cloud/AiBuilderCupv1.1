@@ -45,6 +45,7 @@ import {
   getMasterAgentSlug,
   buildActualDatabaseContext,
 } from '../../services/aiInstructionStore';
+import { checkAndRecordAiCooldown } from '../../utils/aiCooldown';
 import {
   AILayoutToggleBar,
   AILayoutColumnMode,
@@ -52,6 +53,9 @@ import {
 } from '../common/AIShortcutCharts';
 import { useRawMaterials, useRawMaterialPOs } from '../../services/rawMaterialService';
 import { AIExecutiveFourChartsDashboard } from './AIExecutiveFourChartsDashboard';
+import { ACTIVE_STORE_ID } from '../../config/store';
+import { fetchDailyStatsForAiContext } from '../../services/dailyStatsService';
+import { AiRunControlBar, useAiFeatureControl } from '../common/AiRunControlBar';
 
 export interface KnowledgeEntry {
   id: string;
@@ -337,7 +341,18 @@ export const AIInstructionKnowledgePanel: React.FC<AIInstructionKnowledgePanelPr
   };
 
   const executeGeminiForAgent = useCallback(
-    async (targetAgent: AIAgentInstructionConfig, customUserPrompt?: string) => {
+    async (
+      targetAgent: AIAgentInstructionConfig,
+      customUserPrompt?: string,
+      signal?: AbortSignal
+    ) => {
+      const cooldown = checkAndRecordAiCooldown(`agent-inline-${targetAgent.slug}`);
+      if (!cooldown.allowed) {
+        showToast(cooldown.message);
+        setInlineAiOutput(cooldown.message);
+        return;
+      }
+
       setIsRunningInlineAi(true);
       const activeModelId = targetAgent.modelId || defaultAiModel || DEFAULT_GOOGLE_GEMINI_MODEL;
       const instructionText =
@@ -346,34 +361,40 @@ export const AIInstructionKnowledgePanel: React.FC<AIInstructionKnowledgePanelPr
           : targetAgent.defaultInstruction;
       const globalRulesText = targetAgent.globalRules || GLOBAL_AI_STANDARD_RULES;
 
-      const contextJson = buildActualDatabaseContext(
-        targetAgent.referenceModules || targetAgent.moduleRoute,
-        {
-          products,
-          rawMaterials: rawMaterialsList,
-          rawMaterialPOs: rawMaterialPOList,
-          transactions,
-          orders,
-          customers,
-          procurements,
-          staff,
-          shifts,
-          auditLogs,
-          brangkasLogs,
-          formatMoney,
-        }
-      );
-
-      const queryToRun =
-        customUserPrompt && customUserPrompt.trim().length > 0
-          ? customUserPrompt.trim()
-          : `Jalankan instruksi agen "${targetAgent.nameId}" secara menyeluruh berdasarkan data aktual dari modul acuan (${targetAgent.moduleRoute}):\n${instructionText}`;
-
       try {
+        const dailyStatsDocs = await fetchDailyStatsForAiContext(ACTIVE_STORE_ID, 14);
+        if (signal?.aborted) return;
+
+        const contextJson = buildActualDatabaseContext(
+          targetAgent.referenceModules || targetAgent.moduleRoute,
+          {
+            dailyStats: dailyStatsDocs,
+            products,
+            rawMaterials: rawMaterialsList,
+            rawMaterialPOs: rawMaterialPOList,
+            transactions,
+            orders,
+            customers,
+            procurements,
+            staff,
+            shifts,
+            auditLogs,
+            brangkasLogs,
+            formatMoney,
+          }
+        );
+
+        const queryToRun =
+          customUserPrompt && customUserPrompt.trim().length > 0
+            ? customUserPrompt.trim()
+            : `Jalankan instruksi agen "${targetAgent.nameId}" secara menyeluruh berdasarkan ringkasan dailyStats dari modul acuan (${targetAgent.moduleRoute}):\n${instructionText}`;
+
         const res = await fetch('/api/ai/agent-run', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
+          signal,
           body: JSON.stringify({
+            manualTrigger: true,
             agentKey: targetAgent.slug,
             agentName: targetAgent.nameId,
             systemInstruction: instructionText,
@@ -389,9 +410,10 @@ export const AIInstructionKnowledgePanel: React.FC<AIInstructionKnowledgePanelPr
         const data = await res.json();
         setInlineAiOutput(
           data.text ||
-            `[${targetAgent.nameId} • ${activeModelId}] Analisis selesai berdasarkan ${liveEcosystemMetrics.totalProducts} Produk, ${liveEcosystemMetrics.totalRawMaterials} Bahan Baku, ${liveEcosystemMetrics.totalTx} Transaksi POS, ${liveEcosystemMetrics.totalPOs} PO Supplier, dan ${liveEcosystemMetrics.totalStaff} Staff.`
+            `[${targetAgent.nameId} • ${activeModelId}] Analisis selesai berdasarkan ${dailyStatsDocs.length} dailyStats summary docs, ${liveEcosystemMetrics.totalProducts} Produk, ${liveEcosystemMetrics.totalRawMaterials} Bahan Baku, ${liveEcosystemMetrics.totalTx} Transaksi POS, ${liveEcosystemMetrics.totalPOs} PO Supplier, dan ${liveEcosystemMetrics.totalStaff} Staff.`
         );
-      } catch {
+      } catch (err: any) {
+        if (err?.name === 'AbortError') return;
         setInlineAiOutput(
           `[Analisa Real-Time ${targetAgent.nameId} • ${activeModelId}] Sinkronisasi modul (${targetAgent.moduleRoute}): Terdeteksi ${liveEcosystemMetrics.totalProducts} Produk Katalog, ${liveEcosystemMetrics.totalRawMaterials} Bahan Baku, ${liveEcosystemMetrics.totalTx} Transaksi POS (Omzet ${formatMoney(liveEcosystemMetrics.totalRevenue)}, Laba ${formatMoney(liveEcosystemMetrics.totalProfit)}), ${liveEcosystemMetrics.totalPOs} PO Supplier, dan ${liveEcosystemMetrics.totalStaff} Staff Aktif.`
         );
@@ -494,18 +516,10 @@ export const AIInstructionKnowledgePanel: React.FC<AIInstructionKnowledgePanelPr
       setEditingAgent(null);
       showToast(
         tr(
-          `Saved "${editName}" with ${selectedModelInfo.shortLabel} to Firestore & executing AI!`,
-          `Pengaturan "${editName}" (${selectedModelInfo.shortLabel}) berhasil disimpan ke Database Firestore & langsung dieksekusi!`
+          `Saved "${editName}" with ${selectedModelInfo.shortLabel} to Firestore!`,
+          `Pengaturan "${editName}" (${selectedModelInfo.shortLabel}) berhasil disimpan ke Database Firestore!`
         )
       );
-      void executeGeminiForAgent({
-        ...savedAgent,
-        customInstruction: editPromptKnowledge,
-        globalRules: editGlobalRules,
-        modelId: editModelId,
-        moduleRoute: editModuleRoute,
-        outputMode: editOutputMode,
-      });
     } finally {
       setIsSaving(false);
     }
@@ -585,6 +599,13 @@ export const AIInstructionKnowledgePanel: React.FC<AIInstructionKnowledgePanelPr
   const handleRunLiveAgentTest = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!testingAgent || !testQuery.trim() || isRunningTest) return;
+    const cooldown = checkAndRecordAiCooldown(`agent-test-${testingAgent.slug}`);
+    if (!cooldown.allowed) {
+      setTestOutput(cooldown.message);
+      showToast(cooldown.message);
+      return;
+    }
+
     setIsRunningTest(true);
     setTestOutput('');
 
@@ -613,6 +634,7 @@ export const AIInstructionKnowledgePanel: React.FC<AIInstructionKnowledgePanelPr
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          manualTrigger: true,
           agentKey: testingAgent.slug,
           agentName: testingAgent.nameId,
           systemInstruction: systemPrompt,
@@ -678,6 +700,16 @@ export const AIInstructionKnowledgePanel: React.FC<AIInstructionKnowledgePanelPr
         (a.modelId || '').toLowerCase().includes(q)
     );
   }, [agents, isAllAgentsView, agentKey, agentTitle, agentRole, defaultInstruction, searchQuery, defaultAiModel]);
+
+  const inlineAgentControl = useAiFeatureControl({
+    featureKey: `ai_panel_${agentKey || 'master'}`,
+    onRun: async (signal) => {
+      const target = displayedAgents[0] || agents[0];
+      if (target) {
+        await executeGeminiForAgent(target, inlinePrompt, signal);
+      }
+    },
+  });
 
   // Render Edit Modal & Test Modal (shared between single-agent card and full /dashboard/ai-agent grid)
   const renderModals = () => (
@@ -1526,16 +1558,13 @@ export const AIInstructionKnowledgePanel: React.FC<AIInstructionKnowledgePanelPr
             </div>
 
             <div className="flex flex-wrap items-center gap-2 shrink-0">
-              <button
-                type="button"
-                onClick={() => void executeGeminiForAgent(singleAgent, inlinePrompt)}
-                disabled={isRunningInlineAi}
-                className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-xs font-bold flex items-center gap-1.5 transition cursor-pointer shadow-sm"
-                title="Eksekusi Google Gemini API sesuai Kolom Instruksi & Data Aktual Database"
-              >
-                <RefreshCw className={`w-3.5 h-3.5 ${isRunningInlineAi ? 'animate-spin' : ''}`} />
-                <span>{isRunningInlineAi ? 'Menganalisis...' : 'Jalankan Analisa AI Sekarang'}</span>
-              </button>
+              <AiRunControlBar
+                featureLabel={singleAgent.nameId}
+                enabled={inlineAgentControl.enabled}
+                isRunning={inlineAgentControl.isRunning || isRunningInlineAi}
+                onToggle={inlineAgentControl.toggleEnabled}
+                onRun={() => void inlineAgentControl.runNow()}
+              />
 
               {!isAlreadyChartHostPage && (
                 <button

@@ -37,12 +37,16 @@ import {
   query,
   orderBy,
   limit,
+  where,
   updateDoc,
   addDoc,
-  getDocs,
 } from 'firebase/firestore';
 import { db } from '../../firebase';
 import { AdminAreaCharts, parseRecordDate } from './AdminAreaCharts';
+import {
+  fetchDashboardKpiSummary,
+  DailyStatsDoc,
+} from '../../services/dailyStatsService';
 import { useLanguage } from '../../context/LanguageContext';
 import { useAppData } from '../../context/AppDataContext';
 import { useAccessControl } from '../../context/AccessControlContext';
@@ -227,216 +231,55 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     return () => clearInterval(interval);
   }, []);
 
-  // Real-time Firestore subscriptions (products, transactions, stores/store_001/transactions, stores/store_001/orders, stores, customers)
+  const [dailyKpiDoc, setDailyKpiDoc] = useState<DailyStatsDoc | null>(null);
+
+  // Sync Dashboard KPI summary from dailyStats/{storeId}_{YYYYMMDD} or getAggregateFromServer (no full-collection reads)
   useEffect(() => {
-    // 1. Products collection (same as PosMachine.tsx and ClientPwaApp.tsx)
-    const unsubProducts = onSnapshot(
-      collection(db, 'products'),
-      (snapshot) => {
-        const list: LiveProduct[] = [];
-        snapshot.forEach((d) => {
-          const data = d.data() as any;
-          if (data.isActive === false) return;
-          list.push({
-            id: d.id,
-            name: data.name || data.groupName || 'Produk',
-            sku: data.sku || d.id,
-            category: data.category || 'UMUM',
-            stockInUnits: Number(data.stock ?? data.stockInUnits ?? 0),
-            minStockAlert: Number(data.minStockAlert ?? data.minStock ?? getDefaultMinStock()),
-            pricePerUnit: toIdr(data.posPrice ?? data.sellPrice ?? data.pricePerUnit ?? data.price ?? 0),
-            costPerUnit: toIdr(data.costPrice ?? data.costPerUnit ?? 0),
-            sellByUnit: data.sellByUnit !== undefined ? Boolean(data.sellByUnit) : true,
-            piecesPerCarton: Math.max(1, Number(data.itemsPerCarton ?? data.piecesPerCarton ?? 1)),
-          });
-        });
-        setLiveProducts(list);
-      },
-      (err) => console.warn('Dashboard products listener error:', err)
-    );
-
-    const normalizeDateStr = (val: any): string => {
-      if (!val) return new Date().toISOString();
-      if (typeof val === 'string') return val;
-      if (typeof val?.toDate === 'function') {
-        try {
-          return val.toDate().toISOString();
-        } catch {
-          return new Date().toISOString();
-        }
-      }
-      if (typeof val?.seconds === 'number') {
-        return new Date(val.seconds * 1000).toISOString();
-      }
-      return String(val);
+    let active = true;
+    void fetchDashboardKpiSummary(ACTIVE_STORE_ID).then((summary) => {
+      if (active) setDailyKpiDoc(summary);
+    });
+    return () => {
+      active = false;
     };
+  }, [appData.transactions.length]);
 
-    // 2. Transactions from root 'transactions', 'stores/store_001/transactions', 'stores/store_001/orders', and 'orders'
-    let globalTxList: any[] = [];
-    let storeTxList: any[] = [];
-    let storeOrdersList: any[] = [];
-    let rootOrdersList: any[] = [];
-
-    const mergeTransactionsAndOrders = () => {
-      const txMap = new Map<string, any>();
-
-      // Include orders in unified sales list if not already present as a transaction
-      [...rootOrdersList, ...storeOrdersList].forEach((ord) => {
-        const normalizedOrd = {
-          ...ord,
-          id: ord.id,
-          createdAt: normalizeDateStr(ord.createdAt || ord.updatedAt),
-          totalAmount: Number(ord.totalAmount ?? ord.total ?? 0),
-          totalCost: Number(ord.totalCost ?? 0),
-          totalProfit: Number(ord.totalProfit ?? (Number(ord.totalAmount || 0) - Number(ord.totalCost || 0))),
-          paymentMethod: ord.paymentMethod || 'cash',
-          channel: ord.channel || 'pos',
-          outletId: ord.outletId || ord.storeId || ACTIVE_STORE_ID,
-        };
-        txMap.set(ord.id, normalizedOrd);
-      });
-
-      [...storeTxList, ...globalTxList].forEach((tx) => {
-        const existing = txMap.get(tx.id) || {};
-        txMap.set(tx.id, {
-          ...existing,
-          ...tx,
-          id: tx.id,
-          createdAt: normalizeDateStr(tx.createdAt || tx.timestamp || existing.createdAt),
-        });
-      });
-
-      const combinedTx = Array.from(txMap.values()).sort(
-        (a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
-      );
-      setRawTransactions(combinedTx);
-
-      // Also merge orders for the orders panel (including POS transactions)
-      const ordMap = new Map<string, any>();
-      [...globalTxList, ...storeTxList, ...rootOrdersList, ...storeOrdersList].forEach((item) => {
-        const existing = ordMap.get(item.id) || {};
-        ordMap.set(item.id, {
-          ...existing,
-          ...item,
-          id: item.id,
-          createdAt: normalizeDateStr(item.createdAt || item.timestamp || existing.createdAt),
-        });
-      });
-      const combinedOrders = Array.from(ordMap.values()).sort(
-        (a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
-      );
-      setRawStoreOrders(combinedOrders);
-    };
-
-    const unsubGlobalTx = onSnapshot(
-      collection(db, 'transactions'),
-      (snapshot) => {
-        globalTxList = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
-        mergeTransactionsAndOrders();
-      },
-      (err) => console.warn('Dashboard transactions notice:', err)
-    );
-
-    const unsubStoreTx = onSnapshot(
-      collection(db, `stores/${ACTIVE_STORE_ID}/transactions`),
-      (snapshot) => {
-        storeTxList = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
-        mergeTransactionsAndOrders();
-      },
-      (err) => console.warn('Dashboard store transactions notice:', err)
-    );
-
-    // 3. Orders from stores/${ACTIVE_STORE_ID}/orders and root 'orders'
-    const unsubOrders = onSnapshot(
-      collection(db, `stores/${ACTIVE_STORE_ID}/orders`),
-      (snapshot) => {
-        storeOrdersList = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
-        mergeTransactionsAndOrders();
-      },
-      (err) => console.warn('Dashboard orders listener error:', err)
-    );
-
-    const unsubRootOrders = onSnapshot(
-      collection(db, 'orders'),
-      (snapshot) => {
-        rootOrdersList = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
-        mergeTransactionsAndOrders();
-      },
-      (err) => console.warn('Dashboard root orders listener error:', err)
-    );
-
-    // 4. Customers from 'customers' and 'stores/store_001/customers'
-    let rootCustList: any[] = [];
-    let storeCustList: any[] = [];
-    const mergeCustomers = () => {
-      const cMap = new Map<string, any>();
-      [...rootCustList, ...storeCustList].forEach((c) => cMap.set(c.id, { ...(cMap.get(c.id) || {}), ...c }));
-      setRawCustomers(Array.from(cMap.values()));
-    };
-    const unsubCustomers = onSnapshot(
-      collection(db, 'customers'),
-      (snapshot) => {
-        rootCustList = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
-        mergeCustomers();
-      },
-      (err) => console.warn('Dashboard customers listener error:', err)
-    );
-    const unsubStoreCustomers = onSnapshot(
-      collection(db, `stores/${ACTIVE_STORE_ID}/customers`),
-      (snapshot) => {
-        storeCustList = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
-        mergeCustomers();
-      },
-      (err) => console.warn('Dashboard store customers listener error:', err)
-    );
-
-    // 5. Stores metadata from 'stores'
-    const unsubStores = onSnapshot(
-      collection(db, 'stores'),
-      (snapshot) => {
-        const first = snapshot.docs.find((d) => d.id === ACTIVE_STORE_ID) || snapshot.docs[0];
-        if (first) {
-          const data = first.data() as any;
+  // Real-time Firestore subscriptions (use shared AppDataContext for products, transactions, orders, customers, purchase_orders)
+  useEffect(() => {
+    // 1. Store metadata doc listener
+    const unsubStoreDoc = onSnapshot(
+      doc(db, 'stores', ACTIVE_STORE_ID),
+      (snap) => {
+        if (snap.exists()) {
+          const data = snap.data() as any;
           setStoreInfo({
             name: data.name || data.storeName,
             openingCash: Number(data.openingCash ?? data.openingFloat ?? 0),
           });
         }
       },
-      (err) => console.warn('Dashboard stores listener error:', err)
+      () => {}
     );
 
-    // 6. Outlets list
+    // 2. Outlets list with where('storeId','==',ACTIVE_STORE_ID) + limit(50)
     const unsubOutlets = onSnapshot(
-      collection(db, 'outlets'),
+      query(collection(db, 'outlets'), where('storeId', '==', ACTIVE_STORE_ID), limit(50)),
       (snap) => {
         setOutletsList(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
       },
-      (err) => console.warn('Outlets listener error:', err)
-    );
-
-    // 7. Purchase orders for unpaid supplier invoices
-    const unsubPOs = onSnapshot(
-      collection(db, 'purchase_orders'),
-      (snap) => {
-        setPurchaseOrders(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
-      },
-      (err) => console.warn('Purchase orders listener error:', err)
+      () => {}
     );
 
     return () => {
-      unsubProducts();
-      unsubGlobalTx();
-      unsubStoreTx();
-      unsubOrders();
-      unsubRootOrders();
-      unsubCustomers();
-      unsubStoreCustomers();
-      unsubStores();
+      unsubStoreDoc();
       unsubOutlets();
-      unsubPOs();
     };
   }, []);
+
+  // Sync purchaseOrders from shared AppDataContext
+  useEffect(() => {
+    setPurchaseOrders(appData.procurements || []);
+  }, [appData.procurements]);
 
   const handleRefresh = () => {
     setIsRefreshing(true);
@@ -514,30 +357,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     return Array.from(txMap.values()).sort((a, b) => (b._parsedTimeMs || 0) - (a._parsedTimeMs || 0));
   }, [appData.transactions, appData.orders, rawTransactions, rawStoreOrders]);
 
-  // Load subcollection items if a legacy transaction does not have an embedded `items` array
-  useEffect(() => {
-    unifiedTransactions.slice(0, 30).forEach((tx) => {
-      if (Array.isArray(tx.items) && tx.items.length > 0) return;
-      if (fetchedTxIdsRef.current.has(tx.id)) return;
-      fetchedTxIdsRef.current.add(tx.id);
-
-      getDocs(collection(db, `stores/${ACTIVE_STORE_ID}/transactions/${tx.id}/items`))
-        .then((snap) => {
-          if (!snap.empty) {
-            const subItems = snap.docs.map((d) => d.data() as RawTxLineItem);
-            setTxSubItemsMap((prev) => ({ ...prev, [tx.id]: subItems }));
-          } else {
-            return getDocs(collection(db, `transactions/${tx.id}/items`)).then((rootSnap) => {
-              if (!rootSnap.empty) {
-                const subItems = rootSnap.docs.map((d) => d.data() as RawTxLineItem);
-                setTxSubItemsMap((prev) => ({ ...prev, [tx.id]: subItems }));
-              }
-            });
-          }
-        })
-        .catch(() => {});
-    });
-  }, [unifiedTransactions]);
+  // Subcollection items loop removed: all transactions embed `items` directly to avoid N+1 Firestore reads
 
   // Filter transactions by selectedOutlet and local timeRange (WIB / Browser Local Time)
   const filteredRawTransactions = useMemo(() => {
@@ -674,7 +494,20 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       }
     });
 
-    const txCount = filteredRawTransactions.length;
+    const rawFilteredCount = filteredRawTransactions.length;
+    // Use dailyStats/{storeId}_{YYYYMMDD} or getAggregateFromServer summary when viewing today's KPIs
+    if (timeRange === 'today' && dailyKpiDoc && dailyKpiDoc.txCount > rawFilteredCount) {
+      totalSales = Math.max(totalSales, toIdr(dailyKpiDoc.totalRevenue));
+      totalCost = Math.max(totalCost, toIdr(dailyKpiDoc.totalCost));
+      totalUnitsSold = Math.max(totalUnitsSold, Number(dailyKpiDoc.itemsSold || 0));
+      cashSales = Math.max(cashSales, toIdr(dailyKpiDoc.cashRevenue));
+      nonCashSales = Math.max(nonCashSales, toIdr(dailyKpiDoc.qrisRevenue));
+    }
+
+    const txCount =
+      timeRange === 'today' && dailyKpiDoc
+        ? Math.max(rawFilteredCount, Number(dailyKpiDoc.txCount || 0))
+        : rawFilteredCount;
     const avgPerReceipt = txCount > 0 ? Math.round(totalSales / txCount) : 0;
     const grossProfit = Math.max(0, totalSales - totalCost);
     const grossMarginPct = totalSales > 0 ? Number(((grossProfit / totalSales) * 100).toFixed(1)) : 0;
@@ -743,6 +576,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     appData.customers,
     appData.shifts,
     storeInfo.openingCash,
+    dailyKpiDoc,
+    timeRange,
     tr,
   ]);
 
@@ -1244,7 +1079,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
               {/* CTA Buka Kasir POS */}
               <button
-                onClick={() => onNavigateTab('pos_machine')}
+                onClick={() => {
+                  onNavigateTab('pos_machine');
+                  navigateToPath('/pos');
+                }}
                 className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition shadow-md shadow-emerald-600/20 cursor-pointer"
               >
                 <Store className="w-3.5 h-3.5" />

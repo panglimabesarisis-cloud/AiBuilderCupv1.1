@@ -55,6 +55,7 @@ interface NavbarProps {
 
 export const Navbar: React.FC<NavbarProps> = ({
   activeTab,
+  setActiveTab,
   onToggleSidebar,
 }) => {
   const { currencyMode, setCurrencyMode, toggleCurrency, exchangeRate, isRateLive, tr } = useLanguage();
@@ -280,12 +281,9 @@ export const Navbar: React.FC<NavbarProps> = ({
             </AppLink>
           ) : (
             <AppLink
-              to={getPathForTab('pos_machine')}
+              to="/pos"
               onClick={() => {
-                try {
-                  sessionStorage.removeItem('riskcart_pos_pin_verified');
-                  lockPosSession();
-                } catch {}
+                setActiveTab('pos_machine');
               }}
               className="flex items-center gap-1.5 px-2.5 sm:px-3.5 py-1 sm:py-1.5 rounded-xl text-xs font-black transition whitespace-nowrap cursor-pointer border bg-gradient-to-r from-emerald-500/25 via-teal-500/20 to-amber-500/25 text-emerald-200 border-emerald-400/70 hover:border-amber-300 hover:text-white shadow-[0_0_14px_rgba(16,185,129,0.28)]"
               title={tr('Start New Cashier Shift (Open POS)', 'Mulai Shift Kasir Baru (Buka POS)')}

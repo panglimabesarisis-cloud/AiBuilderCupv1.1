@@ -7,6 +7,9 @@ import {
   getDocs,
   onSnapshot,
   writeBatch,
+  query,
+  where,
+  limit,
 } from 'firebase/firestore';
 import { db } from '../firebase';
 import { ACTIVE_STORE_ID } from '../config/store';
@@ -1401,84 +1404,8 @@ export function ensureArabianFoodMasterSynced(): Promise<void> {
         });
       }
       const mergedProds = Array.from(prodMap.values());
-      localStorage.setItem('riskcart_fs_products', JSON.stringify(mergedProds));
       localStorage.setItem('riskcart_cache_products', JSON.stringify(mergedProds));
     } catch {}
-
-    // 3. Persist to Firestore collections in batches
-    try {
-      const existingRmSnap = await getDocs(collection(db, 'raw_materials'));
-      const existingRmIds = new Set<string>();
-      existingRmSnap.forEach((d) => existingRmIds.add(d.id));
-
-      const missingRm = ARABIAN_RAW_MATERIALS.filter(
-        (rm) => !deletedRmIds.has(rm.id) && !existingRmIds.has(rm.id)
-      );
-      if (missingRm.length > 0) {
-        const batch = writeBatch(db);
-        for (const rm of missingRm) {
-          const clean = stripUndefined(rm);
-          batch.set(doc(db, 'raw_materials', rm.id), clean, { merge: true });
-          batch.set(doc(db, 'bahan_baku', rm.id), clean, { merge: true });
-          batch.set(doc(db, 'stores', ACTIVE_STORE_ID, 'raw_materials', rm.id), clean, {
-            merge: true,
-          });
-        }
-        await batch.commit();
-      }
-    } catch (err) {
-      console.warn('[MasterFoodSync] Raw materials Firestore sync notice:', err);
-    }
-
-    try {
-      const existingProdSnap = await getDocs(collection(db, 'products'));
-      const existingProdMap = new Map<string, any>();
-      existingProdSnap.forEach((d) => existingProdMap.set(d.id, d.data()));
-
-      const toWriteProds = ARABIAN_FOOD_PRODUCTS.filter((p) => {
-        if (deletedProdIds.has(p.id) || deletedProdIds.has(p.sku)) return false;
-        const ex = existingProdMap.get(p.id);
-        if (!ex) return true;
-        // Also update if existing doc lacks BOM recipe
-        if (!Array.isArray(ex.rawMaterialRecipe) || ex.rawMaterialRecipe.length === 0) return true;
-        return false;
-      });
-
-      if (toWriteProds.length > 0) {
-        const batch = writeBatch(db);
-        for (const prod of toWriteProds) {
-          const clean = stripUndefined(prod);
-          batch.set(doc(db, 'products', prod.id), clean, { merge: true });
-          batch.set(doc(db, 'stores', ACTIVE_STORE_ID, 'products', prod.id), clean, {
-            merge: true,
-          });
-        }
-        for (const catName of ARABIAN_FOOD_CATEGORIES) {
-          const slug = catName
-            .toLowerCase()
-            .replace(/[^a-z0-9]+/g, '_')
-            .replace(/^_+|_+$/g, '');
-          const catId = `cat_${slug}`;
-          const catPayload = {
-            id: catId,
-            name: catName,
-            slug,
-            icon: catName.startsWith('Italian') ? '🍝' : '🍽️',
-            storeId: ACTIVE_STORE_ID,
-            createdBy: 'user',
-            createdAt: ARABIAN_SEED_TIMESTAMP,
-            updatedAt: ARABIAN_SEED_TIMESTAMP,
-          };
-          batch.set(doc(db, 'categories', catId), catPayload, { merge: true });
-          batch.set(doc(db, 'stores', ACTIVE_STORE_ID, 'categories', catId), catPayload, {
-            merge: true,
-          });
-        }
-        await batch.commit();
-      }
-    } catch (err) {
-      console.warn('[MasterFoodSync] Products Firestore sync notice:', err);
-    }
   })();
 
   return arabianMasterSyncPromise;
@@ -1566,12 +1493,14 @@ export function useRawMaterials() {
     };
 
     let unsubRoot = () => {};
-    let unsubBahanBaku = () => {};
-    let unsubStore = () => {};
 
     try {
       unsubRoot = onSnapshot(
-        collection(db, 'raw_materials'),
+        query(
+          collection(db, 'raw_materials'),
+          where('storeId', '==', ACTIVE_STORE_ID),
+          limit(150)
+        ),
         (snap) => {
           const next = new Map<string, RawMaterialItem>();
           snap.docs.forEach((d) => {
@@ -1587,36 +1516,6 @@ export function useRawMaterials() {
     } catch {
       syncCombined();
     }
-
-    try {
-      unsubBahanBaku = onSnapshot(
-        collection(db, 'bahan_baku'),
-        (snap) => {
-          const next = new Map<string, RawMaterialItem>();
-          snap.docs.forEach((d) => {
-            next.set(d.id, normalizeRawMaterial(d.data(), d.id));
-          });
-          bahanBakuMap = next;
-          syncCombined();
-        },
-        () => setLoading(false)
-      );
-    } catch {}
-
-    try {
-      unsubStore = onSnapshot(
-        collection(db, 'stores', ACTIVE_STORE_ID, 'raw_materials'),
-        (snap) => {
-          const next = new Map<string, RawMaterialItem>();
-          snap.docs.forEach((d) => {
-            next.set(d.id, normalizeRawMaterial(d.data(), d.id));
-          });
-          storeMap = next;
-          syncCombined();
-        },
-        () => setLoading(false)
-      );
-    } catch {}
 
     const handleCustomUpdate = () => {
       const deletedIds = getDeletedRmIds();
@@ -1639,8 +1538,6 @@ export function useRawMaterials() {
     return () => {
       try {
         unsubRoot();
-        unsubBahanBaku();
-        unsubStore();
       } catch {}
       window.removeEventListener(RAW_MATERIALS_UPDATED_EVENT, handleCustomUpdate);
     };
@@ -2111,11 +2008,14 @@ export function useRawMaterialSuppliers() {
     };
 
     let unsubRm = () => {};
-    let unsubGen = () => {};
 
     try {
       unsubRm = onSnapshot(
-        collection(db, 'raw_material_suppliers'),
+        query(
+          collection(db, 'raw_material_suppliers'),
+          where('storeId', '==', ACTIVE_STORE_ID),
+          limit(50)
+        ),
         (snap) => {
           const next = new Map<string, RawMaterialSupplier>();
           snap.docs.forEach((d) => next.set(d.id, normalizeSup(d.data(), d.id)));
@@ -2128,19 +2028,6 @@ export function useRawMaterialSuppliers() {
       setLoading(false);
     }
 
-    try {
-      unsubGen = onSnapshot(
-        collection(db, 'suppliers'),
-        (snap) => {
-          const next = new Map<string, RawMaterialSupplier>();
-          snap.docs.forEach((d) => next.set(d.id, normalizeSup(d.data(), d.id)));
-          generalSupMap = next;
-          syncSuppliers();
-        },
-        () => setLoading(false)
-      );
-    } catch {}
-
     const handleCustomUpdate = () => {
       const cached = readLocalCache<RawMaterialSupplier>(LS_RM_SUPPLIERS_KEY);
       setSuppliers(cached);
@@ -2150,7 +2037,6 @@ export function useRawMaterialSuppliers() {
     return () => {
       try {
         unsubRm();
-        unsubGen();
       } catch {}
       window.removeEventListener(RAW_MATERIALS_UPDATED_EVENT, handleCustomUpdate);
     };
@@ -2238,7 +2124,11 @@ export function useRawMaterialPOs() {
     let unsub = () => {};
     try {
       unsub = onSnapshot(
-        collection(db, 'raw_material_purchase_orders'),
+        query(
+          collection(db, 'raw_material_purchase_orders'),
+          where('storeId', '==', ACTIVE_STORE_ID),
+          limit(50)
+        ),
         (snap) => {
           const combined = new Map<string, RawMaterialPurchaseOrder>();
           readLocalCache<RawMaterialPurchaseOrder>(LS_RM_POS_KEY).forEach((p) => {
@@ -2420,7 +2310,11 @@ export function useRawMaterialPRs() {
     let unsub = () => {};
     try {
       unsub = onSnapshot(
-        collection(db, 'raw_material_purchase_requests'),
+        query(
+          collection(db, 'raw_material_purchase_requests'),
+          where('storeId', '==', ACTIVE_STORE_ID),
+          limit(50)
+        ),
         (snap) => {
           const combined = new Map<string, RawMaterialPurchaseRequest>();
           readLocalCache<RawMaterialPurchaseRequest>(LS_RM_PRS_KEY).forEach((p) => {
@@ -2516,7 +2410,11 @@ export function useRawMaterialMovements() {
     let unsub = () => {};
     try {
       unsub = onSnapshot(
-        collection(db, 'raw_material_movements'),
+        query(
+          collection(db, 'raw_material_movements'),
+          where('storeId', '==', ACTIVE_STORE_ID),
+          limit(50)
+        ),
         (snap) => {
           const combined = new Map<string, RawMaterialMovement>();
           readLocalCache<RawMaterialMovement>(LS_RM_MOVEMENTS_KEY).forEach((m) => {

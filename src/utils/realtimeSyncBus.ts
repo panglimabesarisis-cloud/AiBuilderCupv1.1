@@ -56,12 +56,14 @@ export function publishRealtimeEvent<T = any>(topic: RealtimeSyncTopic, payload:
     // Ignore storage quota warnings
   }
 
-  try {
-    window.dispatchEvent(new CustomEvent(`riskcart_sync_${topic}`, { detail: message }));
-    window.dispatchEvent(new CustomEvent('riskcart_sync_any', { detail: message }));
-  } catch {
-    // Ignore custom event errors
-  }
+  setTimeout(() => {
+    try {
+      window.dispatchEvent(new CustomEvent(`riskcart_sync_${topic}`, { detail: message }));
+      window.dispatchEvent(new CustomEvent('riskcart_sync_any', { detail: message }));
+    } catch {
+      // Ignore custom event errors
+    }
+  }, 0);
 }
 
 /**
@@ -207,12 +209,13 @@ export async function completeTableAndKitchenOrderOnPayment(params: {
           (t: any) =>
             (resolvedTableId && t.id === resolvedTableId) ||
             (resolvedTableNumber &&
-              String(t.number || '').toLowerCase() === String(resolvedTableNumber).toLowerCase()) ||
+              (String(t.tableNumber || '').toLowerCase() === String(resolvedTableNumber).toLowerCase() ||
+                String(t.number || '').toLowerCase() === String(resolvedTableNumber).toLowerCase())) ||
             (orderId && t.activeOrderId === orderId)
         );
         if (matchedTable) {
           resolvedTableId = matchedTable.id;
-          resolvedTableNumber = matchedTable.number || resolvedTableNumber;
+          resolvedTableNumber = matchedTable.tableNumber || matchedTable.number || resolvedTableNumber;
         }
         if (resolvedTableId) {
           const updatedTables = parsedTables.map((t: any) =>
@@ -221,10 +224,12 @@ export async function completeTableAndKitchenOrderOnPayment(params: {
                   ...t,
                   status: 'available',
                   visitorName: '',
+                  customerName: '',
                   visitorPhone: '',
                   paxVisited: 0,
                   orders: [],
                   totalOrder: 0,
+                  totalBill: 0,
                   activeOrderId: '',
                   orderNotes: '',
                   updatedAt: nowIso,
@@ -243,10 +248,12 @@ export async function completeTableAndKitchenOrderOnPayment(params: {
     const tableResetPayload = {
       status: 'available',
       visitorName: '',
+      customerName: '',
       visitorPhone: '',
       paxVisited: 0,
       orders: [],
       totalOrder: 0,
+      totalBill: 0,
       activeOrderId: '',
       orderNotes: '',
       updatedAt: nowIso,

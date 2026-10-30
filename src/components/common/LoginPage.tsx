@@ -3,7 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { useAccessControl, hasValidAuthSession } from '../../context/AccessControlContext';
 
 export const LoginPage: React.FC = () => {
-  const { isAuthenticated, loginWithCredentials } = useAccessControl();
+  const { isAuthenticated, activeRoleId, activeCashier, loginWithCredentials } = useAccessControl();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -13,8 +13,39 @@ export const LoginPage: React.FC = () => {
   const [statusMessage, setStatusMessage] = useState<{ text: string; type: 'info' | 'error' | 'ok' } | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const getRedirectDestination = () => {
+  const getRedirectDestination = (resolvedRoleId?: string, loginEmail?: string) => {
+    const currentPath = (location.pathname || '').replace(/\/+$/, '') || '/';
     const fromPath = (location.state as { from?: { pathname?: string } } | null)?.from?.pathname;
+    const roleLower = String(resolvedRoleId || activeRoleId || activeCashier?.role || '').toLowerCase();
+    const emailLower = String(loginEmail || email || activeCashier?.email || '').toLowerCase();
+    const isCashierRole =
+      roleLower === 'cashier' ||
+      roleLower === 'kasir' ||
+      emailLower.includes('kasir');
+
+    if (
+      currentPath === '/pos' ||
+      currentPath.startsWith('/pos/') ||
+      currentPath === '/dashboard/pos' ||
+      currentPath.startsWith('/dashboard/pos/')
+    ) {
+      return '/pos';
+    }
+
+    if (
+      fromPath &&
+      (fromPath === '/pos' ||
+        fromPath.startsWith('/pos/') ||
+        fromPath === '/dashboard/pos' ||
+        fromPath.startsWith('/dashboard/pos/'))
+    ) {
+      return '/pos';
+    }
+
+    if (isCashierRole) {
+      return '/pos';
+    }
+
     if (fromPath && fromPath !== '/login' && fromPath !== '/') {
       return fromPath;
     }
@@ -52,7 +83,11 @@ export const LoginPage: React.FC = () => {
       const result = await loginWithCredentials(targetEmail, targetPass);
       if (result.ok) {
         setStatusMessage({ text: result.message, type: 'ok' });
-        navigate(getRedirectDestination(), { replace: true });
+        const targetDest =
+          roleType === 'kasir'
+            ? '/pos'
+            : getRedirectDestination(result.roleId, targetEmail);
+        navigate(targetDest, { replace: true });
       } else {
         setStatusMessage({ text: result.message, type: 'error' });
       }
@@ -84,7 +119,7 @@ export const LoginPage: React.FC = () => {
       const result = await loginWithCredentials(cleanEmailInput, cleanPassInput);
       if (result.ok) {
         setStatusMessage({ text: result.message, type: 'ok' });
-        navigate(getRedirectDestination(), { replace: true });
+        navigate(getRedirectDestination(result.roleId, cleanEmailInput), { replace: true });
       } else {
         setStatusMessage({
           text:

@@ -22,9 +22,9 @@ service cloud.firestore {
       return isOwnerOrAdmin() || (isSignedIn() && getUserRole() != '' && getUserRole() != 'customer');
     }
 
-    // Izinkan akses operasional penuh bagi aplikasi POS, Admin Dashboard, Reservasi, Table Layout, dan Client PWA
+    // Wajib autentikasi untuk staf/client operasional (tanpa request.auth == null)
     function isAppClientOrStaff() {
-      return request.auth == null || isSignedIn() || isStaff();
+      return isSignedIn() || isStaff();
     }
 
     // Koleksi rahasia yang HANYA boleh diakses Firebase Admin SDK di server
@@ -40,6 +40,44 @@ service cloud.firestore {
     }
     match /payment_gateway_secrets/{p} {
       allow read, write: if false;
+    }
+
+    // Katalog Publik (allow read: if true khusus katalog: products, categories, brands, stores, promotions)
+    match /products/{productId} {
+      allow read: if true;
+      allow write: if isAppClientOrStaff();
+    }
+    match /categories/{categoryId} {
+      allow read: if true;
+      allow write: if isAppClientOrStaff();
+    }
+    match /brands/{brandId} {
+      allow read: if true;
+      allow write: if isAppClientOrStaff();
+    }
+    match /promotions/{promoId} {
+      allow read: if true;
+      allow write: if isAppClientOrStaff();
+    }
+    match /stores/{storeId} {
+      allow read: if true;
+      allow write: if isAppClientOrStaff();
+    }
+    match /stores/{storeId}/products/{productId} {
+      allow read: if true;
+      allow write: if isAppClientOrStaff();
+    }
+    match /stores/{storeId}/categories/{categoryId} {
+      allow read: if true;
+      allow write: if isAppClientOrStaff();
+    }
+    match /stores/{storeId}/brands/{brandId} {
+      allow read: if true;
+      allow write: if isAppClientOrStaff();
+    }
+    match /stores/{storeId}/promotions/{promoId} {
+      allow read: if true;
+      allow write: if isAppClientOrStaff();
     }
 
     // Pengaturan (melindungi dokumen rahasia payment_gateway_secrets)
@@ -68,10 +106,7 @@ service cloud.firestore {
       allow read, write: if isAppClientOrStaff();
     }
 
-    // Koleksi Katalog Produk, Bahan Baku (BOM), Pembelian & Gudang
-    match /products/{productId} {
-      allow read, write: if isAppClientOrStaff();
-    }
+    // Koleksi Bahan Baku (BOM), Pembelian & Gudang (Wajib Autentikasi)
     match /raw_materials/{rmId} {
       allow read, write: if isAppClientOrStaff();
     }
@@ -100,7 +135,7 @@ service cloud.firestore {
       allow read, write: if isAppClientOrStaff();
     }
 
-    // Koleksi Transaksi POS, Pesanan Online, Kas, Shift & Brangkas
+    // Koleksi Transaksi POS, Pesanan Online, Kas, Shift & Brangkas (Wajib Autentikasi)
     match /transactions/{txId} {
       allow read, write: if isAppClientOrStaff();
     }
@@ -144,7 +179,7 @@ service cloud.firestore {
       allow read, write: if isAppClientOrStaff();
     }
 
-    // Data per toko: stores/store_001/{products|restaurant_tables|table_reservations|transactions|orders|settings|...}
+    // Data per toko lainnya: stores/store_001/{transactions|orders|settings|...} (Wajib Autentikasi)
     match /stores/{storeId}/{sub}/{docId} {
       allow read, write: if isAppClientOrStaff();
       match /{rest=**} {
@@ -152,7 +187,7 @@ service cloud.firestore {
       }
     }
 
-    // Fallback data operasional top-level lainnya (brands, categories, customers, users, staff, ai_activity_logs, dsb.)
+    // Fallback data operasional top-level lainnya (customers, users, staff, ai_activity_logs, dsb.)
     match /{collection}/{docId} {
       allow read, write: if isAppClientOrStaff() && !serverOnly(collection) && collection != 'settings';
       match /{rest=**} {

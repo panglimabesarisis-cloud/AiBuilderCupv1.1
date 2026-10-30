@@ -9,13 +9,32 @@ import {
   doc,
   getDocs,
   query,
+  limit,
+  where,
   QueryConstraint,
 } from 'firebase/firestore';
-import { db } from '../firebase';
+import { db, isFirestoreQuotaExhausted, markFirestoreQuotaExhausted } from '../firebase';
 import { isDatabaseWipeInProgress } from '../services/dataSeeder';
 import { ACTIVE_STORE_ID } from '../config/store';
+import { enqueuePendingSync } from '../utils/dbSync';
 
 const STORE_ID = ACTIVE_STORE_ID || 'store_001';
+
+const LIMITED_HISTORY_COLLECTIONS = new Set([
+  'transactions',
+  'orders',
+  'shifts',
+  'cash_logs',
+  'cash_flows',
+  'audit_logs',
+  'stock_logs',
+  'brangkas_toko_logs',
+  'purchase_orders',
+  'pos_cart_cancellations',
+  'staff_deliveries',
+  'doku_settlements',
+  'payment_webhooks',
+]);
 
 function normalizeCollectionKey(collectionName: string): string {
   return String(collectionName || '')
@@ -71,29 +90,28 @@ function isMockOrDummyItem(item: any): boolean {
 }
 
 export function readLocalCache<T>(collectionName: string, defaultData: T[] = []): T[] {
-  const deletedSet = getDeletedFsIds(collectionName);
+  const normCol = normalizeCollectionKey(collectionName);
+  const deletedSet = getDeletedFsIds(normCol);
   try {
     if (typeof window === 'undefined') {
       return defaultData.filter((x: any) => !deletedSet.has(String(x?.id || '')));
     }
-    const raw = window.localStorage.getItem(`riskcart_fs_${collectionName}`);
-    if (raw !== null) {
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) {
-        const cleaned = parsed.filter(
-          (x) => !isMockOrDummyItem(x) && !deletedSet.has(String(x?.id || ''))
-        );
-        return cleaned as T[];
-      }
-    }
-    const rawAlt = window.localStorage.getItem(`riskcart_cache_${collectionName}`);
-    if (rawAlt !== null) {
-      const parsedAlt = JSON.parse(rawAlt);
-      if (Array.isArray(parsedAlt)) {
-        const cleanedAlt = parsedAlt.filter(
-          (x) => !isMockOrDummyItem(x) && !deletedSet.has(String(x?.id || ''))
-        );
-        return cleanedAlt as T[];
+    const candidateKeys = [
+      `riskcart_fs_${collectionName}`,
+      `riskcart_cache_${collectionName}`,
+      `riskcart_fs_${normCol}`,
+      `riskcart_cache_${normCol}`,
+    ];
+    for (const k of candidateKeys) {
+      const raw = window.localStorage.getItem(k);
+      if (raw !== null) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const cleaned = parsed.filter(
+            (x) => !isMockOrDummyItem(x) && !deletedSet.has(String(x?.id || ''))
+          );
+          if (cleaned.length > 0) return cleaned as T[];
+        }
       }
     }
   } catch (e) {
@@ -109,8 +127,13 @@ export const getLocalCacheList = readLocalCache;
 export function writeLocalCache<T>(collectionName: string, items: T[]): void {
   try {
     if (typeof window === 'undefined') return;
+    const normCol = normalizeCollectionKey(collectionName);
     window.localStorage.setItem(`riskcart_fs_${collectionName}`, JSON.stringify(items));
     window.localStorage.setItem(`riskcart_cache_${collectionName}`, JSON.stringify(items));
+    if (normCol && normCol !== collectionName) {
+      window.localStorage.setItem(`riskcart_fs_${normCol}`, JSON.stringify(items));
+      window.localStorage.setItem(`riskcart_cache_${normCol}`, JSON.stringify(items));
+    }
     window.dispatchEvent(
       new CustomEvent('riskcart_fs_cache_updated', {
         detail: { collectionName, items },
@@ -144,7 +167,7 @@ export function useFirestoreList<T extends { id?: string }>(
   constraints: QueryConstraint[] = []
 ) {
   const [data, setData] = useState<T[]>(() => readLocalCache(collectionName, initialData));
-  const [loading, setLoading] = useState<boolean>(true);
+  const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
   const initialDataRef = useRef(initialData);
@@ -152,7 +175,7 @@ export function useFirestoreList<T extends { id?: string }>(
 
   useEffect(() => {
     let isMounted = true;
-    let unsubStoreFallback: (() => void) | null = null;
+    const normCol = normalizeCollectionKey(collectionName);
 
     const handleCleanSlate = () => {
       if (!isMounted || !isDatabaseWipeInProgress()) return;
@@ -162,8 +185,9 @@ export function useFirestoreList<T extends { id?: string }>(
     const handleCacheUpdated = (e: Event) => {
       if (!isMounted) return;
       const customEvent = e as CustomEvent<{ collectionName: string; items: T[] }>;
+      const eventCol = normalizeCollectionKey(customEvent.detail?.collectionName || '');
       if (
-        customEvent.detail?.collectionName === collectionName &&
+        (customEvent.detail?.collectionName === collectionName || eventCol === normCol) &&
         Array.isArray(customEvent.detail.items)
       ) {
         const deletedSet = getDeletedFsIds(collectionName);
@@ -178,12 +202,31 @@ export function useFirestoreList<T extends { id?: string }>(
     window.addEventListener('riskcart_clean_slate_wiped', handleCleanSlate);
     window.addEventListener('riskcart_fs_cache_updated', handleCacheUpdated);
 
+    // If Firestore quota is already known to be exhausted, operate 100% from local cache
+    if (isFirestoreQuotaExhausted()) {
+      setData((prev) =>
+        prev.length > 0 ? prev : readLocalCache(collectionName, initialDataRef.current)
+      );
+      setLoading(false);
+      return () => {
+        isMounted = false;
+        window.removeEventListener('riskcart_clean_slate_wiped', handleCleanSlate);
+        window.removeEventListener('riskcart_fs_cache_updated', handleCacheUpdated);
+      };
+    }
+
     const colRef = collection(db, collectionName);
-    const q = constraints.length > 0 ? query(colRef, ...constraints) : colRef;
+    const effectiveConstraints =
+      constraints.length > 0
+        ? constraints
+        : collectionName === 'stores'
+        ? [limit(50)]
+        : [where('storeId', '==', STORE_ID), limit(50)];
+    const q = query(colRef, ...effectiveConstraints);
 
     const unsubscribe = onSnapshot(
       q,
-      async (snapshot) => {
+      (snapshot) => {
         if (!isMounted) return;
         const deletedSet = getDeletedFsIds(collectionName);
 
@@ -200,78 +243,21 @@ export function useFirestoreList<T extends { id?: string }>(
           setData(items);
           writeLocalCache(collectionName, items);
           setLoading(false);
+          setError(null);
           return;
         }
 
-        // If root collection is empty and collectionName !== 'stores', check stores/store_001/${collectionName}
-        if (collectionName !== 'stores' && !collectionName.startsWith('stores/')) {
-          try {
-            const storeColRef = collection(db, 'stores', STORE_ID, collectionName);
-            const storeSnap = await getDocs(storeColRef);
-            if (!isMounted) return;
-
-            if (!storeSnap.empty) {
-              const currentDeleted = getDeletedFsIds(collectionName);
-              const storeItems = storeSnap.docs
-                .map((d) => ({
-                  id: d.id,
-                  ...normalizeSnapshotData(d.data()),
-                }))
-                .filter(
-                  (item) =>
-                    !isMockOrDummyItem(item) && !currentDeleted.has(String(item.id || ''))
-                ) as T[];
-              if (storeItems.length > 0) {
-                setData(storeItems);
-                writeLocalCache(collectionName, storeItems);
-                setLoading(false);
-
-                if (!unsubStoreFallback) {
-                  unsubStoreFallback = onSnapshot(
-                    storeColRef,
-                    (subSnap) => {
-                      if (!isMounted) return;
-                      const latestDeleted = getDeletedFsIds(collectionName);
-                      const subItems = subSnap.docs
-                        .map((d) => ({
-                          id: d.id,
-                          ...normalizeSnapshotData(d.data()),
-                        }))
-                        .filter(
-                          (item) =>
-                            !isMockOrDummyItem(item) &&
-                            !latestDeleted.has(String(item.id || ''))
-                        ) as T[];
-                      setData(subItems);
-                      writeLocalCache(collectionName, subItems);
-                    },
-                    () => {}
-                  );
-                }
-                return;
-              }
-            }
-          } catch {}
-        }
-
-        // Both root and store-scoped Firestore collections are genuinely empty:
-        // If localStorage already has an explicit empty array saved by the user, keep it [].
-        const hasExplicitLocal =
-          typeof window !== 'undefined' &&
-          window.localStorage.getItem(`riskcart_fs_${collectionName}`) !== null;
-        const emptyFallback = hasExplicitLocal
-          ? ([] as T[])
-          : initialDataRef.current.filter(
-              (item) => !isMockOrDummyItem(item) && !deletedSet.has(String(item.id || ''))
-            );
-        setData(emptyFallback);
-        writeLocalCache(collectionName, emptyFallback);
+        const cached = readLocalCache(collectionName, initialDataRef.current);
+        setData(cached);
         setLoading(false);
+        setError(null);
       },
       (err: any) => {
         if (!isMounted) return;
-        const msg = String(err?.message || err || '');
-        setError(msg);
+        if (err?.code === 'resource-exhausted') {
+          markFirestoreQuotaExhausted(true);
+        }
+        setError(null);
         const deletedSet = getDeletedFsIds(collectionName);
         setData((prev) =>
           prev.length > 0
@@ -287,9 +273,6 @@ export function useFirestoreList<T extends { id?: string }>(
       window.removeEventListener('riskcart_clean_slate_wiped', handleCleanSlate);
       window.removeEventListener('riskcart_fs_cache_updated', handleCacheUpdated);
       unsubscribe();
-      if (unsubStoreFallback) {
-        unsubStoreFallback();
-      }
     };
   }, [collectionName]);
 
@@ -297,46 +280,51 @@ export function useFirestoreList<T extends { id?: string }>(
     async (item: Omit<T, 'id'> & { id?: string }): Promise<string | null> => {
       const nowIso = new Date().toISOString();
       const explicitId = (item as any)?.id ? String((item as any).id).trim() : '';
-      if (explicitId) {
-        removeDeletedFsId(collectionName, explicitId);
-      }
+      const fallbackId =
+        explicitId || `local_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+      removeDeletedFsId(collectionName, fallbackId);
+
       const payload = {
         ...item,
+        id: fallbackId,
         createdAt: (item as any)?.createdAt || nowIso,
         updatedAt: nowIso,
       };
 
+      // Cache-First: Immediately update state & localStorage so UI is 100% responsive offline
+      const optimisticItem = payload as unknown as T;
+      setData((prev) => {
+        const next = [optimisticItem, ...prev.filter((p) => p.id !== fallbackId)];
+        writeLocalCache(collectionName, next);
+        return next;
+      });
+
+      if (isFirestoreQuotaExhausted()) {
+        enqueuePendingSync({
+          op: 'set',
+          collectionPath: collectionName,
+          docId: fallbackId,
+          data: payload,
+          merge: true,
+        });
+        return fallbackId;
+      }
+
       try {
-        const colRef = collection(db, collectionName);
-        let finalId = explicitId;
-        if (explicitId) {
-          await setDoc(doc(db, collectionName, explicitId), payload as any, { merge: true });
-        } else {
-          const docRef = await addDoc(colRef, payload as any);
-          finalId = docRef.id;
-        }
-        removeDeletedFsId(collectionName, finalId);
-        const newItem = { ...payload, id: finalId } as unknown as T;
-        setData((prev) => {
-          const next = [newItem, ...prev.filter((p) => p.id !== finalId)];
-          writeLocalCache(collectionName, next);
-          return next;
-        });
-        return finalId;
+        await setDoc(doc(db, collectionName, fallbackId), payload as any, { merge: true });
+        return fallbackId;
       } catch (err: any) {
-        const fallbackId =
-          explicitId || `local_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
-        removeDeletedFsId(collectionName, fallbackId);
-        const newItem = { ...payload, id: fallbackId } as unknown as T;
-        setData((prev) => {
-          const next = [newItem, ...prev.filter((p) => p.id !== fallbackId)];
-          writeLocalCache(collectionName, next);
-          return next;
+        const errCode = String(err?.code || '').toLowerCase();
+        if (errCode.includes('resource-exhausted') || String(err?.message || '').toLowerCase().includes('quota')) {
+          markFirestoreQuotaExhausted(true);
+        }
+        enqueuePendingSync({
+          op: 'set',
+          collectionPath: collectionName,
+          docId: fallbackId,
+          data: payload,
+          merge: true,
         });
-        console.warn(
-          `[useFirestoreList] Added locally due to write error on ${collectionName}:`,
-          err
-        );
         return fallbackId;
       }
     },
@@ -346,39 +334,45 @@ export function useFirestoreList<T extends { id?: string }>(
   const updateItem = useCallback(
     async (id: string, updates: Partial<T>): Promise<boolean> => {
       const nowIso = new Date().toISOString();
+      const patchPayload = {
+        ...updates,
+        updatedAt: nowIso,
+      };
       setData((prev) => {
         const next = prev.map((item) =>
-          item.id === id ? ({ ...item, ...updates, updatedAt: nowIso } as T) : item
+          item.id === id ? ({ ...item, ...patchPayload } as T) : item
         );
         writeLocalCache(collectionName, next);
         return next;
       });
 
-      try {
-        const docRef = doc(db, collectionName, id);
-        await updateDoc(docRef, {
-          ...updates,
-          updatedAt: nowIso,
-        } as any);
+      if (isFirestoreQuotaExhausted()) {
+        enqueuePendingSync({
+          op: 'set',
+          collectionPath: collectionName,
+          docId: id,
+          data: patchPayload,
+          merge: true,
+        });
         return true;
-      } catch {
-        try {
-          await setDoc(
-            doc(db, collectionName, id),
-            {
-              ...updates,
-              updatedAt: nowIso,
-            } as any,
-            { merge: true }
-          );
-          return true;
-        } catch (err: any) {
-          console.warn(
-            `[useFirestoreList] Updated locally due to write error on ${collectionName}/${id}:`,
-            err
-          );
-          return true;
+      }
+
+      try {
+        await setDoc(doc(db, collectionName, id), patchPayload as any, { merge: true });
+        return true;
+      } catch (err: any) {
+        const errCode = String(err?.code || '').toLowerCase();
+        if (errCode.includes('resource-exhausted') || String(err?.message || '').toLowerCase().includes('quota')) {
+          markFirestoreQuotaExhausted(true);
         }
+        enqueuePendingSync({
+          op: 'set',
+          collectionPath: collectionName,
+          docId: id,
+          data: patchPayload,
+          merge: true,
+        });
+        return true;
       }
     },
     [collectionName]

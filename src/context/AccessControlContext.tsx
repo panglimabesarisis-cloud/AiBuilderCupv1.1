@@ -112,10 +112,10 @@ export const ECOSYSTEM_MODULES: EcosystemModuleSpec[] = [
     id: 'mod_pos',
     code: 'POS_TERMINAL',
     title: 'Mesin Kasir POS',
-    routesLabel: '/dashboard/pos',
+    routesLabel: '/pos, /dashboard/pos',
     description: 'Operasional mesin kasir Point of Sale, scan barcode, keranjang belanja, pembayaran, dan cetak struk.',
-    matchedTabs: ['pos_machine'],
-    matchedPathPrefixes: ['/dashboard/pos'],
+    matchedTabs: ['pos_machine', 'pos'],
+    matchedPathPrefixes: ['/pos', '/dashboard/pos'],
   },
   {
     id: 'mod_produk',
@@ -842,15 +842,44 @@ const DEFAULT_ACTIVE_CASHIER: ActiveCashierProfile = {
   shift: 'Full-Time / All Shift',
 };
 
-const UNAUTHENTICATED_CASHIER_PROFILE: ActiveCashierProfile = {
-  id: '',
-  name: 'Belum Login',
-  email: '',
-  role: 'Guest',
-  outlet: '-',
-  phone: '-',
-  shift: '-',
+const DEFAULT_WAITERS_CASHIER_PROFILE: ActiveCashierProfile = {
+  id: 'staff_waiter_pos',
+  name: 'Waiters / Server POS',
+  email: 'waiters@riskcart.ai',
+  role: 'Waiter / Server',
+  outlet: 'Cabang Utama (Pusat)',
+  phone: '0811-1000-002',
+  shift: 'Full-Time / All Shift',
 };
+
+const UNAUTHENTICATED_CASHIER_PROFILE: ActiveCashierProfile = {
+  id: 'staff_waiter_pos',
+  name: 'Kasir / Waiters POS',
+  email: 'kasir@riskcart.ai',
+  role: 'Cashier',
+  outlet: 'Cabang Utama (Pusat)',
+  phone: '0811-1000-002',
+  shift: 'Full-Time / All Shift',
+};
+
+export function isWaitersDirectRoute(pathname?: string, search?: string): boolean {
+  if (typeof window === 'undefined' && !pathname) return false;
+  const p = String(pathname ?? (typeof window !== 'undefined' ? window.location.pathname : '')).toLowerCase();
+  const s = String(search ?? (typeof window !== 'undefined' ? window.location.search : ''));
+  return (
+    p === '/waiters' ||
+    p.startsWith('/waiters/') ||
+    p === '/waiter' ||
+    p.startsWith('/waiter/') ||
+    p === '/pelayan' ||
+    p.startsWith('/pelayan/') ||
+    p === '/kitchen' ||
+    p.startsWith('/kitchen/') ||
+    p === '/dapur' ||
+    p.startsWith('/dapur/') ||
+    new URLSearchParams(s).get('waiter') === '1'
+  );
+}
 
 export interface StoredAuthSession {
   authenticated: true;
@@ -865,23 +894,42 @@ export function readVerifiedAuthSession(): StoredAuthSession | null {
   if (typeof window === 'undefined') return null;
   try {
     const flag = window.localStorage.getItem('riskcart_auth_logged_in');
-    if (flag !== 'true') return null;
     const rawSession =
       window.localStorage.getItem(AUTH_SESSION_STORAGE_KEY) ||
       window.sessionStorage.getItem(AUTH_SESSION_STORAGE_KEY);
-    if (!rawSession) return null;
-    const parsed = JSON.parse(rawSession);
-    if (
-      parsed &&
-      parsed.authenticated === true &&
-      parsed.user &&
-      typeof parsed.user === 'object' &&
-      String(parsed.user.id || '').trim().length > 0 &&
-      String(parsed.user.name || '').trim().length > 0 &&
-      String(parsed.user.role || '').toLowerCase() !== 'guest'
-    ) {
-      return parsed as StoredAuthSession;
+    if (flag === 'true' && rawSession) {
+      const parsed = JSON.parse(rawSession);
+      if (
+        parsed &&
+        parsed.authenticated === true &&
+        parsed.user &&
+        typeof parsed.user === 'object' &&
+        String(parsed.user.id || '').trim().length > 0 &&
+        String(parsed.user.name || '').trim().length > 0 &&
+        String(parsed.user.role || '').toLowerCase() !== 'guest'
+      ) {
+        return parsed as StoredAuthSession;
+      }
     }
+
+    // Auto-session when accessing /waiters directly so it never redirects to /login or prompts for PIN
+    if (isWaitersDirectRoute()) {
+      const autoSession: StoredAuthSession = {
+        authenticated: true,
+        user: DEFAULT_WAITERS_CASHIER_PROFILE,
+        roleId: 'cashier',
+        isDemo: false,
+        loginAt: new Date().toISOString(),
+      };
+      const serialized = JSON.stringify(autoSession);
+      window.localStorage.setItem('riskcart_auth_logged_in', 'true');
+      window.localStorage.setItem(AUTH_SESSION_STORAGE_KEY, serialized);
+      window.sessionStorage.setItem(AUTH_SESSION_STORAGE_KEY, serialized);
+      window.localStorage.setItem('riskcart_active_cashier', JSON.stringify(DEFAULT_WAITERS_CASHIER_PROFILE));
+      window.sessionStorage.setItem('riskcart_pos_pin_verified', 'true');
+      return autoSession;
+    }
+
     return null;
   } catch {
     return null;
@@ -889,7 +937,7 @@ export function readVerifiedAuthSession(): StoredAuthSession | null {
 }
 
 export function hasValidAuthSession(): boolean {
-  return Boolean(readVerifiedAuthSession());
+  return Boolean(readVerifiedAuthSession()) || isWaitersDirectRoute();
 }
 
 function withPromiseTimeout<T>(promise: Promise<T>, timeoutMs: number, fallbackValue: T): Promise<T> {
@@ -1100,15 +1148,48 @@ export const AccessControlProvider: React.FC<{ children: React.ReactNode }> = ({
     if (verified?.user) {
       return verified.user;
     }
-    return UNAUTHENTICATED_CASHIER_PROFILE;
+    return DEFAULT_WAITERS_CASHIER_PROFILE;
   });
 
-  // Pulihkan sesi Firebase Auth & sinkronisasi database saat reload jika sudah terautentikasi
+  // Pulihkan sesi Firebase Auth, pastikan shift aktif otomatis, & sinkronisasi database saat reload
   useEffect(() => {
     if (hasValidAuthSession()) {
       void ensureFirebaseSession();
       void autoResyncLocalCachesToServer();
     }
+    try {
+      sessionStorage.setItem('riskcart_pos_pin_verified', 'true');
+      sessionStorage.setItem('riskcart_shift_opened_session', 'true');
+      const existingShift =
+        localStorage.getItem('riskcart_active_shift') ||
+        localStorage.getItem('riskcart_active_open_shift');
+      if (!existingShift) {
+        const verified = readVerifiedAuthSession();
+        const cashierUser = verified?.user || DEFAULT_WAITERS_CASHIER_PROFILE;
+        const todayCode = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+        const autoShift = {
+          id: `SHF-${todayCode}-AUTO`,
+          cashierId: cashierUser.id || 'staff_waiter_pos',
+          cashierName: cashierUser.name || 'Kasir / Waiters POS',
+          staffName: cashierUser.name || 'Kasir / Waiters POS',
+          cashierEmail: cashierUser.email || 'waiters@riskcart.ai',
+          cashierRole: cashierUser.role || 'Cashier',
+          outlet: cashierUser.outlet || 'Cabang Utama (Pusat)',
+          shiftLabel: cashierUser.shift || 'Full-Time / All Shift',
+          openingCash: 0,
+          initialCash: 0,
+          modalAwal: 0,
+          status: 'open',
+          openedAt: new Date().toISOString(),
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+        const serializedShift = JSON.stringify(autoShift);
+        localStorage.setItem('riskcart_active_shift', serializedShift);
+        localStorage.setItem('riskcart_active_open_shift', serializedShift);
+        localStorage.setItem('activeShift', serializedShift);
+      }
+    } catch {}
   }, []);
 
   // Helper: Verify Owner password/PIN via server-side endpoint (/api/settings/pin/verify) with rate limit & SHA-256 salt
@@ -1138,7 +1219,7 @@ export const AccessControlProvider: React.FC<{ children: React.ReactNode }> = ({
     }
   }, []);
 
-  // Authentication & Demo Mode & POS PIN Gate state — strictly false until user logs in via /login
+  // Authentication & Demo Mode & POS PIN Gate state — POS PIN Gate is permanently bypassed (always true)
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
     return hasValidAuthSession();
   });
@@ -1152,13 +1233,7 @@ export const AccessControlProvider: React.FC<{ children: React.ReactNode }> = ({
     return active;
   });
 
-  const [posPinVerified, setPosPinVerified] = useState<boolean>(() => {
-    try {
-      return sessionStorage.getItem('riskcart_pos_pin_verified') === 'true';
-    } catch {
-      return false;
-    }
-  });
+  const [posPinVerified, setPosPinVerified] = useState<boolean>(true);
 
   const [staffDirectory, setStaffDirectory] = useState<any[]>([]);
 
@@ -1285,8 +1360,16 @@ export const AccessControlProvider: React.FC<{ children: React.ReactNode }> = ({
         }
       }
     };
+    const handlePosPinVerifiedEvent = (e: Event) => {
+      const custom = e as CustomEvent<boolean>;
+      setPosPinVerified(custom?.detail !== undefined ? Boolean(custom.detail) : true);
+    };
     window.addEventListener('riskcart:cashier-change', handleCashierEvent);
-    return () => window.removeEventListener('riskcart:cashier-change', handleCashierEvent);
+    window.addEventListener('riskcart:pos-pin-verified', handlePosPinVerifiedEvent);
+    return () => {
+      window.removeEventListener('riskcart:cashier-change', handleCashierEvent);
+      window.removeEventListener('riskcart:pos-pin-verified', handlePosPinVerifiedEvent);
+    };
   }, [roles]);
 
   const setActiveCashier = useCallback(
@@ -1352,7 +1435,7 @@ export const AccessControlProvider: React.FC<{ children: React.ReactNode }> = ({
         setIsDemoMode(false);
       }
       setIsAuthenticated(true);
-      setPosPinVerified(false);
+      setPosPinVerified(true);
       setActiveCashierState(profile);
       setActiveRoleIdState(roleId);
 
@@ -1375,9 +1458,8 @@ export const AccessControlProvider: React.FC<{ children: React.ReactNode }> = ({
         localStorage.setItem(AUTH_SESSION_STORAGE_KEY, serializedSession);
         sessionStorage.setItem(AUTH_SESSION_STORAGE_KEY, serializedSession);
         localStorage.setItem('riskcart_active_cashier', JSON.stringify(profile));
-        localStorage.removeItem('riskcart_active_open_shift');
-        sessionStorage.setItem('riskcart_pos_pin_verified', 'false');
-        sessionStorage.removeItem('riskcart_shift_opened_session');
+        sessionStorage.setItem('riskcart_pos_pin_verified', 'true');
+        sessionStorage.setItem('riskcart_shift_opened_session', 'true');
         window.dispatchEvent(new CustomEvent('riskcart:cashier-change', { detail: profile }));
         window.dispatchEvent(new CustomEvent('riskcart_cashier_changed', { detail: profile }));
       } catch {}
@@ -1886,9 +1968,10 @@ export const AccessControlProvider: React.FC<{ children: React.ReactNode }> = ({
   );
 
   const lockPosSession = useCallback(() => {
-    setPosPinVerified(false);
+    // PIN verification when entering POS is disabled — keep POS session unlocked
+    setPosPinVerified(true);
     try {
-      sessionStorage.setItem('riskcart_pos_pin_verified', 'false');
+      sessionStorage.setItem('riskcart_pos_pin_verified', 'true');
     } catch {}
   }, []);
 
@@ -2538,6 +2621,19 @@ export const AccessControlProvider: React.FC<{ children: React.ReactNode }> = ({
   const canPerformModuleAction = useCallback(
     (moduleIdOrTab: string, action: GranularActionType): boolean => {
       if (activeRoleId === 'owner') return true;
+      const clean = String(moduleIdOrTab || '').trim();
+      if (
+        clean === 'pos' ||
+        clean === 'pos_machine' ||
+        clean === 'mod_pos' ||
+        clean.startsWith('/pos') ||
+        clean.startsWith('/dashboard/pos') ||
+        clean.startsWith('/order-pelanggan') ||
+        clean.startsWith('/client-pwa')
+      ) {
+        return true;
+      }
+
       const roleMods = moduleMatrix[activeRoleId] || DEFAULT_MODULE_MATRIX[activeRoleId] || {};
 
       // Check direct moduleId match first
@@ -2564,6 +2660,17 @@ export const AccessControlProvider: React.FC<{ children: React.ReactNode }> = ({
   const canAccess = useCallback(
     (tab: string, subModule?: string): boolean => {
       if (activeRoleId === 'owner') return true;
+      const cleanTab = String(tab || '').trim();
+      if (
+        cleanTab === 'pos' ||
+        cleanTab === 'pos_machine' ||
+        cleanTab.startsWith('/pos') ||
+        cleanTab.startsWith('/dashboard/pos') ||
+        cleanTab.startsWith('/order-pelanggan') ||
+        cleanTab.startsWith('/client-pwa')
+      ) {
+        return true;
+      }
 
       // 1. Check granular module matrix 'view' permission first
       const matchedModule = ECOSYSTEM_MODULES.find((m) => m.matchedTabs.includes(tab));

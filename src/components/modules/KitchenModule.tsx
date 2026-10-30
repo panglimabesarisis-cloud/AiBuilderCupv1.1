@@ -722,53 +722,57 @@ export const KitchenModule: React.FC = () => {
   // Update a card's pipeline stage and record active Kitchen Staff / Expediter
   const handleMoveStage = (orderId: string, nextStage: KitchenPipelineStage) => {
     const nowIso = new Date().toISOString();
-    setKitchenOrders((prev) => {
-      const nextList = prev.map((ord) => {
-        if (ord.id !== orderId) return ord;
-        const updated: KitchenOrderCardDoc = {
-          ...ord,
-          stage: nextStage,
-          updatedAt: nowIso,
-          completedAt: nextStage === 'Completed' ? nowIso : undefined,
-          processedByStaff: activeKitchenPic?.name || ord.processedByStaff || 'Chef Dapur',
-          processedByRole: activeKitchenPic?.role || ord.processedByRole || 'Executive Chef',
-          processedByStation: activeKitchenPic?.station || ord.processedByStation || 'Main Kitchen',
-          expediterName:
-            nextStage === 'Ready for Pick Up' || nextStage === 'Completed'
-              ? activeExpediterStaff?.name || activeKitchenPic?.name || ord.expediterName
-              : ord.expediterName,
-        };
-        void persistKitchenOrderDoc(updated);
-        return updated;
-      });
-      saveToLocalCache(nextList);
-      return nextList;
+    let updatedDoc: KitchenOrderCardDoc | null = null;
+    const nextList = kitchenOrders.map((ord) => {
+      if (ord.id !== orderId) return ord;
+      const updated: KitchenOrderCardDoc = {
+        ...ord,
+        stage: nextStage,
+        updatedAt: nowIso,
+        completedAt: nextStage === 'Completed' ? nowIso : undefined,
+        processedByStaff: activeKitchenPic?.name || ord.processedByStaff || 'Chef Dapur',
+        processedByRole: activeKitchenPic?.role || ord.processedByRole || 'Executive Chef',
+        processedByStation: activeKitchenPic?.station || ord.processedByStation || 'Main Kitchen',
+        expediterName:
+          nextStage === 'Ready for Pick Up' || nextStage === 'Completed'
+            ? activeExpediterStaff?.name || activeKitchenPic?.name || ord.expediterName
+            : ord.expediterName,
+      };
+      updatedDoc = updated;
+      return updated;
     });
+    setKitchenOrders(nextList);
+    saveToLocalCache(nextList);
+    if (updatedDoc) {
+      void persistKitchenOrderDoc(updatedDoc);
+    }
   };
 
   // Toggle individual menu item check inside a card
   const handleToggleItemCheck = (orderId: string, itemId: string) => {
     const nowIso = new Date().toISOString();
-    setKitchenOrders((prev) => {
-      const nextList = prev.map((ord) => {
-        if (ord.id !== orderId) return ord;
-        const updatedItems = ord.items.map((it) =>
-          it.id === itemId ? { ...it, checked: !it.checked } : it
-        );
-        const updated: KitchenOrderCardDoc = {
-          ...ord,
-          items: updatedItems,
-          updatedAt: nowIso,
-          processedByStaff: activeKitchenPic?.name || ord.processedByStaff || 'Chef Dapur',
-          processedByRole: activeKitchenPic?.role || ord.processedByRole || 'Executive Chef',
-          processedByStation: activeKitchenPic?.station || ord.processedByStation || 'Main Kitchen',
-        };
-        void persistKitchenOrderDoc(updated);
-        return updated;
-      });
-      saveToLocalCache(nextList);
-      return nextList;
+    let updatedDoc: KitchenOrderCardDoc | null = null;
+    const nextList = kitchenOrders.map((ord) => {
+      if (ord.id !== orderId) return ord;
+      const updatedItems = ord.items.map((it) =>
+        it.id === itemId ? { ...it, checked: !it.checked } : it
+      );
+      const updated: KitchenOrderCardDoc = {
+        ...ord,
+        items: updatedItems,
+        updatedAt: nowIso,
+        processedByStaff: activeKitchenPic?.name || ord.processedByStaff || 'Chef Dapur',
+        processedByRole: activeKitchenPic?.role || ord.processedByRole || 'Executive Chef',
+        processedByStation: activeKitchenPic?.station || ord.processedByStation || 'Main Kitchen',
+      };
+      updatedDoc = updated;
+      return updated;
     });
+    setKitchenOrders(nextList);
+    saveToLocalCache(nextList);
+    if (updatedDoc) {
+      void persistKitchenOrderDoc(updatedDoc);
+    }
   };
 
   const filteredOrders = useMemo(() => {

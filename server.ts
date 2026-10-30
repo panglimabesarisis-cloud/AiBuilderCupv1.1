@@ -3,7 +3,7 @@ import { createServer } from 'http';
 import dotenv from 'dotenv';
 import path from 'path';
 import fs from 'fs/promises';
-import { readFileSync } from 'fs';
+import { existsSync, readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import crypto from 'crypto';
 import QRCode from 'qrcode';
@@ -42,12 +42,22 @@ import {
   resetDatabaseAllData,
   isProtectedOwnerOrDemoAccount,
 } from './src/db/users.ts';
-import appletConfigRaw from './firebase-applet-config.json';
 
 dotenv.config();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+// Read firebase-applet-config.json safely with fs.existsSync and try/catch so server never crashes if missing on deploy
+let appletConfigRaw: Record<string, any> = {};
+try {
+  const appletCfgPath = path.resolve(__dirname, 'firebase-applet-config.json');
+  if (existsSync(appletCfgPath)) {
+    appletConfigRaw = JSON.parse(readFileSync(appletCfgPath, 'utf-8'));
+  }
+} catch (err) {
+  console.warn('[Server] firebase-applet-config.json not found or invalid, using environment variables:', err);
+}
 
 // Initialize server-side Firestore client from environment variables first (fallback to firebase-applet-config.json)
 try {
@@ -177,8 +187,12 @@ const SERVER_ONLY_COLLECTIONS = new Set([
   'payment_gateway_secrets',
 ]);
 
-app.post('/api/db/sync', async (req, res) => {
-  try {
+app.post(
+  '/api/db/sync',
+  requireAuth,
+  requireRole(['owner', 'admin', 'super_admin', 'supervisor', 'manager', 'cashier', 'staff']),
+  async (req, res) => {
+    try {
     const { op, collectionPath, docId, data, merge } = req.body || {};
     const cleanCol = String(collectionPath || '').trim().replace(/^\/+|\/+$/g, '');
     const cleanId = String(docId || '').trim().replace(/^\/+|\/+$/g, '');
@@ -578,10 +592,12 @@ const ai = new GoogleGenAI({
   },
 });
 
-// Centralized Gemini Model Configuration
-export const GEMINI_PRIMARY_MODEL = process.env.GEMINI_MODEL || 'gemini-3.8-flash';
+// Centralized Gemini Model Configuration (Default: gemini-2.5-flash)
+export const GEMINI_PRIMARY_MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
 export const GEMINI_FALLBACK_MODEL = process.env.GEMINI_FALLBACK_MODEL || 'gemini-3.1-flash-lite';
 const GEMINI_TIMEOUT_MS = Number(process.env.GEMINI_TIMEOUT_MS) || 25000;
+const MIN_SERVER_GEMINI_COOLDOWN_MS = 30_000; // Minimum 30 seconds between server-side Gemini API calls
+let lastServerGeminiCallTs = 0;
 
 function isRetryableGeminiError(error: any): boolean {
   if (!error) return false;
@@ -648,10 +664,22 @@ interface GeminiCallParams {
 }
 
 async function generateContentWithFallback(params: GeminiCallParams) {
+  const now = Date.now();
+  const elapsed = now - lastServerGeminiCallTs;
+  if (lastServerGeminiCallTs > 0 && elapsed < MIN_SERVER_GEMINI_COOLDOWN_MS) {
+    const remainingSec = Math.ceil((MIN_SERVER_GEMINI_COOLDOWN_MS - elapsed) / 1000);
+    const cooldownErr: any = new Error(
+      `[Gemini Cooldown Active] Pembatas tagihan aktif: tunggu ${remainingSec} detik lagi sebelum memanggil Gemini API.`
+    );
+    cooldownErr.status = 403; // Non-retryable so caller immediately uses local deterministic fallback
+    throw cooldownErr;
+  }
+  lastServerGeminiCallTs = now;
+
   const primaryModel = params.preferredModel || GEMINI_PRIMARY_MODEL;
   const fallbackModel = GEMINI_FALLBACK_MODEL;
 
-  // 1. Try primary model first
+  // Single attempt on primary model (no multi-retry loops that multiply billing)
   try {
     const res = await callWithTimeout(
       ai.models.generateContent({
@@ -665,43 +693,19 @@ async function generateContentWithFallback(params: GeminiCallParams) {
     return res;
   } catch (err1: any) {
     if (!isRetryableGeminiError(err1)) {
-      throw err1; // Do not fallback on 400/401/403 client errors
+      throw err1;
     }
-
-    console.warn(`[Gemini] Primary model ${primaryModel} failed (${err1.message || err1}). Retrying once after short pause...`);
-    await new Promise((r) => setTimeout(r, 800));
-
-    // 2. Retry primary model once after brief pause
-    try {
-      const res = await callWithTimeout(
-        ai.models.generateContent({
-          model: primaryModel,
-          contents: params.contents,
-          config: params.config,
-        }),
-        GEMINI_TIMEOUT_MS
-      );
-      (res as any).modelVersion = res.modelVersion || primaryModel;
-      return res;
-    } catch (err2: any) {
-      if (!isRetryableGeminiError(err2)) {
-        throw err2;
-      }
-
-      console.warn(`[Gemini] Primary retry failed (${err2.message || err2}). Switching to fallback model: ${fallbackModel}`);
-
-      // 3. Fallback to secondary model (gemini-3.1-flash-lite)
-      const res = await callWithTimeout(
-        ai.models.generateContent({
-          model: fallbackModel,
-          contents: params.contents,
-          config: params.config,
-        }),
-        GEMINI_TIMEOUT_MS
-      );
-      (res as any).modelVersion = res.modelVersion || fallbackModel;
-      return res;
-    }
+    console.warn(`[Gemini] Primary model ${primaryModel} failed (${err1.message || err1}). Switching to fallback model: ${fallbackModel}`);
+    const res = await callWithTimeout(
+      ai.models.generateContent({
+        model: fallbackModel,
+        contents: params.contents,
+        config: params.config,
+      }),
+      GEMINI_TIMEOUT_MS
+    );
+    (res as any).modelVersion = res.modelVersion || fallbackModel;
+    return res;
   }
 }
 
@@ -2474,72 +2478,7 @@ async function handleDokuPaymentConfirmation(payload: {
   };
 }
 
-app.post('/api/webhooks/doku', async (req, res) => {
-  try {
-    const dokuSecret = (process.env.DOKU_SECRET_KEY || '').trim();
-    const signatureHeader = String(req.headers['signature'] || '').trim();
-    if (dokuSecret && process.env.NODE_ENV === 'production') {
-      if (!signatureHeader.startsWith('HMACSHA256=')) {
-        return res.status(401).json({ success: false, error: 'Missing DOKU webhook HMAC signature' });
-      }
-      const clientId = String(req.headers['client-id'] || process.env.DOKU_CLIENT_ID || '');
-      const requestId = String(req.headers['request-id'] || '');
-      const requestTimestamp = String(req.headers['request-timestamp'] || '');
-      const rawBody = JSON.stringify(req.body || {});
-      const digest = crypto.createHash('sha256').update(rawBody, 'utf8').digest('base64');
-      const stringToSign =
-        `Client-Id:${clientId}\n` +
-        `Request-Id:${requestId}\n` +
-        `Request-Timestamp:${requestTimestamp}\n` +
-        `Request-Target:/api/webhooks/doku\n` +
-        `Digest:${digest}`;
-      const expectedSig =
-        'HMACSHA256=' + crypto.createHmac('sha256', dokuSecret).update(stringToSign).digest('base64');
-      if (
-        signatureHeader.length !== expectedSig.length ||
-        !crypto.timingSafeEqual(Buffer.from(signatureHeader), Buffer.from(expectedSig))
-      ) {
-        return res.status(401).json({ success: false, error: 'Invalid DOKU webhook signature' });
-      }
-    }
-
-    const body = req.body || {};
-    const txId =
-      body.transactionId ||
-      body.order?.invoice_number ||
-      body.invoice_number ||
-      body.orderId ||
-      '';
-    const invNumber =
-      body.invoiceNumber ||
-      body.order?.invoice_number ||
-      body.invoice_number ||
-      txId;
-    const amount = Number(body.amount ?? body.order?.amount ?? 0);
-    const paymentId =
-      body.paymentId ||
-      body.transaction?.original_request_id ||
-      body.acquirer?.id ||
-      '';
-    const customerName = body.customerName || body.customer?.name || 'Walk-in Customer';
-
-    const result = await handleDokuPaymentConfirmation({
-      transactionId: txId,
-      invoiceNumber: invNumber,
-      paymentId,
-      amount,
-      customerName,
-    });
-
-    return res.json(result);
-  } catch (err: any) {
-    console.error('Error in /api/webhooks/doku:', err);
-    return res.status(500).json({
-      success: false,
-      error: err?.message || 'Gagal memproses webhook DOKU',
-    });
-  }
-});
+// Duplicate /api/webhooks/doku removed — handled by payments/gatewayRouter.ts
 
 
 function hashServerSecretWithSalt(secretVal: string): string {
@@ -3846,9 +3785,13 @@ app.post(
   }
 );
 
-app.post('/api/ai-architect/analyze', async (req, res) => {
-  const startTime = Date.now();
-  try {
+app.post(
+  '/api/ai-architect/analyze',
+  requireAuth,
+  requireRole(['owner', 'admin', 'super_admin']),
+  async (req, res) => {
+    const startTime = Date.now();
+    try {
     const {
       prompt = '',
       mode = 'bug_fix', // 'bug_fix' | 'text_override' | 'layout_override' | 'schema_formula' | 'code_patch'
@@ -4854,23 +4797,32 @@ app.post('/api/visitor/notify', async (req, res) => {
 });
 
 // Endpoints for AI Agent Prompts (ai_agents_private & ai_instructions)
-app.get('/api/ai/agents/private', async (_req, res) => {
-  try {
-    const result: Record<string, any> = {};
-    for (const [key, prompt] of Object.entries(SERVER_PRIVATE_AGENT_PROMPTS)) {
-      const snap = await adminDb.collection('ai_agents_private').doc(key).get();
-      result[key] = snap.exists
-        ? snap.data()
-        : { id: key, slug: key, defaultInstruction: prompt, globalRules: SERVER_GLOBAL_AI_RULES };
+app.get(
+  '/api/ai/agents/private',
+  requireAuth,
+  requireRole(['owner', 'admin', 'super_admin', 'supervisor', 'manager']),
+  async (_req, res) => {
+    try {
+      const result: Record<string, any> = {};
+      for (const [key, prompt] of Object.entries(SERVER_PRIVATE_AGENT_PROMPTS)) {
+        const snap = await adminDb.collection('ai_agents_private').doc(key).get();
+        result[key] = snap.exists
+          ? snap.data()
+          : { id: key, slug: key, defaultInstruction: prompt, globalRules: SERVER_GLOBAL_AI_RULES };
+      }
+      return res.json({ status: 'ok', prompts: result, globalRules: SERVER_GLOBAL_AI_RULES });
+    } catch (err: any) {
+      return res.status(500).json({ status: 'error', message: err.message });
     }
-    return res.json({ status: 'ok', prompts: result, globalRules: SERVER_GLOBAL_AI_RULES });
-  } catch (err: any) {
-    return res.status(500).json({ status: 'error', message: err.message });
   }
-});
+);
 
-app.post('/api/ai/agents/private', async (req: AuthRequest, res) => {
-  try {
+app.post(
+  '/api/ai/agents/private',
+  requireAuth,
+  requireRole(['owner', 'admin', 'super_admin']),
+  async (req: AuthRequest, res) => {
+    try {
     const { id, slug, customInstruction = '', globalRules = '', modelId = '' } = req.body || {};
     const targetKey = String(slug || id || '').trim();
     if (!targetKey) {
@@ -5148,8 +5100,12 @@ app.post('/api/ai/page-builder/save', requireAuth, requireRole(['owner', 'superv
 
 // Endpoint Factory Data Reset (Wipe All Data) - menghapus seluruh koleksi data operasional, serverStore, dan database lokal
 // namun mempertahankan user dengan role OWNER & DEMO serta pengaturan payment gateway.
-app.post('/api/admin/reset-all-data', async (_req, res) => {
-  try {
+app.post(
+  '/api/admin/reset-all-data',
+  requireAuth,
+  requireRole(['owner', 'admin', 'super_admin']),
+  async (_req, res) => {
+    try {
     let totalDeleted = 0;
 
     // 1. Kosongkan in-memory store di server.ts & serverStore cache

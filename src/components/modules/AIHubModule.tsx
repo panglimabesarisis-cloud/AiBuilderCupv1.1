@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { checkAndRecordAiCooldown } from '../../utils/aiCooldown';
 import {
   Cpu,
   Sparkles,
@@ -725,6 +726,15 @@ export const AIHubModule: React.FC<AIHubModuleProps> = ({
   };
 
   const handleRunAgentSandboxTest = async (agent: any) => {
+    const cooldown = checkAndRecordAiCooldown(`sandbox-${agent.id}`);
+    if (!cooldown.allowed) {
+      setAgentTestOutputs((prev) => ({
+        ...prev,
+        [agent.id]: cooldown.message,
+      }));
+      return;
+    }
+
     const queryText = agentTestInputs[agent.id] || 'Lakukan audit otomatis pada pesanan POS terakhir';
     setAgentIsTesting((prev) => ({ ...prev, [agent.id]: true }));
 
@@ -748,6 +758,7 @@ export const AIHubModule: React.FC<AIHubModuleProps> = ({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          manualTrigger: true,
           agentKey: agent.id,
           agentName: agent.name,
           systemPrompt: dynamicPrompt,
@@ -1515,6 +1526,17 @@ export const AIHubModule: React.FC<AIHubModuleProps> = ({
     if (!questionText.trim() || isAsking) return;
 
     const timeNow = new Date().toLocaleTimeString(language === 'id' ? 'id-ID' : 'en-US', { hour: '2-digit', minute: '2-digit' });
+    const cooldown = checkAndRecordAiCooldown('business-copilot-chat');
+    if (!cooldown.allowed) {
+      setChatMessages((prev) => [
+        ...prev,
+        { sender: 'user', text: questionText, time: timeNow },
+        { sender: 'ai', text: cooldown.message, time: timeNow },
+      ]);
+      if (!customText) setInputQuestion('');
+      return;
+    }
+
     setChatMessages((prev) => [...prev, { sender: 'user', text: questionText, time: timeNow }]);
     if (!customText) setInputQuestion('');
     setIsAsking(true);
@@ -1539,6 +1561,7 @@ export const AIHubModule: React.FC<AIHubModuleProps> = ({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          manualTrigger: true,
           agentKey: 'business-copilot',
           agentName: 'Tanya AI Business Copilot',
           systemPrompt,
@@ -1920,6 +1943,12 @@ export const AIHubModule: React.FC<AIHubModuleProps> = ({
   }, [dynamicPricingItems, customPriceOverrides, handleApplyRecommendedMarginPrice]);
 
   const handleRunThinMarginAIAnalysis = useCallback(async () => {
+    const cooldown = checkAndRecordAiCooldown('thin-margin-analyzer');
+    if (!cooldown.allowed) {
+      setThinMarginStatusBanner(cooldown.message);
+      return;
+    }
+
     setIsAnalyzingThinMarginAI(true);
     try {
       const thinList = dynamicPricingItems
@@ -1961,6 +1990,7 @@ export const AIHubModule: React.FC<AIHubModuleProps> = ({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          manualTrigger: true,
           agentSlug: 'dynamic-pricing',
           model: getActiveAgentModel('dynamic-pricing'),
           systemInstruction:

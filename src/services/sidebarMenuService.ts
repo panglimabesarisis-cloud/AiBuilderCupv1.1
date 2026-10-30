@@ -261,9 +261,9 @@ export const DEFAULT_SIDEBAR_MENU: MenuGroupConfig[] = [
     borderColor: 'border-amber-500/80',
     visible: true,
     children: [
+      { id: 'res_table_layout', labelId: 'Table Layout', labelEn: 'Table Layout', path: '/dashboard/layout-table', visible: true },
       { id: 'res_reservasi', labelId: 'Reservasi', labelEn: 'Reservasi', path: '/dashboard/reservation', visible: true },
       { id: 'res_list', labelId: 'List Reservasi', labelEn: 'List Reservasi', path: '/dashboard/reservation/list', visible: true },
-      { id: 'res_table_layout', labelId: 'Table Layout', labelEn: 'Table Layout', path: '/dashboard/layout-table', visible: true },
       { id: 'res_summary_report', labelId: 'Summary Report', labelEn: 'Summary Report', path: '/dashboard/layout-table/summary', visible: true },
     ],
   },

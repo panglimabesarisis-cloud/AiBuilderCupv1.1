@@ -43,6 +43,9 @@ import { openTransactionDetailModal } from '../common/GlobalModals';
 import { getPosSettings, dayKeyTz, logAudit } from '../../services/posRuntime';
 import { printReceipt } from '../../services/receiptPrinter';
 import { useApprovalPin } from '../pos/ApprovalPinModal';
+import { fetchTransactionsHistoryPage } from '../../services/dailyStatsService';
+import { ACTIVE_STORE_ID } from '../../config/store';
+import type { QueryDocumentSnapshot, DocumentData } from 'firebase/firestore';
 
 interface POSTransactionsModuleProps {
   subModule: 'transaksi_penjualan' | 'pendapatan_masuk' | 'pengeluaran_toko';
@@ -98,11 +101,59 @@ export const POSTransactionsModule: React.FC<POSTransactionsModuleProps> = ({
     }
   };
 
-  // Sync with centralized AppDataContext (merges root transactions + stores/store_001/transactions)
+  const [historyCursor, setHistoryCursor] = useState<QueryDocumentSnapshot<DocumentData> | null>(null);
+  const [hasMoreHistory, setHasMoreHistory] = useState<boolean>(true);
+  const [loadingMoreHistory, setLoadingMoreHistory] = useState<boolean>(false);
+
+  // Sync with centralized AppDataContext (default = today's transactions)
   useEffect(() => {
-    setTransactions(ctxTransactions);
+    setTransactions((prev) => {
+      const map = new Map<string, Transaction>();
+      ctxTransactions.forEach((t) => map.set(t.id, t));
+      prev.forEach((t) => {
+        if (!map.has(t.id)) map.set(t.id, t);
+      });
+      return Array.from(map.values()).sort(
+        (a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
+      );
+    });
     setLoading(loadingTransactions);
   }, [ctxTransactions, loadingTransactions]);
+
+  const handleLoadMoreHistory = async () => {
+    if (loadingMoreHistory) return;
+    setLoadingMoreHistory(true);
+    try {
+      const page = await fetchTransactionsHistoryPage({
+        storeId: ACTIVE_STORE_ID,
+        cursorDoc: historyCursor,
+        pageSize: 50,
+      });
+      setHistoryCursor(page.nextCursor);
+      setHasMoreHistory(page.hasMore);
+      if (page.items.length > 0) {
+        setTransactions((prev) => {
+          const map = new Map<string, Transaction>();
+          prev.forEach((t) => map.set(t.id, t));
+          page.items.forEach((raw: any) => {
+            if (raw?.id && !map.has(raw.id)) {
+              map.set(raw.id, {
+                ...raw,
+                id: raw.id,
+                totalAmount: Number(raw.totalAmount ?? raw.total ?? 0),
+                createdAt: raw.createdAt || raw.orderDate || new Date().toISOString(),
+              } as Transaction);
+            }
+          });
+          return Array.from(map.values()).sort(
+            (a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
+          );
+        });
+      }
+    } finally {
+      setLoadingMoreHistory(false);
+    }
+  };
 
   // Selected Transaction for Detail Modal / Receipt Preview / Refund / Edit
   const [selectedTrx, setSelectedTrx] = useState<Transaction | null>(null);
@@ -926,6 +977,22 @@ export const POSTransactionsModule: React.FC<POSTransactionsModuleProps> = ({
                 )}
               </tbody>
             </table>
+            <div className="px-4 py-3 bg-zinc-950/70 border-t border-zinc-800 flex items-center justify-between text-xs text-zinc-400">
+              <span>
+                Menampilkan {filteredTrx.length} transaksi (Default: Transaksi Hari Ini · Riwayat menggunakan Cursor Pagination 50/halaman)
+              </span>
+              {hasMoreHistory && (
+                <button
+                  type="button"
+                  onClick={() => void handleLoadMoreHistory()}
+                  disabled={loadingMoreHistory}
+                  className="px-3.5 py-1.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 disabled:opacity-50 text-zinc-200 font-bold transition cursor-pointer flex items-center gap-1.5"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${loadingMoreHistory ? 'animate-spin' : ''}`} />
+                  <span>{loadingMoreHistory ? 'Memuat Riwayat...' : 'Muat Riwayat Sebelumnya (50)'}</span>
+                </button>
+              )}
+            </div>
           </div>
         </div>
       )}

@@ -9,7 +9,7 @@ import {
   type CollectionReference,
   type SetOptions,
 } from 'firebase/firestore';
-import { db } from '../firebase';
+import { db, markFirestoreQuotaExhausted, isFirestoreQuotaExhausted } from '../firebase';
 import { ACTIVE_STORE_ID } from '../config/store';
 
 export interface PendingSyncOperation {
@@ -288,18 +288,25 @@ export async function syncDocToDatabase(
   let clientSuccess = false;
   let serverSuccess = false;
 
-  try {
-    const segments = cleanCol.split('/').filter(Boolean);
-    const docRef = doc(db, segments[0], ...segments.slice(1), cleanId);
-    await setDoc(docRef, cleanPayload, options);
-    clientSuccess = true;
-  } catch (err: any) {
-    console.error('[DB Sync Rejected - Client Firestore]', {
-      collectionPath: cleanCol,
-      docId: cleanId,
-      code: err?.code || 'unknown',
-      message: err?.message || String(err),
-    });
+  if (!isFirestoreQuotaExhausted()) {
+    try {
+      const segments = cleanCol.split('/').filter(Boolean);
+      const docRef = doc(db, segments[0], ...segments.slice(1), cleanId);
+      await setDoc(docRef, cleanPayload, options);
+      clientSuccess = true;
+    } catch (err: any) {
+      const errCode = String(err?.code || '').toLowerCase();
+      const errMsg = String(err?.message || err || '').toLowerCase();
+      if (errCode.includes('resource-exhausted') || errMsg.includes('quota')) {
+        markFirestoreQuotaExhausted(true);
+      } else {
+        console.warn('[DB Sync Notice - Client Firestore]', {
+          collectionPath: cleanCol,
+          docId: cleanId,
+          code: err?.code || 'unknown',
+        });
+      }
+    }
   }
 
   try {
@@ -331,18 +338,19 @@ export async function deleteDocFromDatabase(
   let clientSuccess = false;
   let serverSuccess = false;
 
-  try {
-    const segments = cleanCol.split('/').filter(Boolean);
-    const docRef = doc(db, segments[0], ...segments.slice(1), cleanId);
-    await deleteDoc(docRef);
-    clientSuccess = true;
-  } catch (err: any) {
-    console.error('[DB Delete Rejected - Client Firestore]', {
-      collectionPath: cleanCol,
-      docId: cleanId,
-      code: err?.code || 'unknown',
-      message: err?.message || String(err),
-    });
+  if (!isFirestoreQuotaExhausted()) {
+    try {
+      const segments = cleanCol.split('/').filter(Boolean);
+      const docRef = doc(db, segments[0], ...segments.slice(1), cleanId);
+      await deleteDoc(docRef);
+      clientSuccess = true;
+    } catch (err: any) {
+      const errCode = String(err?.code || '').toLowerCase();
+      const errMsg = String(err?.message || err || '').toLowerCase();
+      if (errCode.includes('resource-exhausted') || errMsg.includes('quota')) {
+        markFirestoreQuotaExhausted(true);
+      }
+    }
   }
 
   try {
@@ -378,11 +386,11 @@ export async function safeSetDoc(
     await setDoc(docRef, sanitized, options);
     void mirrorWriteToBackendServer('set', collectionPath, docId, sanitized, true);
   } catch (err: any) {
-    console.error('[safeSetDoc Error]', {
-      path: docRef.path,
-      code: err?.code || 'unknown',
-      message: err?.message || String(err),
-    });
+    const errCode = String(err?.code || '').toLowerCase();
+    const errMsg = String(err?.message || err || '').toLowerCase();
+    if (errCode.includes('resource-exhausted') || errMsg.includes('quota')) {
+      markFirestoreQuotaExhausted(true);
+    }
     const okServer = await mirrorWriteToBackendServer('set', collectionPath, docId, sanitized, true);
     if (!okServer && collectionPath && docId) {
       enqueuePendingSync({
@@ -480,116 +488,11 @@ let isResyncingLocalCaches = false;
  * to Firestore and the backend server so nothing stays local-only.
  */
 export async function autoResyncLocalCachesToServer(): Promise<void> {
-  if (typeof window === 'undefined' || isResyncingLocalCaches) return;
+  if (typeof window === 'undefined' || isResyncingLocalCaches || isFirestoreQuotaExhausted()) return;
   isResyncingLocalCaches = true;
 
   try {
     await flushPendingSyncQueue();
-
-    const localCollectionMappings: Array<{
-      storageKey: string;
-      collections: string[];
-      deletedStorageKey?: string;
-    }> = [
-      {
-        storageKey: 'riskcart_restaurant_tables_v1',
-        collections: [
-          'restaurant_tables',
-          'tables',
-          ...(ACTIVE_STORE_ID ? [`stores/${ACTIVE_STORE_ID}/restaurant_tables`] : []),
-        ],
-        deletedStorageKey: 'riskcart_deleted_table_ids_v1',
-      },
-      {
-        storageKey: 'riskcart_table_reservations_v1',
-        collections: [
-          'table_reservations',
-          'reservations',
-          ...(ACTIVE_STORE_ID ? [`stores/${ACTIVE_STORE_ID}/table_reservations`] : []),
-        ],
-        deletedStorageKey: 'riskcart_deleted_reservation_ids_v1',
-      },
-      {
-        storageKey: 'riskcart_table_dinein_history_v1',
-        collections: [
-          'table_dinein_history',
-          ...(ACTIVE_STORE_ID ? [`stores/${ACTIVE_STORE_ID}/table_dinein_history`] : []),
-        ],
-        deletedStorageKey: 'riskcart_deleted_dinein_ids_v1',
-      },
-      {
-        storageKey: 'riskcart_raw_materials_v2',
-        collections: [
-          'raw_materials',
-          ...(ACTIVE_STORE_ID ? [`stores/${ACTIVE_STORE_ID}/raw_materials`] : []),
-        ],
-        deletedStorageKey: 'riskcart_deleted_raw_materials_v1',
-      },
-      {
-        storageKey: 'riskcart_rm_suppliers_v2',
-        collections: ['raw_material_suppliers', 'suppliers'],
-        deletedStorageKey: 'riskcart_deleted_rm_suppliers_v1',
-      },
-      {
-        storageKey: 'riskcart_rm_pos_v2',
-        collections: ['raw_material_purchase_orders'],
-      },
-      {
-        storageKey: 'riskcart_rm_prs_v2',
-        collections: ['raw_material_purchase_requests'],
-      },
-    ];
-
-    for (const mapping of localCollectionMappings) {
-      try {
-        const raw = localStorage.getItem(mapping.storageKey);
-        if (!raw) continue;
-        const parsed = JSON.parse(raw);
-        if (!Array.isArray(parsed) || parsed.length === 0) continue;
-
-        let deletedIds = new Set<string>();
-        if (mapping.deletedStorageKey) {
-          const rawDel = localStorage.getItem(mapping.deletedStorageKey);
-          if (rawDel) {
-            const parsedDel = JSON.parse(rawDel);
-            if (Array.isArray(parsedDel)) {
-              deletedIds = new Set(parsedDel.map(String));
-            }
-          }
-        }
-
-        for (const item of parsed) {
-          if (!item || !item.id || deletedIds.has(String(item.id))) continue;
-          const cleanItem = sanitizeForDatabase(item);
-          for (const colPath of mapping.collections) {
-            await syncDocToDatabase(colPath, String(item.id), cleanItem);
-          }
-        }
-      } catch {}
-    }
-
-    // Also sync table_areas_config if present
-    try {
-      const rawAreas = localStorage.getItem('riskcart_table_areas_v1');
-      if (rawAreas) {
-        const areas = JSON.parse(rawAreas);
-        if (Array.isArray(areas) && areas.length > 0) {
-          const payload = sanitizeForDatabase({
-            id: 'table_areas_config',
-            areas: areas.map((a) => String(a).trim()).filter(Boolean),
-            updatedAt: new Date().toISOString(),
-          });
-          await syncDocToDatabase('settings', 'table_areas_config', payload);
-          if (ACTIVE_STORE_ID) {
-            await syncDocToDatabase(
-              `stores/${ACTIVE_STORE_ID}/settings`,
-              'table_areas_config',
-              payload
-            );
-          }
-        }
-      }
-    } catch {}
   } finally {
     isResyncingLocalCaches = false;
   }

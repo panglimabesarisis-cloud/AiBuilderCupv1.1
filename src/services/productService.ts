@@ -74,32 +74,8 @@ export async function saveProductDocToAllPaths(docId: string, productData: Recor
     throw new Error(PHOTO_TOO_LARGE_MESSAGE);
   }
 
-  // Primary source of truth: root `products` collection
-  await setDoc(doc(db, 'products', cleanId), payload, { merge: true });
-
-  // If there is an existing document in `products` with the same SKU under a different doc ID, update it too so no stale duplicate overrides the edit
+  // Immediately sync localStorage caches first so POS, PWA, and Product pages reflect updates without delay
   const cleanSku = typeof payload.sku === 'string' ? payload.sku.trim() : '';
-  if (cleanSku) {
-    try {
-      const qRoot = query(collection(db, 'products'), where('sku', '==', cleanSku));
-      const snapRoot = await getDocs(qRoot);
-      for (const d of snapRoot.docs) {
-        if (d.id !== cleanId) {
-          await setDoc(doc(db, 'products', d.id), { ...payload, id: d.id }, { merge: true });
-        }
-      }
-    } catch (e) {}
-  }
-
-  // Mirror to store subcollection so POS / Bundles / Discount / Inventory modules stay 100% in sync
-  try {
-    await setDoc(doc(db, 'stores', ACTIVE_STORE_ID, 'products', cleanId), {
-      ...payload,
-      storeId: ACTIVE_STORE_ID,
-    }, { merge: true });
-  } catch (e) {}
-
-  // Immediately sync localStorage caches so POS, PWA, and Product pages reflect updates without delay
   if (typeof window !== 'undefined') {
     for (const cacheKey of ['riskcart_fs_products', 'riskcart_cache_products']) {
       try {
@@ -123,6 +99,31 @@ export async function saveProductDocToAllPaths(docId: string, productData: Recor
         }
       } catch (e) {}
     }
+  }
+
+  // Primary source of truth: root `products` collection + store subcollection (non-blocking in offline mode)
+  void Promise.all([
+    setDoc(doc(db, 'products', cleanId), payload, { merge: true }).catch(() => {}),
+    setDoc(
+      doc(db, 'stores', ACTIVE_STORE_ID, 'products', cleanId),
+      {
+        ...payload,
+        storeId: ACTIVE_STORE_ID,
+      },
+      { merge: true }
+    ).catch(() => {}),
+  ]);
+
+  if (cleanSku) {
+    void getDocs(query(collection(db, 'products'), where('sku', '==', cleanSku)))
+      .then((snapRoot) => {
+        for (const d of snapRoot.docs) {
+          if (d.id !== cleanId) {
+            void setDoc(doc(db, 'products', d.id), { ...payload, id: d.id }, { merge: true }).catch(() => {});
+          }
+        }
+      })
+      .catch(() => {});
   }
 }
 

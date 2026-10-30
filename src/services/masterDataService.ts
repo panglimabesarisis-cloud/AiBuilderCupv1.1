@@ -8,6 +8,7 @@ import {
   deleteDoc,
   query,
   where,
+  limit,
   writeBatch,
 } from 'firebase/firestore';
 import { db } from '../firebase';
@@ -234,10 +235,9 @@ export function useCategories(): string[] {
 
   useEffect(() => {
     let rootCatDocs: string[] = [];
-    let storeCatDocs: string[] = [];
 
     const updateCombined = () => {
-      const sorted = normalizeAndSortUnique([...SEED_CATEGORIES, ...storeCatDocs, ...rootCatDocs], true);
+      const sorted = normalizeAndSortUnique([...SEED_CATEGORIES, ...rootCatDocs], true);
       setCategories(sorted);
       try {
         localStorage.setItem('riskcart_cache_categories', JSON.stringify(sorted));
@@ -245,16 +245,18 @@ export function useCategories(): string[] {
     };
 
     const unsubCategories = onSnapshot(
-      collection(db, 'categories'),
+      query(
+        collection(db, 'categories'),
+        where('storeId', '==', ACTIVE_STORE_ID),
+        limit(100)
+      ),
       (snapshot) => {
         rootCatDocs = [];
         const seenNorm = new Map<string, { id: string; ref: any; slug: string }>();
-        const duplicateRefs: any[] = [];
 
         snapshot.docs.forEach((d) => {
           const data = d.data();
           if (data.deleted === true || isFictitiousDoc(d.id, data)) {
-            duplicateRefs.push(d.ref);
             return;
           }
           const name = String(data.name || '').trim();
@@ -265,25 +267,11 @@ export function useCategories(): string[] {
           const slug = toCategorySlug(name);
           if (!normKey || !slug) return;
 
-          const existing = seenNorm.get(normKey);
-          if (!existing) {
+          if (!seenNorm.has(normKey)) {
             seenNorm.set(normKey, { id: d.id, ref: d.ref, slug });
             rootCatDocs.push(name);
-          } else {
-            if (d.id === `cat_${slug}` && existing.id !== `cat_${slug}`) {
-              duplicateRefs.push(existing.ref);
-              seenNorm.set(normKey, { id: d.id, ref: d.ref, slug });
-            } else {
-              duplicateRefs.push(d.ref);
-            }
           }
         });
-
-        if (duplicateRefs.length > 0) {
-          const batch = writeBatch(db);
-          duplicateRefs.forEach((r) => batch.delete(r));
-          void batch.commit().catch(() => {});
-        }
         updateCombined();
       },
       (err) => {
@@ -291,57 +279,11 @@ export function useCategories(): string[] {
       }
     );
 
-    const unsubStoreCategories = onSnapshot(
-      collection(db, 'stores', ACTIVE_STORE_ID, 'categories'),
-      (snapshot) => {
-        storeCatDocs = [];
-        const seenNorm = new Map<string, { id: string; ref: any; slug: string }>();
-        const duplicateRefs: any[] = [];
-
-        snapshot.docs.forEach((d) => {
-          const data = d.data();
-          if (data.deleted === true || isFictitiousDoc(d.id, data)) {
-            duplicateRefs.push(d.ref);
-            return;
-          }
-          const name = String(data.name || '').trim();
-          if (!name || name.toLowerCase() === 'other' || /^cat_default_\d+$/i.test(name)) {
-            return;
-          }
-          const normKey = normalizeCategoryKey(name);
-          const slug = toCategorySlug(name);
-          if (!normKey || !slug) return;
-
-          const existing = seenNorm.get(normKey);
-          if (!existing) {
-            seenNorm.set(normKey, { id: d.id, ref: d.ref, slug });
-            storeCatDocs.push(name);
-          } else {
-            if (d.id === `cat_${slug}` && existing.id !== `cat_${slug}`) {
-              duplicateRefs.push(existing.ref);
-              seenNorm.set(normKey, { id: d.id, ref: d.ref, slug });
-            } else {
-              duplicateRefs.push(d.ref);
-            }
-          }
-        });
-
-        if (duplicateRefs.length > 0) {
-          const batch = writeBatch(db);
-          duplicateRefs.forEach((r) => batch.delete(r));
-          void batch.commit().catch(() => {});
-        }
-        updateCombined();
-      },
-      () => {}
-    );
-
     const handleCategoriesSync = () => updateCombined();
     window.addEventListener('riskcart_categories_updated', handleCategoriesSync);
 
     return () => {
       unsubCategories();
-      unsubStoreCategories();
       window.removeEventListener('riskcart_categories_updated', handleCategoriesSync);
     };
   }, []);
@@ -351,17 +293,15 @@ export function useCategories(): string[] {
 
 /**
  * Live hook returning sorted unique brands synchronized with /dashboard/kategori-produk
- * from both root `brands` and `stores/store_001/brands`.
  */
 export function useBrands(): string[] {
   const [brands, setBrands] = useState<string[]>([]);
 
   useEffect(() => {
     let rootBrandDocs: string[] = [];
-    let storeBrandDocs: string[] = [];
 
     const updateCombined = () => {
-      const sorted = normalizeAndSortUnique([...storeBrandDocs, ...rootBrandDocs]);
+      const sorted = normalizeAndSortUnique([...rootBrandDocs]);
       setBrands(sorted);
       try {
         localStorage.setItem('riskcart_cache_brands', JSON.stringify(sorted));
@@ -369,7 +309,11 @@ export function useBrands(): string[] {
     };
 
     const unsubBrands = onSnapshot(
-      collection(db, 'brands'),
+      query(
+        collection(db, 'brands'),
+        where('storeId', '==', ACTIVE_STORE_ID),
+        limit(100)
+      ),
       (snapshot) => {
         rootBrandDocs = [];
         snapshot.docs.forEach((d) => {
@@ -387,26 +331,8 @@ export function useBrands(): string[] {
       }
     );
 
-    const unsubStoreBrands = onSnapshot(
-      collection(db, 'stores', ACTIVE_STORE_ID, 'brands'),
-      (snapshot) => {
-        storeBrandDocs = [];
-        snapshot.docs.forEach((d) => {
-          const data = d.data();
-          if (data.deleted === true || isFictitiousDoc(d.id, data)) return;
-          const name = String(data.name || '').trim();
-          if (name && !/^brand_default_\d+$/i.test(name)) {
-            storeBrandDocs.push(name);
-          }
-        });
-        updateCombined();
-      },
-      () => {}
-    );
-
     return () => {
       unsubBrands();
-      unsubStoreBrands();
     };
   }, []);
 
@@ -421,7 +347,11 @@ export function useStorageLocations(): string[] {
 
   useEffect(() => {
     const unsub = onSnapshot(
-      collection(db, 'storage_locations'),
+      query(
+        collection(db, 'storage_locations'),
+        where('storeId', '==', ACTIVE_STORE_ID),
+        limit(100)
+      ),
       (snapshot) => {
         const list = snapshot.docs
           .map((d) => String(d.data().name || '').trim())

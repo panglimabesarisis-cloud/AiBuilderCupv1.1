@@ -31,11 +31,13 @@ import {
 } from 'lucide-react';
 import { useLanguage } from '../../context/LanguageContext';
 import { useAppData } from '../../context/AppDataContext';
+import { checkAndRecordAiCooldown } from '../../utils/aiCooldown';
 import {
   AILayoutToggleBar,
   AILayoutColumnMode,
   getDynamicLayoutGridClass,
 } from '../common/AIShortcutCharts';
+import { AiRunControlBar, useAiFeatureControl } from '../common/AiRunControlBar';
 
 export const RestockAdvisor: React.FC = () => {
   const { language, tr } = useLanguage();
@@ -64,67 +66,102 @@ export const RestockAdvisor: React.FC = () => {
     };
   }, []);
 
-  // Fetch or Refresh AI Restock Recommendations using reconciled POS + PWA stock & velocity metrics
-  const fetchAiRestockPlan = async () => {
-    if (products.length === 0) return;
-    setLoadingAi(true);
-    try {
-      const reconciledMetrics = syncSnapshot?.productMetrics || {};
+  const buildDeterministicRestockPlan = () => {
+    const reconciledMetrics = syncSnapshot?.productMetrics || {};
+    const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+    const recent7dCompletedTx = transactions.filter((t) => {
+      const status = String(t.status || '').toLowerCase();
+      const fulfillment = String(t.fulfillmentStatus || '').toLowerCase();
+      const isCompleted = status === 'completed' || fulfillment === 'completed';
+      const ts = t.createdAt ? new Date(t.createdAt).getTime() : 0;
+      return isCompleted && ts >= sevenDaysAgo;
+    });
 
-      // Compute 7-day sales velocity strictly from completed transactions as fallback if metric not yet populated
-      const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
-      const recent7dCompletedTx = transactions.filter((t) => {
-        const status = String(t.status || '').toLowerCase();
-        const fulfillment = String(t.fulfillmentStatus || '').toLowerCase();
-        const isCompleted = status === 'completed' || fulfillment === 'completed';
-        const ts = t.createdAt ? new Date(t.createdAt).getTime() : 0;
-        return isCompleted && ts >= sevenDaysAgo;
-      });
+    const unitsSold7dMap: Record<string, number> = {};
+    recent7dCompletedTx.forEach((tx) => {
+      if (Array.isArray(tx.items)) {
+        tx.items.forEach((item: any) => {
+          const pId = item.productId || item.id;
+          const prod = products.find((p) => p.id === pId);
+          const piecesPerCarton = Math.max(1, Number(prod?.piecesPerCarton ?? 1));
+          const sellByUnit = prod?.sellByUnit !== undefined ? Boolean(prod.sellByUnit) : true;
+          const qtyOrdered = Number(item.quantityOrdered ?? item.quantity ?? 1);
+          const qty =
+            Number(item.unitsDeducted) > 0
+              ? Number(item.unitsDeducted)
+              : item.packageType === 'carton' && sellByUnit
+              ? qtyOrdered * piecesPerCarton
+              : qtyOrdered;
+          if (pId) {
+            unitsSold7dMap[pId] = (unitsSold7dMap[pId] || 0) + Number(qty || 0);
+          }
+        });
+      }
+    });
 
-      const unitsSold7dMap: Record<string, number> = {};
-      recent7dCompletedTx.forEach((tx) => {
-        if (Array.isArray(tx.items)) {
-          tx.items.forEach((item: any) => {
-            const pId = item.productId || item.id;
-            const prod = products.find((p) => p.id === pId);
-            const piecesPerCarton = Math.max(1, Number(prod?.piecesPerCarton ?? 1));
-            const sellByUnit = prod?.sellByUnit !== undefined ? Boolean(prod.sellByUnit) : true;
-            const qtyOrdered = Number(item.quantityOrdered ?? item.quantity ?? 1);
-            const qty =
-              Number(item.unitsDeducted) > 0
-                ? Number(item.unitsDeducted)
-                : item.packageType === 'carton' && sellByUnit
-                ? qtyOrdered * piecesPerCarton
-                : qtyOrdered;
-            if (pId) {
-              unitsSold7dMap[pId] = (unitsSold7dMap[pId] || 0) + Number(qty || 0);
-            }
-          });
-        }
-      });
+    const currentStockLevels = products.map((p) => {
+      const m = reconciledMetrics[p.id];
+      const sold7d = m !== undefined ? m.unitsSold7d : unitsSold7dMap[p.id] || 0;
+      const dailyVel = m !== undefined ? m.dailyVelocity : Number((sold7d / 7).toFixed(1));
+      const stockUnits = m !== undefined ? m.stockInUnits : p.stockInUnits;
+      return {
+        id: p.id,
+        productId: p.id,
+        name: p.name,
+        sku: p.sku || '',
+        category: p.category || '',
+        currentStockUnits: stockUnits,
+        piecesPerCarton: p.piecesPerCarton || 1,
+        costPerUnit: p.costPerUnit || 0,
+        pricePerUnit: p.pricePerUnit || 0,
+        minStockAlert: p.minStockAlert || 10,
+        salesVelocity7d: sold7d,
+        dailyVelocity: dailyVel,
+      };
+    });
 
-      // Prepare current stock levels and 7-day velocity arrays from reconciled metrics
-      const currentStockLevels = products.map((p) => {
-        const m = reconciledMetrics[p.id];
-        const sold7d = m !== undefined ? m.unitsSold7d : unitsSold7dMap[p.id] || 0;
-        const dailyVel = m !== undefined ? m.dailyVelocity : Number((sold7d / 7).toFixed(1));
-        const stockUnits = m !== undefined ? m.stockInUnits : p.stockInUnits;
+    const localRecs: RestockRecommendation[] = currentStockLevels
+      .filter((p) => p.currentStockUnits <= p.minStockAlert * 1.5 || p.dailyVelocity > 0)
+      .slice(0, 12)
+      .map((p) => {
+        const dailyVel = Math.max(1, p.dailyVelocity || 2);
+        const daysUntilStockout = Math.max(0, Math.round(p.currentStockUnits / dailyVel));
+        const targetUnits = Math.max(p.minStockAlert * 2, Math.ceil(dailyVel * 14));
+        const deficitUnits = Math.max(p.piecesPerCarton, targetUnits - p.currentStockUnits);
+        const suggestedCartons = Math.max(1, Math.ceil(deficitUnits / Math.max(1, p.piecesPerCarton)));
+        const urgency: 'critical' | 'high' | 'medium' | 'low' =
+          p.currentStockUnits <= p.minStockAlert * 0.5
+            ? 'critical'
+            : p.currentStockUnits <= p.minStockAlert
+            ? 'high'
+            : 'medium';
         return {
-          id: p.id,
           productId: p.id,
-          name: p.name,
-          sku: p.sku || '',
-          category: p.category || '',
-          currentStockUnits: stockUnits,
-          piecesPerCarton: p.piecesPerCarton || 1,
-          costPerUnit: p.costPerUnit || 0,
-          pricePerUnit: p.pricePerUnit || 0,
-          minStockAlert: p.minStockAlert || 10,
-          salesVelocity7d: sold7d,
-          dailyVelocity: dailyVel,
+          productName: p.name,
+          currentStockUnits: p.currentStockUnits,
+          daysUntilStockout,
+          suggestedCartons,
+          estimatedCost: suggestedCartons * p.piecesPerCarton * p.costPerUnit,
+          urgency,
+          reasoning: `Stok saat ini ${p.currentStockUnits} unit (batas minimum ${p.minStockAlert} unit), rata-rata penjualan 7 hari ${p.salesVelocity7d} unit.`,
         };
       });
 
+    return { currentStockLevels, recent7dCompletedTx, localRecs };
+  };
+
+  // Manual-only AI Restock Recommendations with 30-second cooldown and AbortSignal
+  const fetchAiRestockPlan = async (signal?: AbortSignal) => {
+    if (products.length === 0) return;
+    const cooldown = checkAndRecordAiCooldown('restock-advisor');
+    if (!cooldown.allowed) {
+      setExecutiveSummary(cooldown.message);
+      return;
+    }
+
+    setLoadingAi(true);
+    try {
+      const { currentStockLevels, recent7dCompletedTx, localRecs } = buildDeterministicRestockPlan();
       const salesVelocity7d = currentStockLevels.map((p) => ({
         productId: p.id,
         productName: p.name,
@@ -135,7 +172,9 @@ export const RestockAdvisor: React.FC = () => {
       const res = await fetch('/api/ai/restock-advisor', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        signal,
         body: JSON.stringify({
+          manualTrigger: true,
           currentStockLevels,
           salesVelocity7d,
           products: currentStockLevels,
@@ -150,8 +189,11 @@ export const RestockAdvisor: React.FC = () => {
       if (data.recommendations && Array.isArray(data.recommendations)) {
         setRecommendations(data.recommendations);
         setExecutiveSummary(data.executiveSummary || '');
+      } else {
+        setRecommendations(localRecs);
       }
-    } catch (error) {
+    } catch (error: any) {
+      if (error?.name === 'AbortError') return;
       console.warn('Notice fetching restock recommendations:', error);
       setIsFallback(true);
     } finally {
@@ -159,30 +201,28 @@ export const RestockAdvisor: React.FC = () => {
     }
   };
 
-  // Initial load & automatic refresh when a new POS or PWA transaction completes reconciliation
+  const aiRestockControl = useAiFeatureControl({
+    featureKey: 'ai_restock_advisor',
+    onRun: async (signal) => {
+      await fetchAiRestockPlan(signal);
+    },
+  });
+
+  // Populate local deterministic restock metrics WITHOUT calling Gemini API automatically
   useEffect(() => {
     if (products.length === 0) {
       setRecommendations([]);
       setExecutiveSummary('');
       return;
     }
-    if (products.length > 0 && recommendations.length === 0 && !loadingAi) {
-      void fetchAiRestockPlan();
+    const { localRecs } = buildDeterministicRestockPlan();
+    setRecommendations(localRecs);
+    if (!executiveSummary) {
+      setExecutiveSummary(
+        'Kalkulasi deterministik lokal aktif (0 panggilan otomatis Gemini API). Klik tombol "Refresh AI Forecast" secara manual jika ingin meminta analisis Gemini AI (cooldown 30 detik).'
+      );
     }
-  }, [products]);
-
-  useEffect(() => {
-    const completedTxId = syncSnapshot?.lastCompletedTxId || null;
-    if (
-      completedTxId &&
-      completedTxId !== lastFetchedTxIdRef.current &&
-      products.length > 0 &&
-      !loadingAi
-    ) {
-      lastFetchedTxIdRef.current = completedTxId;
-      void fetchAiRestockPlan();
-    }
-  }, [syncSnapshot?.lastCompletedTxId, products.length]);
+  }, [products, syncSnapshot?.lastCompletedTxId]);
 
   // Execute 1-Click Purchase Order for a recommended item (synchronized across POS & PWA collections)
   const handleApplyRestock = async (rec: RestockRecommendation) => {
@@ -347,14 +387,13 @@ export const RestockAdvisor: React.FC = () => {
             </button>
           )}
 
-          <button
-            onClick={fetchAiRestockPlan}
-            disabled={loadingAi || products.length === 0}
-            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-xs font-semibold transition shadow-lg shadow-blue-600/20 cursor-pointer"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${loadingAi ? 'animate-spin' : ''}`} />
-            {loadingAi ? tr('Analyzing Demand...', 'Menganalisis Demand...') : tr('Recalculate AI Forecast', 'Hitung Ulang AI Forecast')}
-          </button>
+          <AiRunControlBar
+            featureLabel="AI Restock Forecast"
+            enabled={aiRestockControl.enabled}
+            isRunning={aiRestockControl.isRunning || loadingAi}
+            onToggle={aiRestockControl.toggleEnabled}
+            onRun={() => void aiRestockControl.runNow()}
+          />
         </div>
       </div>
 

@@ -5,16 +5,19 @@ import {
   setDoc,
   deleteDoc,
   onSnapshot,
-  getDocs,
+  query,
+  limit,
+  where,
 } from 'firebase/firestore';
-import { db } from '../firebase';
+import { db, isFirestoreQuotaExhausted, markFirestoreQuotaExhausted } from '../firebase';
 import { ACTIVE_STORE_ID } from '../config/store';
 import { readLocalCache, writeLocalCache } from './useFirestoreList';
+import { enqueuePendingSync } from '../utils/dbSync';
 
 const STORE_ID = ACTIVE_STORE_ID || 'store_001';
 
 /**
- * 1) useCollection: Real-time listener and CRUD actions on primary Firestore `db`.
+ * 1) useCollection: Real-time listener and CRUD actions on primary Firestore `db` with Cache-First, where('storeId','==',STORE_ID) & limit(50).
  */
 export function useCollection<T extends { id: string }>(
   name: string,
@@ -29,20 +32,31 @@ export function useCollection<T extends { id: string }>(
 } {
   const cleanName = name.replace(/^stores\/[^/]+\//, '');
   const [items, setItems] = useState<T[]>(() => readLocalCache<T>(cleanName, _seed));
-  const [loading, setLoading] = useState<boolean>(true);
+  const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<Error | null>(null);
   const seedRef = useRef<T[]>(_seed);
   seedRef.current = _seed;
 
   useEffect(() => {
     let isMounted = true;
-    setLoading(true);
+
+    if (isFirestoreQuotaExhausted()) {
+      setItems((prev) => (prev.length > 0 ? prev : readLocalCache<T>(cleanName, seedRef.current)));
+      setLoading(false);
+      return () => {
+        isMounted = false;
+      };
+    }
 
     const colRef = collection(db, cleanName);
+    const q =
+      cleanName === 'stores'
+        ? query(colRef, limit(50))
+        : query(colRef, where('storeId', '==', STORE_ID), limit(50));
 
     const unsubscribe = onSnapshot(
-      colRef,
-      async (snapshot) => {
+      q,
+      (snapshot) => {
         if (!isMounted) return;
         const list = snapshot.docs.map((d) => ({
           id: d.id,
@@ -57,24 +71,6 @@ export function useCollection<T extends { id: string }>(
           return;
         }
 
-        if (cleanName !== 'stores') {
-          try {
-            const storeSnap = await getDocs(collection(db, 'stores', STORE_ID, cleanName));
-            if (!isMounted) return;
-            if (!storeSnap.empty) {
-              const storeList = storeSnap.docs.map((d) => ({
-                id: d.id,
-                ...d.data(),
-              })) as T[];
-              setItems(storeList);
-              writeLocalCache(cleanName, storeList);
-              setLoading(false);
-              setError(null);
-              return;
-            }
-          } catch {}
-        }
-
         const cached = readLocalCache<T>(cleanName, seedRef.current);
         setItems(cached);
         setLoading(false);
@@ -82,7 +78,14 @@ export function useCollection<T extends { id: string }>(
       },
       (err: any) => {
         if (!isMounted) return;
-        setError(err instanceof Error ? err : new Error(String(err)));
+        if (err?.code === 'resource-exhausted') {
+          markFirestoreQuotaExhausted(true);
+        }
+        if (errCode.includes('resource-exhausted') || String(err?.message || '').toLowerCase().includes('quota')) {
+          markFirestoreQuotaExhausted(true);
+        }
+        setItems((prev) => (prev.length > 0 ? prev : readLocalCache<T>(cleanName, seedRef.current)));
+        setError(null);
         setLoading(false);
       }
     );
@@ -112,12 +115,32 @@ export function useCollection<T extends { id: string }>(
         return next;
       });
 
+      if (isFirestoreQuotaExhausted()) {
+        enqueuePendingSync({
+          op: 'set',
+          collectionPath: cleanName,
+          docId: docRef.id,
+          data: newItem,
+          merge: true,
+        });
+        return docRef.id;
+      }
+
       try {
         await setDoc(docRef, newItem, { merge: true });
         setError(null);
         return docRef.id;
       } catch (err: any) {
-        console.warn(`[useCollection] Saved locally due to write notice on ${cleanName}:`, err);
+        if (String(err?.code || '').toLowerCase().includes('resource-exhausted')) {
+          markFirestoreQuotaExhausted(true);
+        }
+        enqueuePendingSync({
+          op: 'set',
+          collectionPath: cleanName,
+          docId: docRef.id,
+          data: newItem,
+          merge: true,
+        });
         return docRef.id;
       }
     },
@@ -140,11 +163,31 @@ export function useCollection<T extends { id: string }>(
         return next;
       });
 
+      if (isFirestoreQuotaExhausted()) {
+        enqueuePendingSync({
+          op: 'set',
+          collectionPath: cleanName,
+          docId: id,
+          data: updateData,
+          merge: true,
+        });
+        return;
+      }
+
       try {
         await setDoc(docRef, updateData, { merge: true });
         setError(null);
       } catch (err: any) {
-        console.warn(`[useCollection] Updated locally due to write notice on ${cleanName}/${id}:`, err);
+        if (String(err?.code || '').toLowerCase().includes('resource-exhausted')) {
+          markFirestoreQuotaExhausted(true);
+        }
+        enqueuePendingSync({
+          op: 'set',
+          collectionPath: cleanName,
+          docId: id,
+          data: updateData,
+          merge: true,
+        });
       }
     },
     [cleanName]
@@ -158,11 +201,27 @@ export function useCollection<T extends { id: string }>(
         return next;
       });
 
+      if (isFirestoreQuotaExhausted()) {
+        enqueuePendingSync({
+          op: 'delete',
+          collectionPath: cleanName,
+          docId: id,
+        });
+        return;
+      }
+
       try {
         await deleteDoc(doc(db, cleanName, id));
         setError(null);
       } catch (err: any) {
-        console.warn(`[useCollection] Removed locally due to write notice on ${cleanName}/${id}:`, err);
+        if (String(err?.code || '').toLowerCase().includes('resource-exhausted')) {
+          markFirestoreQuotaExhausted(true);
+        }
+        enqueuePendingSync({
+          op: 'delete',
+          collectionPath: cleanName,
+          docId: id,
+        });
       }
     },
     [cleanName]
@@ -211,13 +270,17 @@ export function useSettingsDoc<T extends Record<string, any>>(
     } catch {}
     return defaults;
   });
-  const [loading, setLoading] = useState<boolean>(true);
+  const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<Error | null>(null);
 
   useEffect(() => {
     let isMounted = true;
-    setLoading(true);
-    setError(null);
+    if (isFirestoreQuotaExhausted()) {
+      setLoading(false);
+      return () => {
+        isMounted = false;
+      };
+    }
 
     const docRef = resolveDocRef(path);
     const isPosSettingsPath = path.endsWith('/settings/pos') || path === 'settings/pos';
@@ -236,7 +299,7 @@ export function useSettingsDoc<T extends Record<string, any>>(
           } catch {}
           setLoading(false);
           setError(null);
-        } else if (isPosSettingsPath) {
+        } else if (isPosSettingsPath && !isFirestoreQuotaExhausted()) {
           const fallbackRef =
             path === 'settings/pos'
               ? doc(db, 'stores', STORE_ID, 'settings', 'pos')
@@ -266,7 +329,10 @@ export function useSettingsDoc<T extends Record<string, any>>(
       },
       (err: any) => {
         if (!isMounted) return;
-        setError(err instanceof Error ? err : new Error(String(err)));
+        if (String(err?.code || '').toLowerCase().includes('resource-exhausted')) {
+          markFirestoreQuotaExhausted(true);
+        }
+        setError(null);
         setLoading(false);
       }
     );
@@ -296,6 +362,10 @@ export function useSettingsDoc<T extends Record<string, any>>(
         return next;
       });
 
+      if (isFirestoreQuotaExhausted()) {
+        return;
+      }
+
       try {
         await setDoc(docRef, updateData, { merge: true });
         if (isPosSettingsPath) {
@@ -307,7 +377,9 @@ export function useSettingsDoc<T extends Record<string, any>>(
         }
         setError(null);
       } catch (err: any) {
-        console.warn(`[useSettingsDoc] Saved locally due to write notice at ${path}:`, err);
+        if (String(err?.code || '').toLowerCase().includes('resource-exhausted')) {
+          markFirestoreQuotaExhausted(true);
+        }
       }
     },
     [path, cacheKey]
@@ -315,3 +387,4 @@ export function useSettingsDoc<T extends Record<string, any>>(
 
   return { value, save, loading, error };
 }
+

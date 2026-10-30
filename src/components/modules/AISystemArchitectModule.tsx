@@ -42,6 +42,7 @@ import { useAppData } from '../../context/AppDataContext';
 import { useLanguage } from '../../context/LanguageContext';
 import { useAppNavigation } from '../../router';
 import { UITextOverrideRule } from '../../utils/i18nEngine';
+import { checkAndRecordAiCooldown } from '../../utils/aiCooldown';
 
 export type ArchitectMode =
   | 'bug_fix'
@@ -373,8 +374,16 @@ export const AISystemArchitectModule: React.FC = () => {
     reader.readAsDataURL(file);
   };
 
-  // Analyze Prompt & Screenshot with Gemini AI System Architect
+  // Analyze Prompt & Screenshot with Gemini AI System Architect (manual trigger + 30s cooldown)
   const handleAnalyzeWithAi = async () => {
+    const cooldown = checkAndRecordAiCooldown('ai-system-architect');
+    if (!cooldown.allowed) {
+      setStatusMessage({
+        type: 'error',
+        text: cooldown.message,
+      });
+      return;
+    }
     setIsAnalyzing(true);
     setStatusMessage(null);
     try {
@@ -382,6 +391,7 @@ export const AISystemArchitectModule: React.FC = () => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          manualTrigger: true,
           prompt,
           mode: activeMode,
           targetModule,

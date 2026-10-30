@@ -10,12 +10,14 @@ import {
   Info,
   Package,
 } from 'lucide-react';
-import { collection, onSnapshot } from 'firebase/firestore';
+import { collection, onSnapshot, query, where, limit } from 'firebase/firestore';
 import { db } from '../../firebase';
 import { useAppData } from '../../context/AppDataContext';
 import { useLanguage } from '../../context/LanguageContext';
 import { formatMoney, formatCompactMoney } from '../../utils/money';
 import { ACTIVE_STORE_ID } from '../../config/store';
+import { fetchDailyStatsForAiContext } from '../../services/dailyStatsService';
+import { useAiFeatureControl, AiRunControlBar } from '../common/AiRunControlBar';
 
 export type ChartViewTab = 'all' | 'penjualan' | 'asset' | 'pembelian' | 'stok_vs_sales';
 export type TimeframeOption = 'today' | 'yesterday' | '7d' | '14d' | '30d' | 'month' | 'year';
@@ -182,29 +184,78 @@ export const AdminAreaCharts: React.FC<AdminAreaChartsProps> = ({
   const [rawStockMutations, setRawStockMutations] = useState<any[]>([]);
   const [rawStockMovements, setRawStockMovements] = useState<any[]>([]);
 
+  const [aiChartInsight, setAiChartInsight] = useState<string>('');
+  const [aiChartError, setAiChartError] = useState<string | null>(null);
+
+  const runAiChartAnalysis = useCallback(
+    async (signal: AbortSignal) => {
+      setAiChartError(null);
+      try {
+        // Requirement 4: Build model context from dailyStats summary docs, never by reading all transactions/products
+        const dailyStatsDocs = await fetchDailyStatsForAiContext(ACTIVE_STORE_ID, 14);
+        if (signal.aborted) return;
+        const prompt = `Analisis tren grafik bisnis berdasarkan dokumen ringkasan dailyStats (${dailyStatsDocs.length} hari terakhir): ${JSON.stringify(
+          dailyStatsDocs
+        )}. Berikan ringkasan eksekutif singkat (3 poin: tren omzet, efisiensi modal/laba, dan rekomendasi aksi).`;
+        const res = await fetch('/api/ai/insight', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          signal,
+          body: JSON.stringify({
+            model: appData.defaultAiModel || 'gemini-2.5-flash',
+            prompt,
+          }),
+        });
+        if (signal.aborted) return;
+        const data = await res.json().catch(() => ({}));
+        setAiChartInsight(
+          String(
+            data?.text ||
+              data?.insight ||
+              `Analisis DailyStats (${dailyStatsDocs.length} hari): Total Omzet Rp ${dailyStatsDocs
+                .reduce((s, d) => s + Number(d.totalRevenue || 0), 0)
+                .toLocaleString('id-ID')} dari ${dailyStatsDocs.reduce(
+                (s, d) => s + Number(d.txCount || 0),
+                0
+              )} transaksi.`
+          )
+        );
+      } catch (err: any) {
+        if (err?.name === 'AbortError' || signal.aborted) return;
+        setAiChartError(err?.message || 'Gagal menjalankan analisis AI Chart.');
+      }
+    },
+    [appData.defaultAiModel]
+  );
+
+  const aiChartCtrl = useAiFeatureControl({
+    featureKey: 'ai_chart_dashboard',
+    onRun: runAiChartAnalysis,
+  });
+
   useEffect(() => {
     const unsubPO = onSnapshot(
-      collection(db, 'purchase_orders'),
+      query(collection(db, 'purchase_orders'), where('storeId', '==', ACTIVE_STORE_ID), limit(50)),
       (snap) => setRawPurchaseOrders(snap.docs.map((d) => ({ id: d.id, ...d.data() }))),
       () => {}
     );
     const unsubProc = onSnapshot(
-      collection(db, 'procurements'),
+      query(collection(db, 'procurements'), where('storeId', '==', ACTIVE_STORE_ID), limit(50)),
       (snap) => setRawProcurements(snap.docs.map((d) => ({ id: d.id, ...d.data() }))),
       () => {}
     );
     const unsubLogs = onSnapshot(
-      collection(db, 'product_logs'),
+      query(collection(db, 'product_logs'), where('storeId', '==', ACTIVE_STORE_ID), limit(50)),
       (snap) => setRawProductLogs(snap.docs.map((d) => ({ id: d.id, ...d.data() }))),
       () => {}
     );
     const unsubMutations = onSnapshot(
-      collection(db, 'stock_mutations'),
+      query(collection(db, 'stock_mutations'), where('storeId', '==', ACTIVE_STORE_ID), limit(50)),
       (snap) => setRawStockMutations(snap.docs.map((d) => ({ id: d.id, ...d.data() }))),
       () => {}
     );
     const unsubMovements = onSnapshot(
-      collection(db, 'stock_movements'),
+      query(collection(db, 'stock_movements'), where('storeId', '==', ACTIVE_STORE_ID), limit(50)),
       (snap) => setRawStockMovements(snap.docs.map((d) => ({ id: d.id, ...d.data() }))),
       () => {}
     );
@@ -1092,6 +1143,34 @@ export const AdminAreaCharts: React.FC<AdminAreaChartsProps> = ({
             <span>Kurva: {curveType === 'smooth' ? 'Halus' : 'Linear'}</span>
           </button>
         </div>
+      </div>
+
+      {/* AI CHART CONTROLS (Requirement 4 & 8: dailyStats context + ON/OFF toggle + Run AI button) */}
+      <div className="bg-zinc-950/80 border border-zinc-800 rounded-2xl p-3.5 space-y-2">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2 text-xs font-bold text-indigo-300">
+            <Sparkles className="w-4 h-4 text-indigo-400" />
+            <span>AI Chart Insight (Sumber: dailyStats Summary Docs)</span>
+          </div>
+          <AiRunControlBar
+            featureLabel="AI Chart"
+            isEnabled={aiChartCtrl.isEnabled}
+            isRunning={aiChartCtrl.isRunning}
+            onToggle={aiChartCtrl.setEnabled}
+            onRun={aiChartCtrl.runAi}
+            compact
+          />
+        </div>
+        {aiChartError && (
+          <div className="text-xs text-rose-400 bg-rose-950/40 border border-rose-800/50 rounded-lg px-3 py-1.5">
+            {aiChartError}
+          </div>
+        )}
+        {aiChartInsight && (
+          <div className="text-xs text-zinc-200 bg-indigo-950/30 border border-indigo-500/30 rounded-xl p-3 leading-relaxed">
+            {aiChartInsight}
+          </div>
+        )}
       </div>
 
       {/* CHART NAVIGATION TABS */}

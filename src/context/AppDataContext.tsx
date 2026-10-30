@@ -13,8 +13,14 @@ import {
   addDoc,
   serverTimestamp,
   enableNetwork,
+  where,
 } from 'firebase/firestore';
-import { db, isDemoModeActive, resetDemoSandbox } from '../firebase';
+import {
+  db,
+  isDemoModeActive,
+  resetDemoSandbox,
+  markFirestoreQuotaExhausted,
+} from '../firebase';
 import { Product, Transaction } from '../types';
 import { ACTIVE_STORE_ID } from '../config/store';
 import { subscribeRealtimeEvent } from '../utils/realtimeSyncBus';
@@ -82,6 +88,10 @@ import {
   PaymentGatewayConfig,
   DEFAULT_PAYMENT_GATEWAY_CONFIG,
 } from '../types/settings';
+import {
+  recordTransactionInDailyStats,
+  getTodayDateYmd,
+} from '../services/dailyStatsService';
 
 function isDummySimulationItem(item: any): boolean {
   if (!item || typeof item !== 'object') return false;
@@ -111,13 +121,13 @@ function getLocalCache<T>(key: string, fallback: T): T {
     const parsedFs = rawFs ? JSON.parse(rawFs) : null;
     const parsedCache = rawCache ? JSON.parse(rawCache) : null;
 
-    if (Array.isArray(parsedFs)) {
+    if (Array.isArray(parsedFs) && parsedFs.length > 0) {
       const cleaned = parsedFs.filter((item) => !isDummySimulationItem(item));
-      return cleaned as unknown as T;
+      if (cleaned.length > 0) return cleaned as unknown as T;
     }
-    if (Array.isArray(parsedCache)) {
+    if (Array.isArray(parsedCache) && parsedCache.length > 0) {
       const cleaned = parsedCache.filter((item) => !isDummySimulationItem(item));
-      return cleaned as unknown as T;
+      if (cleaned.length > 0) return cleaned as unknown as T;
     }
     if (parsedCache && typeof parsedCache === 'object' && !Array.isArray(parsedCache)) {
       return parsedCache as unknown as T;
@@ -131,7 +141,7 @@ function getLocalCache<T>(key: string, fallback: T): T {
 function setLocalCache<T>(key: string, data: T): void {
   try {
     const cleaned = Array.isArray(data)
-      ? data.filter((item) => !isDummySimulationItem(item))
+      ? data.filter((item) => !isDummySimulationItem(item)).slice(0, 120)
       : data;
     const serialized = JSON.stringify(cleaned);
     // In Demo Sandbox mode, never overwrite persistent localStorage cache with sandbox mutations
@@ -140,24 +150,14 @@ function setLocalCache<T>(key: string, data: T): void {
       return;
     }
     localStorage.setItem(`riskcart_cache_${key}`, serialized);
-    localStorage.setItem(`riskcart_fs_${key}`, serialized);
   } catch (e) {
     // Quota of localStorage exceeded or private mode, ignore safely
   }
 }
 
-// Check if error is Firestore quota exceeded
+// Check if error is Firestore quota exceeded (strictly error.code === 'resource-exhausted')
 export function isQuotaExceededError(error: any): boolean {
-  if (!error) return false;
-  const msg = String(error.message || error || '').toLowerCase();
-  const code = String(error.code || '').toLowerCase();
-  return (
-    code.includes('resource-exhausted') ||
-    code.includes('quota-exceeded') ||
-    msg.includes('quota exceeded') ||
-    msg.includes('resource_exhausted') ||
-    msg.includes('resource has been exhausted')
-  );
+  return error?.code === 'resource-exhausted';
 }
 
 export type EcosystemWriteActionType =
@@ -267,24 +267,45 @@ export interface AppDataContextValue {
 const AppDataContext = createContext<AppDataContextValue | null>(null);
 
 export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  // Cache-First initialization from localStorage with fallback to master catalog
   const [products, setProducts] = useState<Product[]>(() =>
-    ARABIAN_FOOD_PRODUCTS as unknown as Product[]
+    getLocalCache<Product[]>('products', ARABIAN_FOOD_PRODUCTS as unknown as Product[])
   );
-  const [categories, setCategories] = useState<string[]>(() => [...ARABIAN_FOOD_CATEGORIES]);
-  const [brands, setBrands] = useState<string[]>(() => [
-    'Al-Barakah Kitchen',
-    'La Bella Italia Kitchen',
-    'Merlion Singapore Kitchen',
-    'Selera Nusantara Kitchen',
-  ]);
-  const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const [customers, setCustomers] = useState<any[]>([]);
-  const [orders, setOrders] = useState<any[]>([]);
-  const [shifts, setShifts] = useState<any[]>([]);
-  const [cashLogs, setCashLogs] = useState<any[]>([]);
-  const [procurements, setProcurements] = useState<any[]>([]);
-  const [brangkasTokoLogs, setBrangkasTokoLogs] = useState<any[]>([]);
-  const [aiTokenLogs, setAiTokenLogs] = useState<any[]>([]);
+  const [categories, setCategories] = useState<string[]>(() =>
+    getLocalCache<string[]>('categories', [...ARABIAN_FOOD_CATEGORIES])
+  );
+  const [brands, setBrands] = useState<string[]>(() =>
+    getLocalCache<string[]>('brands', [
+      'Al-Barakah Kitchen',
+      'La Bella Italia Kitchen',
+      'Merlion Singapore Kitchen',
+      'Selera Nusantara Kitchen',
+    ])
+  );
+  const [transactions, setTransactions] = useState<Transaction[]>(() =>
+    getLocalCache<Transaction[]>('transactions', [])
+  );
+  const [customers, setCustomers] = useState<any[]>(() =>
+    getLocalCache<any[]>('customers', [])
+  );
+  const [orders, setOrders] = useState<any[]>(() =>
+    getLocalCache<any[]>('orders', [])
+  );
+  const [shifts, setShifts] = useState<any[]>(() =>
+    getLocalCache<any[]>('shifts', [])
+  );
+  const [cashLogs, setCashLogs] = useState<any[]>(() =>
+    getLocalCache<any[]>('cash_logs', [])
+  );
+  const [procurements, setProcurements] = useState<any[]>(() =>
+    getLocalCache<any[]>('procurements', [])
+  );
+  const [brangkasTokoLogs, setBrangkasTokoLogs] = useState<any[]>(() =>
+    getLocalCache<any[]>('brangkas_toko_logs', [])
+  );
+  const [aiTokenLogs, setAiTokenLogs] = useState<any[]>(() =>
+    getLocalCache<any[]>('ai_token_logs', [])
+  );
   const [rewardTargets, setRewardTargets] = useState<any[]>(() => {
     try {
       const raw =
@@ -318,7 +339,7 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
     };
 
     const unsubReward = onSnapshot(
-      collection(db, 'reward_targets'),
+      query(collection(db, 'reward_targets'), where('storeId', '==', ACTIVE_STORE_ID), limit(50)),
       (snap) => {
         rewardDocs = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
         syncMergedTargets();
@@ -327,7 +348,7 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
     );
 
     const unsubMarketing = onSnapshot(
-      collection(db, 'marketing_targets'),
+      query(collection(db, 'marketing_targets'), where('storeId', '==', ACTIVE_STORE_ID), limit(50)),
       (snap) => {
         marketingDocs = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
         syncMergedTargets();
@@ -523,9 +544,34 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const handleQuotaDetected = useCallback((err: any, source: string) => {
     if (isQuotaExceededError(err)) {
-      console.warn(`[AppDataContext] Firestore quota exceeded on ${source}. Activating offline cache mode.`);
+      console.warn(
+        `[AppDataContext] Firestore quota exceeded on ${source}. Operating 100% from local cache (IndexedDB/LocalStorage).`
+      );
+      markFirestoreQuotaExhausted(true);
       setIsQuotaExceeded(true);
-      setDismissQuotaBanner(false);
+      // Load from local cache immediately so POS cashier & Admin never halt
+      setProducts((prev) =>
+        prev.length > 0
+          ? prev
+          : getLocalCache<Product[]>('products', ARABIAN_FOOD_PRODUCTS as unknown as Product[])
+      );
+      setCategories((prev) =>
+        prev.length > 0 ? prev : getLocalCache<string[]>('categories', [...ARABIAN_FOOD_CATEGORIES])
+      );
+      setBrands((prev) =>
+        prev.length > 0
+          ? prev
+          : getLocalCache<string[]>('brands', [
+              'Al-Barakah Kitchen',
+              'La Bella Italia Kitchen',
+              'Merlion Singapore Kitchen',
+              'Selera Nusantara Kitchen',
+            ])
+      );
+      setTransactions((prev) =>
+        prev.length > 0 ? prev : getLocalCache<Transaction[]>('transactions', [])
+      );
+      setOrders((prev) => (prev.length > 0 ? prev : getLocalCache<any[]>('orders', [])));
     }
   }, []);
 
@@ -549,86 +595,28 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
     return String(val);
   };
 
-  // 2. Centralized Singleton Listeners for Core Collections (100% Live Cloud Firestore `db`)
+  // 2. Centralized Singleton Listeners for Core Collections (Cache-First + Quota-Safe Cloud Firestore `db`)
   useEffect(() => {
     isListeningRef.current = true;
 
     if (typeof window !== 'undefined') {
-      void restoreMissingMasterDatabase();
       void ensureArabianFoodMasterSynced();
       void autoResyncLocalCachesToServer();
 
-      // Migrate any existing 'Muhammad Irfan' records in localStorage & Firestore database to 'Dede Fajar Kurniawan'
-      void (async () => {
-        try {
-          for (let i = 0; i < localStorage.length; i++) {
-            const key = localStorage.key(i);
-            if (!key) continue;
-            const rawVal = localStorage.getItem(key);
-            if (rawVal && /muhammad\s+irfan/i.test(rawVal)) {
-              localStorage.setItem(
-                key,
-                rawVal.replace(/muhammad\s+irfan/gi, 'Dede Fajar Kurniawan')
-              );
-            }
+      // Local-only normalization (zero extra Firestore getDocs scans to conserve quota)
+      try {
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          if (!key) continue;
+          const rawVal = localStorage.getItem(key);
+          if (rawVal && /muhammad\s+irfan/i.test(rawVal)) {
+            localStorage.setItem(
+              key,
+              rawVal.replace(/muhammad\s+irfan/gi, 'Dede Fajar Kurniawan')
+            );
           }
-        } catch {}
-
-        const targetCols = [
-          'staff',
-          'staff_members',
-          'users',
-          'shifts',
-          'cashier_shifts',
-          'transactions',
-          'orders',
-          'pos_orders',
-          'safe_deposits',
-        ];
-        for (const colName of targetCols) {
-          try {
-            const snap = await getDocs(collection(db, colName));
-            snap.forEach((docSnap) => {
-              const d = docSnap.data();
-              if (!d) return;
-              const patch: Record<string, any> = {};
-              for (const field of ['name', 'cashierName', 'cashier', 'picName', 'staffName']) {
-                if (typeof d[field] === 'string' && /muhammad\s+irfan/i.test(d[field])) {
-                  patch[field] = d[field].replace(/muhammad\s+irfan/gi, 'Dede Fajar Kurniawan');
-                }
-              }
-              if (Object.keys(patch).length > 0) {
-                patch.updatedAt = new Date().toISOString();
-                setDoc(doc(db, colName, docSnap.id), patch, { merge: true }).catch(() => {});
-              }
-            });
-          } catch {}
         }
-
-        for (const subCol of ['staff', 'transactions', 'orders']) {
-          try {
-            const snap = await getDocs(collection(db, 'stores', ACTIVE_STORE_ID, subCol));
-            snap.forEach((docSnap) => {
-              const d = docSnap.data();
-              if (!d) return;
-              const patch: Record<string, any> = {};
-              for (const field of ['name', 'cashierName', 'cashier', 'picName', 'staffName']) {
-                if (typeof d[field] === 'string' && /muhammad\s+irfan/i.test(d[field])) {
-                  patch[field] = d[field].replace(/muhammad\s+irfan/gi, 'Dede Fajar Kurniawan');
-                }
-              }
-              if (Object.keys(patch).length > 0) {
-                patch.updatedAt = new Date().toISOString();
-                setDoc(
-                  doc(db, 'stores', ACTIVE_STORE_ID, subCol, docSnap.id),
-                  patch,
-                  { merge: true }
-                ).catch(() => {});
-              }
-            });
-          } catch {}
-        }
-      })();
+      } catch {}
     }
 
     let unsubProducts: () => void = () => {};
@@ -781,10 +769,10 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
       setLoadingProducts(false);
     };
 
-    // A. LISTENERS: Products (`collection(db, 'products')` merged with `collection(db, 'stores', 'store_001', 'products')`)
+    // A. ONE SHARED LISTENER: Products (`collection(db, 'products')` with where('storeId','==',storeId) + limit(250))
     try {
       unsubProducts = onSnapshot(
-        collection(db, 'products'),
+        query(collection(db, 'products'), where('storeId', '==', ACTIVE_STORE_ID), limit(250)),
         (snapshot) => {
           const nextMap = new Map<string, Product>();
           snapshot.forEach((d) => {
@@ -802,22 +790,6 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
     } catch {
       setLoadingProducts(false);
     }
-
-    try {
-      unsubStoreProducts = onSnapshot(
-        collection(db, 'stores', 'store_001', 'products'),
-        (snapshot) => {
-          const nextMap = new Map<string, Product>();
-          snapshot.forEach((d) => {
-            const p = mapDocToProduct(d.id, d.data());
-            if (p) nextMap.set(d.id, p);
-          });
-          storeProductsMap = nextMap;
-          publishMergedProducts();
-        },
-        () => {}
-      );
-    } catch {}
 
     // B. LISTENERS: Transactions (`collection(db, 'transactions')` + `collection(db, 'stores', 'store_001', 'transactions')` WITHOUT orderBy)
     // & Orders (`collection(db, 'orders')` + `collection(db, 'stores', 'store_001', 'orders')` WITHOUT orderBy)
@@ -947,6 +919,15 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
       const deletedTx = getDeletedSet('transactions');
       const deletedOrders = getDeletedSet('orders');
       const merged = new Map<string, Transaction>();
+
+      // Include locally cached offline transactions first so offline POS sales are never lost
+      const cachedLocalTx = getLocalCache<Transaction[]>('transactions', []);
+      cachedLocalTx.forEach((tx) => {
+        if (tx?.id && !deletedTx.has(tx.id) && !deletedOrders.has(tx.id)) {
+          merged.set(tx.id, tx);
+        }
+      });
+
       storeTxMap.forEach((tx, id) => {
         if (!deletedTx.has(id) && !deletedOrders.has(id)) merged.set(id, tx);
       });
@@ -1008,9 +989,16 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
       setLoadingTransactions(false);
     };
 
+    // B. ONE SHARED LISTENER FOR TODAY'S TRANSACTIONS: default query = today's date range + storeId + limit(50)
+    const todayStartIso = `${getTodayDateYmd()}T00:00:00.000Z`;
     try {
       unsubTransactions = onSnapshot(
-        collection(db, 'transactions'),
+        query(
+          collection(db, 'transactions'),
+          where('storeId', '==', ACTIVE_STORE_ID),
+          where('createdAt', '>=', todayStartIso),
+          limit(50)
+        ),
         (snapshot) => {
           const next = new Map<string, Transaction>();
           snapshot.docs.forEach((d) => {
@@ -1028,25 +1016,10 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
       setLoadingTransactions(false);
     }
 
-    try {
-      unsubStoreTransactions = onSnapshot(
-        collection(db, 'stores', 'store_001', 'transactions'),
-        (snapshot) => {
-          const next = new Map<string, Transaction>();
-          snapshot.docs.forEach((d) => {
-            next.set(d.id, normalizeTxDoc(d.id, d.data()));
-          });
-          storeTxMap = next;
-          publishMergedTransactions();
-        },
-        () => {}
-      );
-    } catch {}
-
-    // C. LISTENERS: Categories (`collection(db, 'categories')`) & Brands (`collection(db, 'brands')`)
+    // C. LISTENERS: Categories (`collection(db, 'categories')`) & Brands (`collection(db, 'brands')`) with storeId + limit(100)
     try {
       unsubCategories = onSnapshot(
-        collection(db, 'categories'),
+        query(collection(db, 'categories'), where('storeId', '==', ACTIVE_STORE_ID), limit(100)),
         (snapshot) => {
           const deletedSet = getDeletedCategorySlugs();
           const uniqueByNormKey = new Map<string, string>();
@@ -1095,7 +1068,7 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
     try {
       unsubBrands = onSnapshot(
-        collection(db, 'brands'),
+        query(collection(db, 'brands'), where('storeId', '==', ACTIVE_STORE_ID), limit(100)),
         (snapshot) => {
           const brandNames = snapshot.docs
             .filter((d) => !d.data().deleted && !isFictitiousDoc(d.id, d.data()))
@@ -1109,10 +1082,10 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
       );
     } catch {}
 
-    // D. LISTENERS: Customers (`collection(db, 'customers')`)
+    // D. LISTENERS: Customers (`collection(db, 'customers')`) with where('storeId','==',storeId) + limit(100)
     try {
       unsubCustomers = onSnapshot(
-        collection(db, 'customers'),
+        query(collection(db, 'customers'), where('storeId', '==', ACTIVE_STORE_ID), limit(100)),
         (snapshot) => {
           const list = snapshot.docs
             .map((d) => ({
@@ -1127,11 +1100,20 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
       );
     } catch {}
 
-    // E. LISTENERS: Orders (`collection(db, 'orders')` merged with `collection(db, 'stores', 'store_001', 'orders')` WITHOUT orderBy)
+    // E. LISTENERS: Orders (`collection(db, 'orders')` merged with `collection(db, 'stores', 'store_001', 'orders')` with limit(50))
     const publishMergedOrders = () => {
       const deletedOrders = getDeletedSet('orders');
       const deletedTx = getDeletedSet('transactions');
       const merged = new Map<string, any>();
+
+      // Preserve locally cached orders so offline creations are retained
+      const cachedLocalOrders = getLocalCache<any[]>('orders', []);
+      cachedLocalOrders.forEach((ord) => {
+        if (ord?.id && !deletedOrders.has(ord.id) && !deletedTx.has(ord.id)) {
+          merged.set(ord.id, ord);
+        }
+      });
+
       storeOrdersMap.forEach((ord, id) => {
         if (!deletedOrders.has(id) && !deletedTx.has(id)) merged.set(id, ord);
       });
@@ -1154,33 +1136,8 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
     };
 
     try {
-      unsubOrders = onSnapshot(
-        collection(db, 'stores', 'store_001', 'orders'),
-        (snapshot) => {
-          const next = new Map<string, any>();
-          snapshot.docs.forEach((d) => {
-            const data = d.data();
-            next.set(d.id, {
-              id: d.id,
-              ...data,
-              createdAt:
-                normalizeDateValue(data.orderDate) ||
-                normalizeDateValue(data.createdAt) ||
-                normalizeDateValue(data.timestamp) ||
-                normalizeDateValue(data.date) ||
-                new Date().toISOString(),
-            });
-          });
-          storeOrdersMap = next;
-          publishMergedOrders();
-        },
-        () => {}
-      );
-    } catch {}
-
-    try {
       unsubRootOrders = onSnapshot(
-        collection(db, 'orders'),
+        query(collection(db, 'orders'), where('storeId', '==', ACTIVE_STORE_ID), limit(50)),
         (snapshot) => {
           const next = new Map<string, any>();
           snapshot.docs.forEach((d) => {
@@ -1199,15 +1156,17 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
           rootOrdersMap = next;
           publishMergedOrders();
         },
-        () => {}
+        (err) => {
+          handleQuotaDetected(err, 'orders');
+        }
       );
     } catch {}
 
-    // 7. Shifts listener (shifts & shift_history)
+    // 7. Shifts listener (shifts with where('storeId','==',storeId) + limit(50))
     let unsubShifts = () => {};
     try {
       unsubShifts = onSnapshot(
-        collection(db, 'shifts'),
+        query(collection(db, 'shifts'), where('storeId', '==', ACTIVE_STORE_ID), limit(50)),
         (snapshot) => {
           const list = snapshot.docs.map((d) => ({
             id: d.id,
@@ -1220,11 +1179,11 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
       );
     } catch {}
 
-    // 8. Cash Logs listener
+    // 8. Cash Logs listener with where('storeId','==',storeId) + limit(50)
     let unsubCashLogs = () => {};
     try {
       unsubCashLogs = onSnapshot(
-        collection(db, 'cash_logs'),
+        query(collection(db, 'cash_logs'), where('storeId', '==', ACTIVE_STORE_ID), limit(50)),
         (snapshot) => {
           const list = snapshot.docs.map((d) => ({
             id: d.id,
@@ -1237,11 +1196,11 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
       );
     } catch {}
 
-    // 9. AI Token Logs listener
+    // 9. AI Token Logs listener with where('storeId','==',storeId) + limit(50)
     let unsubAiLogs = () => {};
     try {
       unsubAiLogs = onSnapshot(
-        query(collection(db, 'ai_logs'), orderBy('ts', 'desc'), limit(60)),
+        query(collection(db, 'ai_logs'), where('storeId', '==', ACTIVE_STORE_ID), limit(50)),
         (snapshot) => {
           const list = snapshot.docs.map((d) => ({
             id: d.id,
@@ -1254,11 +1213,11 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
       );
     } catch {}
 
-    // 10. Procurements (`purchase_orders`) & Brangkas Toko Logs (`brangkas_toko_logs`) listeners
+    // 10. Procurements (`purchase_orders`) & Brangkas Toko Logs (`brangkas_toko_logs`) listeners with where('storeId','==',storeId) + limit(50)
     let unsubProcurements = () => {};
     try {
       unsubProcurements = onSnapshot(
-        collection(db, 'purchase_orders'),
+        query(collection(db, 'purchase_orders'), where('storeId', '==', ACTIVE_STORE_ID), limit(50)),
         (snapshot) => {
           const list = snapshot.docs.map((d) => ({
             id: d.id,
@@ -1274,7 +1233,7 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
     let unsubBrangkasLogs = () => {};
     try {
       unsubBrangkasLogs = onSnapshot(
-        collection(db, 'brangkas_toko_logs'),
+        query(collection(db, 'brangkas_toko_logs'), where('storeId', '==', ACTIVE_STORE_ID), limit(50)),
         (snapshot) => {
           const list = snapshot.docs.map((d) => ({
             id: d.id,
@@ -1397,6 +1356,8 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
       if (ACTIVE_STORE_ID) {
         void syncDocToDatabase(`stores/${ACTIVE_STORE_ID}/transactions`, String(cleanTx.id), cleanTx);
       }
+      // Update summary doc dailyStats/{storeId}_{YYYYMMDD} using increment() when transaction is saved
+      void recordTransactionInDailyStats(cleanTx as any, ACTIVE_STORE_ID);
     }
 
     // Also persist transaction to Cloud SQL in background when authenticated
@@ -1982,16 +1943,7 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
     []
   );
 
-  // One-time auto execution for "hapus transaksi shift hari ini"
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const autoFlagKey = 'riskcart_auto_purge_today_shift_tx_v1';
-    try {
-      if (localStorage.getItem(autoFlagKey) === 'done') return;
-      localStorage.setItem(autoFlagKey, 'done');
-      void purgeTodayShiftTransactions();
-    } catch {}
-  }, [purgeTodayShiftTransactions]);
+  // Auto-purge on page load disabled to prevent full-collection Firestore reads on startup
 
   const updateCategory = useCallback(
     async (categoryId: string, oldName: string, newName: string, icon?: string) => {
@@ -2063,16 +2015,7 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
     []
   );
 
-  // Auto-clean fictitious/seed categories, brands, and products from Firestore on initialization
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const flag = 'riskcart_purge_fictitious_v3';
-    try {
-      if (localStorage.getItem(flag) === 'done') return;
-      localStorage.setItem(flag, 'done');
-      void purgeFictitiousDatabaseEntries({ removeUnusedCategoriesAndBrands: true });
-    } catch {}
-  }, []);
+  // Auto-clean fictitious entries on initialization disabled to avoid full-collection Firestore reads on page load
 
   const contextValue = useMemo<AppDataContextValue>(
     () => ({

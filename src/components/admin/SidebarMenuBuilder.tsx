@@ -42,6 +42,7 @@ import {
 } from '../../services/sidebarMenuService';
 import { GOOGLE_GEMINI_MODELS } from '../../services/aiInstructionStore';
 import { DynamicCustomPage } from '../custom/DynamicCustomPage';
+import { AiRunControlBar, useAiFeatureControl } from '../common/AiRunControlBar';
 
 const AI_STUDIO_MODEL_OPTIONS = [
   {
@@ -290,7 +291,7 @@ export const SidebarMenuBuilder: React.FC = () => {
     reader.readAsDataURL(file);
   };
 
-  const handleGenerateAiPage = async () => {
+  const handleGenerateAiPage = async (signal?: AbortSignal) => {
     if (!aiPrompt.trim() && !uploadedImageBase64) {
       setGenerationError('Masukkan instruksi prompt atau unggah gambar sketsa/wireframe terlebih dahulu.');
       return;
@@ -311,6 +312,7 @@ export const SidebarMenuBuilder: React.FC = () => {
       const response = await fetch('/api/ai-page-builder/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        signal,
         body: JSON.stringify({
           pageTitle: derivedTitle,
           prompt: aiPrompt.trim(),
@@ -335,11 +337,19 @@ export const SidebarMenuBuilder: React.FC = () => {
       }
       showToast('✓ Analisis 3 Lapis (Visual, Data Mapping & Business Logic) berhasil dirancang oleh Gemini AI!');
     } catch (err: any) {
+      if (err?.name === 'AbortError') return;
       setGenerationError(err?.message || 'Terjadi kesalahan saat menghubungi AI Page Builder.');
     } finally {
       setIsGeneratingPage(false);
     }
   };
+
+  const aiPageBuilderControl = useAiFeatureControl({
+    featureKey: 'ai_page_builder',
+    onRun: async (signal) => {
+      await handleGenerateAiPage(signal);
+    },
+  });
 
   const handleSaveAndMountPage = async () => {
     if (!generatedSchema) return;
@@ -692,28 +702,17 @@ export const SidebarMenuBuilder: React.FC = () => {
               )}
 
               {/* Generate Action Button */}
-              <div className="pt-1 flex items-center justify-between gap-3">
+              <div className="pt-1 flex flex-wrap items-center justify-between gap-3">
                 <div className="text-[11px] text-zinc-400">
                   Token pemakaian AI otomatis dicatat ke <code>ai_token_logs</code>.
                 </div>
-                <button
-                  type="button"
-                  onClick={handleGenerateAiPage}
-                  disabled={isGeneratingPage}
-                  className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 via-blue-600 to-emerald-600 hover:from-indigo-500 hover:to-emerald-500 text-white font-black text-xs flex items-center gap-2 shadow-lg shadow-indigo-600/30 cursor-pointer disabled:opacity-50"
-                >
-                  {isGeneratingPage ? (
-                    <>
-                      <RefreshCw className="w-4 h-4 animate-spin" />
-                      <span>Menganalisis 3 Lapis &amp; Menyusun Rumus...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Sparkles className="w-4 h-4" />
-                      <span>Analisis &amp; Bangun Halaman AI</span>
-                    </>
-                  )}
-                </button>
+                <AiRunControlBar
+                  featureLabel="AI Page Builder"
+                  enabled={aiPageBuilderControl.enabled}
+                  isRunning={aiPageBuilderControl.isRunning || isGeneratingPage}
+                  onToggle={aiPageBuilderControl.toggleEnabled}
+                  onRun={() => void aiPageBuilderControl.runNow()}
+                />
               </div>
             </div>
 

@@ -41,6 +41,7 @@ import {
   getGoogleGeminiModelInfo,
   DEFAULT_GOOGLE_GEMINI_MODEL,
 } from '../../services/aiInstructionStore';
+import { checkAndRecordAiCooldown } from '../../utils/aiCooldown';
 
 export interface AIExecutiveFourChartsDashboardProps {
   agentKey?: string;
@@ -656,6 +657,15 @@ export const AIExecutiveFourChartsDashboard: React.FC<AIExecutiveFourChartsDashb
   }, [buildDeterministicInsights]);
 
   const handleRunAIChartAnalysis = useCallback(async () => {
+    const cooldown = checkAndRecordAiCooldown('executive-four-charts');
+    if (!cooldown.allowed) {
+      setAiInsights((prev) => ({
+        ...prev,
+        salesInsight: `${cooldown.message} • ${prev.salesInsight}`,
+      }));
+      return;
+    }
+
     setIsAnalyzingAI(true);
     refreshFirestore();
     const baseInsights = buildDeterministicInsights();
@@ -693,6 +703,7 @@ export const AIExecutiveFourChartsDashboard: React.FC<AIExecutiveFourChartsDashb
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          manualTrigger: true,
           agentKey: activeAgentConfig?.slug || agentKey,
           agentName: activeAgentConfig?.nameId || 'AI Analyst Chart (AI-7)',
           model: activeModelId,
@@ -747,13 +758,6 @@ export const AIExecutiveFourChartsDashboard: React.FC<AIExecutiveFourChartsDashb
     activeModelId,
     language,
   ]);
-
-  // Automatically re-run AI Chart Analysis when user saves custom prompt / model in Edit AI Model & Instructions
-  useEffect(() => {
-    if (agentConfigVersion > 0) {
-      void handleRunAIChartAnalysis();
-    }
-  }, [agentConfigVersion, handleRunAIChartAnalysis]);
 
   const cardSurface = isDark
     ? 'bg-zinc-900/95 border-amber-500/25 text-zinc-100 shadow-xl'

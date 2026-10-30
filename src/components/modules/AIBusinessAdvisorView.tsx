@@ -33,6 +33,9 @@ import {
   addDoc,
   setDoc,
   serverTimestamp,
+  query,
+  where,
+  limit,
 } from 'firebase/firestore';
 import { db } from '../../firebase';
 import { ACTIVE_STORE_ID } from '../../config/store';
@@ -43,7 +46,10 @@ import {
   getActiveAgentModel,
   DEFAULT_GOOGLE_GEMINI_MODEL,
 } from '../../services/aiInstructionStore';
+import { checkAndRecordAiCooldown } from '../../utils/aiCooldown';
 import { ProductBundle, BundleItem } from '../../types';
+import { fetchDailyStatsForAiContext } from '../../services/dailyStatsService';
+import { AiRunControlBar, useAiFeatureControl } from '../common/AiRunControlBar';
 
 interface AIBusinessAdvisorViewProps {
   currencyMode?: 'IDR' | 'USD';
@@ -191,34 +197,14 @@ export const AIBusinessAdvisorView: React.FC<AIBusinessAdvisorViewProps> = ({
     return `Rp ${Math.round(safe).toLocaleString('id-ID')}`;
   };
 
-  // Subscribe to Firestore collections so we always have 100% live data from /dashboard/produk and /dashboard/laporankas
+  // Subscribe to bundles collection with where('storeId', '==', ACTIVE_STORE_ID) + limit(50); products & transactions use shared AppDataContext listener
   useEffect(() => {
-    const unsubRootProd = onSnapshot(
-      collection(db, 'products'),
-      (snap) => {
-        setDirectRootProducts(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
-      },
-      () => {}
-    );
-
-    const unsubStoreProd = onSnapshot(
-      collection(db, 'stores', ACTIVE_STORE_ID, 'products'),
-      (snap) => {
-        setDirectStoreProducts(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
-      },
-      () => {}
-    );
-
-    const unsubStoreTx = onSnapshot(
-      collection(db, 'stores', ACTIVE_STORE_ID, 'transactions'),
-      (snap) => {
-        setStoreSubTransactions(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
-      },
-      () => {}
-    );
-
     const unsubBundles = onSnapshot(
-      collection(db, 'stores', ACTIVE_STORE_ID, 'bundles'),
+      query(
+        collection(db, 'stores', ACTIVE_STORE_ID, 'bundles'),
+        where('storeId', '==', ACTIVE_STORE_ID),
+        limit(50)
+      ),
       (snap) => {
         const list: ProductBundle[] = [];
         snap.forEach((d) => {
@@ -248,9 +234,6 @@ export const AIBusinessAdvisorView: React.FC<AIBusinessAdvisorViewProps> = ({
     );
 
     return () => {
-      unsubRootProd();
-      unsubStoreProd();
-      unsubStoreTx();
       unsubBundles();
     };
   }, []);
@@ -898,12 +881,19 @@ export const AIBusinessAdvisorView: React.FC<AIBusinessAdvisorViewProps> = ({
     }
   };
 
-  // Action: Run Gemini AI Business Advisor Consultation grounded in /dashboard/produk & /dashboard/laporankas
-  const handleRunAiAdvisorAnalysis = async (customTopic?: string) => {
+  // Action: Run Gemini AI Business Advisor Consultation grounded in dailyStats summary docs
+  const handleRunAiAdvisorAnalysis = async (customTopic?: string, signal?: AbortSignal) => {
+    const cooldown = checkAndRecordAiCooldown('business-advisor');
+    if (!cooldown.allowed) {
+      showToast(cooldown.message, 'info');
+      setAiResponseText(cooldown.message);
+      return;
+    }
+
     const promptTopic =
       customTopic ||
       aiPromptInput.trim() ||
-      'Berikan strategi marketing & penjualan komprehensif untuk menghabiskan produk overstock/deadstock dan strategi bundling dengan produk paling menguntungkan berdasarkan data Harga (/dashboard/produk) dan Kolom Penjualan (/dashboard/laporankas).';
+      'Berikan strategi marketing & penjualan komprehensif untuk menghabiskan produk overstock/deadstock dan strategi bundling dengan produk paling menguntungkan berdasarkan ringkasan dailyStats.';
 
     setIsAiGenerating(true);
     try {
@@ -915,7 +905,11 @@ export const AIBusinessAdvisorView: React.FC<AIBusinessAdvisorViewProps> = ({
         getActiveAgentInstruction('business-advisor') ||
         'Anda adalah AI Business Advisor (Penasihat Strategi Bisnis & Marketing Retail) RiskCart.';
 
+      const dailyStatsDocs = await fetchDailyStatsForAiContext(ACTIVE_STORE_ID, 14);
+      if (signal?.aborted) return;
+
       const advisorDataSnapshot = {
+        dailyStatsSummaryDocs: dailyStatsDocs,
         ringkasanToko: {
           totalProdukKatalog: enrichedProducts.length,
           totalStokFisikUnit: totalStockUnits,
@@ -924,27 +918,7 @@ export const AIBusinessAdvisorView: React.FC<AIBusinessAdvisorViewProps> = ({
           totalLabaKotorLaporanKasRp: totalLaporanKasProfit,
           jumlahTransaksiValid: validSalesTransactions.length,
         },
-        dataHargaProdukDanPenjualanLaporanKas: enrichedProducts.map((p) => ({
-          namaProduk: p.name,
-          sku: p.sku,
-          kategori: p.category,
-          stokSaatIni: p.stock,
-          hargaModalProduk: p.costPrice,
-          hargaJualProduk: p.sellingPrice,
-          untungPerUnitRp: p.unitProfit,
-          marginPersen: `${p.marginPercent}%`,
-          nilaiModalTertahanDiStokRp: p.stockAssetValue,
-          terjualQtyLaporanKas: p.soldQty,
-          kolomPenjualanLaporanKasRp: p.salesRevenue,
-          labaPenjualanAktualRp: p.salesProfit,
-          lokasiRakSaatIni: p.shelfLocation,
-          statusKlasifikasi: [
-            p.isMostProfitable ? 'PALING_MENGUNTUNGKAN' : null,
-            p.isOverstock ? 'OVERSTOCK_STOK_BANYAK' : null,
-            p.isDeadstock ? 'DEADSTOCK_KURANG_LAKU' : null,
-          ].filter(Boolean),
-        })),
-        rekomendasiBundlingOtomatis: autoBundleRecommendations.map((b) => ({
+        rekomendasiBundlingOtomatis: autoBundleRecommendations.slice(0, 6).map((b) => ({
           namaPaket: b.bundleName,
           kombinasi: `${b.profitableQty}x ${b.profitableProduct.name} (Untung Tinggi) + ${b.targetQty}x ${b.targetProduct.name} (Stok Banyak/Deadstock)`,
           totalModal: b.totalCostPrice,
@@ -955,13 +929,13 @@ export const AIBusinessAdvisorView: React.FC<AIBusinessAdvisorViewProps> = ({
       };
 
       const fullQuery = `ATURAN WAJIB PENASIHAT BISNIS:
-1. Anda WAJIB menggunakan HANYA data produk, Harga Modal, Harga Jual (dari /dashboard/produk), dan angka Kolom Penjualan (dari /dashboard/laporankas) yang dilampirkan pada JSON di bawah ini. DILARANG mengarang nama produk di luar database.
+1. Anda WAJIB menggunakan HANYA data ringkasan dailyStats dan metrik bundling yang dilampirkan pada JSON di bawah ini.
 2. Jawab dengan terstruktur mencakup:
    - Strategi Menjual Cepat Produk yang Stoknya Masih Banyak (Overstock)
    - Trik Penjualan & Bundling Berbasis Data (Produk Paling Menguntungkan + Produk Overstock) beserta hitungan Harga Modal, Harga Bundling, dan Estimasi Untung
    - Strategi Penempatan Strategis (Eye-Level, Meja Kasir, Etalase PWA) untuk Produk Deadstock agar langsung terlihat pembeli.
 
-DATA AKTUAL FIREBASE (/dashboard/produk & /dashboard/laporankas):
+DATA RINGKASAN DAILYSTATS & BUNDLING:
 ${JSON.stringify(advisorDataSnapshot, null, 2)}
 
 PERTANYAAN / FOKUS ANALISIS:
@@ -970,7 +944,9 @@ ${promptTopic}`;
       const res = await fetch('/api/ai/agent-run', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        signal,
         body: JSON.stringify({
+          manualTrigger: true,
           agentKey: 'business-advisor',
           agentName: 'AI Business Advisor (Penasihat Bisnis)',
           systemPrompt: systemInstruction,
@@ -987,8 +963,8 @@ ${promptTopic}`;
       } else {
         throw new Error('Empty AI response');
       }
-    } catch {
-      // Deterministic, 100% real-data fallback report if offline or API busy
+    } catch (err: any) {
+      if (err?.name === 'AbortError') return;
       const topOver = overstockProducts[0];
       const topProfit = mostProfitableProducts[0];
       const topDead = deadstockProducts[0];
@@ -1021,6 +997,13 @@ ${promptTopic}`;
       setIsAiGenerating(false);
     }
   };
+
+  const aiAdvisorControl = useAiFeatureControl({
+    featureKey: 'ai_business_advisor',
+    onRun: async (signal) => {
+      await handleRunAiAdvisorAnalysis(undefined, signal);
+    },
+  });
 
   // Filtered matrix rows
   const filteredMatrixProducts = useMemo(() => {
@@ -2131,7 +2114,14 @@ ${promptTopic}`;
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-1.5">
+          <div className="flex flex-wrap items-center gap-2">
+            <AiRunControlBar
+              featureLabel="AI Advisor"
+              enabled={aiAdvisorControl.enabled}
+              isRunning={aiAdvisorControl.isRunning || isAiGenerating}
+              onToggle={aiAdvisorControl.toggleEnabled}
+              onRun={() => void aiAdvisorControl.runNow()}
+            />
             {[
               'Strategi Habiskan Produk Stok Terbanyak Minggu Ini',
               'Rekomendasi Bundling Paling Untung + Deadstock',
@@ -2140,11 +2130,12 @@ ${promptTopic}`;
               <button
                 key={quickPrompt}
                 type="button"
+                disabled={aiAdvisorControl.isRunning || isAiGenerating}
                 onClick={() => {
                   setAiPromptInput(quickPrompt);
                   void handleRunAiAdvisorAnalysis(quickPrompt);
                 }}
-                className="px-2.5 py-1 rounded-lg bg-zinc-950 hover:bg-amber-500/20 border border-amber-500/30 text-amber-200 text-[11px] font-semibold transition cursor-pointer"
+                className="px-2.5 py-1 rounded-lg bg-zinc-950 hover:bg-amber-500/20 disabled:opacity-50 border border-amber-500/30 text-amber-200 text-[11px] font-semibold transition cursor-pointer"
               >
                 {quickPrompt}
               </button>
@@ -2157,18 +2148,18 @@ ${promptTopic}`;
             type="text"
             value={aiPromptInput}
             onChange={(e) => setAiPromptInput(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && void handleRunAiAdvisorAnalysis()}
+            onKeyDown={(e) => e.key === 'Enter' && void aiAdvisorControl.runNow()}
             placeholder="Tanyakan strategi penjualan, paket bundling, atau penataan produk deadstock..."
             className="flex-1 bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2.5 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-amber-400"
           />
           <button
             type="button"
-            disabled={isAiGenerating}
-            onClick={() => void handleRunAiAdvisorAnalysis()}
+            disabled={isAiGenerating || aiAdvisorControl.isRunning}
+            onClick={() => void aiAdvisorControl.runNow()}
             className="px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-zinc-950 font-black text-xs flex items-center justify-center gap-2 cursor-pointer transition shrink-0"
           >
             <Send className="w-3.5 h-3.5" />
-            <span>{isAiGenerating ? 'Menganalisis Data...' : 'Minta Saran AI'}</span>
+            <span>{isAiGenerating || aiAdvisorControl.isRunning ? 'Running AI...' : 'Run AI'}</span>
           </button>
         </div>
 

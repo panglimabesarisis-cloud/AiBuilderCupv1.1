@@ -1,9 +1,16 @@
 import React from 'react';
 import { Link, LinkProps, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import type { ProductCartonTabType } from './components/common/Sidebar';
-import { useAccessControl, hasValidAuthSession } from './context/AccessControlContext';
+import {
+  useAccessControl,
+  hasValidAuthSession,
+  isWaitersDirectRoute,
+  readVerifiedAuthSession,
+} from './context/AccessControlContext';
 
 export interface ResolvedAppRoute {
+  view?: 'landing' | 'pos' | 'admin' | 'pwa';
+  posSubTab?: string;
   activeTab: string;
   activeSubModule: string;
   productSubTab: ProductCartonTabType;
@@ -19,6 +26,95 @@ export interface ResolvedAppRoute {
   orderId?: string;
   entityId?: string;
   actionMode: 'list' | 'tambah' | 'edit' | 'detail';
+}
+
+export interface PathToViewResult {
+  view: 'landing' | 'pos' | 'admin' | 'pwa';
+  subModule: string | null;
+  posSubTab: string;
+}
+
+/**
+ * Maps a browser pathname to the high-level view ('landing' | 'pos' | 'admin' | 'pwa'),
+ * subModule, and posSubTab without forcing /pos to /dashboard.
+ */
+export function pathToView(pathname: string): PathToViewResult {
+  const cleanPath = (pathname || '/').replace(/\/+$/, '') || '/';
+
+  if (
+    cleanPath === '/pos' ||
+    cleanPath.startsWith('/pos/') ||
+    cleanPath === '/dashboard/pos' ||
+    cleanPath.startsWith('/dashboard/pos/') ||
+    cleanPath === '/waiters' ||
+    cleanPath.startsWith('/waiters/') ||
+    cleanPath === '/waiter' ||
+    cleanPath.startsWith('/waiter/')
+  ) {
+    const isWaiterPath = cleanPath.startsWith('/waiter');
+    const normalized = cleanPath
+      .replace('/dashboard/pos', '/pos')
+      .replace(/^\/waiters?(?:\/pos)?/, '/pos');
+    const parts = normalized.split('/').filter(Boolean);
+    const tab = parts[1] || 'kasir';
+    return { view: 'pos', subModule: isWaiterPath ? 'waiter' : null, posSubTab: tab };
+  }
+
+  if (
+    cleanPath === '/order-pelanggan' ||
+    cleanPath.startsWith('/order-pelanggan/') ||
+    cleanPath === '/client-pwa' ||
+    cleanPath.startsWith('/client-pwa/') ||
+    cleanPath === '/pwa' ||
+    cleanPath.startsWith('/pwa/') ||
+    cleanPath === '/clienthome' ||
+    cleanPath.startsWith('/clienthome/')
+  ) {
+    return { view: 'pwa', subModule: null, posSubTab: 'kasir' };
+  }
+
+  if (cleanPath === '/beranda' || cleanPath === '/landing' || cleanPath === '/dashboard/beranda') {
+    return { view: 'landing', subModule: null, posSubTab: 'kasir' };
+  }
+
+  const resolved = resolveRouteFromLocation(cleanPath, '');
+  if (resolved.activeTab === 'pos_machine' || resolved.activeTab === 'pos') {
+    return { view: 'pos', subModule: null, posSubTab: resolved.posSubTab || 'kasir' };
+  }
+  if (resolved.activeTab === 'landing') {
+    return { view: 'landing', subModule: null, posSubTab: 'kasir' };
+  }
+
+  return {
+    view: 'admin',
+    subModule: resolved.activeSubModule || null,
+    posSubTab: 'kasir',
+  };
+}
+
+/**
+ * Maps view ('landing' | 'pos' | 'admin' | 'pwa'), subModule, and posSubTab back to a clean URL path.
+ * Ensures view === 'pos' always returns '/pos' (or '/pos/:posSubTab'), never '/dashboard'.
+ */
+export function viewToPath(
+  view: 'landing' | 'pos' | 'admin' | 'pwa' | string,
+  subModule?: string | null,
+  posSubTab?: string
+): string {
+  if (view === 'pos' || view === 'pos_machine') {
+    const cleanTab = (posSubTab || 'kasir').trim();
+    return cleanTab && cleanTab !== 'kasir' ? `/pos/${cleanTab}` : '/pos';
+  }
+  if (view === 'pwa' || view === 'order-pelanggan' || view === 'client-pwa') {
+    return '/client-pwa';
+  }
+  if (view === 'landing') {
+    return '/dashboard/beranda';
+  }
+  if (subModule) {
+    return getPathForTab(view === 'admin' ? 'admin_dashboard' : view, subModule);
+  }
+  return '/dashboard';
 }
 
 /**
@@ -40,14 +136,17 @@ export function buildUrlWithSearch(
   const stripped = (rawPath || '/').replace(/^\/en(?=\/|$)/i, '');
   let cleanPathname = stripped.startsWith('/') ? stripped : `/${stripped}`;
 
-  // Auto-prefix '/dashboard' for any admin path that does not already start with /dashboard, /client-pwa, /pwa, /clienthome, /waiters, or /kitchen
+  // Auto-prefix '/dashboard' for any admin path that does not already start with /pos, /order-pelanggan, /login, /dashboard, /client-pwa, /pwa, /clienthome, /waiter, /waiters, or /kitchen
   if (
     cleanPathname !== '/' &&
+    !cleanPathname.startsWith('/pos') &&
+    !cleanPathname.startsWith('/order-pelanggan') &&
+    !cleanPathname.startsWith('/login') &&
     !cleanPathname.startsWith('/dashboard') &&
     !cleanPathname.startsWith('/client-pwa') &&
     !cleanPathname.startsWith('/pwa') &&
     !cleanPathname.startsWith('/clienthome') &&
-    !cleanPathname.startsWith('/waiters') &&
+    !cleanPathname.startsWith('/waiter') &&
     !cleanPathname.startsWith('/kitchen')
   ) {
     cleanPathname = `/dashboard${cleanPathname}`;
@@ -61,7 +160,7 @@ export function buildUrlWithSearch(
   ) {
     mergedParams.delete('agent');
   }
-  if (!targetQuery && !cleanPathname.startsWith('/waiters')) {
+  if (!targetQuery && !cleanPathname.startsWith('/waiter')) {
     mergedParams.delete('waiter');
     mergedParams.delete('tableId');
     mergedParams.delete('tableNumber');
@@ -82,8 +181,11 @@ export function buildUrlWithSearch(
  */
 export function getPathForTab(tabId: string, subModule?: string): string {
   switch (tabId) {
+    case 'pos':
     case 'pos_machine':
-      return subModule === 'waiter' ? '/waiters/pos' : '/dashboard/pos';
+      if (subModule === 'waiter') return '/waiters/pos';
+      if (subModule && subModule !== 'kasir' && subModule !== 'pos_machine') return `/pos/${subModule}`;
+      return '/pos';
     case 'waiters':
     case 'waiter':
       return '/waiters';
@@ -495,32 +597,37 @@ export function resolveRouteFromLocation(pathname: string, search: string = ''):
     };
   }
 
-  // 1. POS Machine
+  // 1. POS Machine (/pos, /pos/*, /dashboard/pos, /dashboard/pos/*, /pos-machine, /kasir, /terminal-kasir)
   if (first === 'pos' || first === 'pos-machine' || first === 'kasir' || first === 'terminal-kasir') {
     const isWaiterPos =
       searchParams.get('waiter') === '1' ||
       second === 'waiter' ||
       second === 'waiters';
+    const posSub = second || 'kasir';
     return {
       ...base,
+      view: 'pos',
+      posSubTab: posSub,
       activeTab: 'pos_machine',
       activeSubModule: isWaiterPos ? 'waiter' : base.activeSubModule,
       entityId: rawSegments[1] ? decodeURIComponent(rawSegments[1]) : undefined,
     };
   }
 
-  // 1b. Dedicated Waiters Route (/waiters & /waiters/pos)
+  // 1b. Dedicated Waiters Route (/waiters & /waiters/pos) -> Directly opens POS Cashier Terminal
   if (first === 'waiters' || first === 'waiter' || first === 'pelayan') {
-    if (second === 'pos' || second === 'order' || second === 'pesanan') {
+    if (second === 'meja' || second === 'layout' || second === 'denah') {
       return {
         ...base,
-        activeTab: 'pos_machine',
-        activeSubModule: 'waiter',
+        activeTab: 'waiters',
       };
     }
     return {
       ...base,
-      activeTab: 'waiters',
+      view: 'pos',
+      posSubTab: second && second !== 'pos' ? second : 'kasir',
+      activeTab: 'pos_machine',
+      activeSubModule: 'waiter',
     };
   }
 
@@ -1508,6 +1615,8 @@ export function useAppNavigation() {
 
   return {
     route,
+    activeView: route.view || (route.activeTab === 'pos_machine' ? 'pos' : route.activeTab === 'landing' ? 'landing' : 'admin'),
+    posSubTab: route.posSubTab || 'kasir',
     activeTab: route.activeTab,
     activeSubModule: route.activeSubModule,
     setActiveTab,
@@ -1544,6 +1653,12 @@ export const AppLink: React.FC<AppLinkProps> = ({ to, children, ...rest }) => {
 export const ProtectedRoute: React.FC<{ children: React.ReactElement }> = ({ children }) => {
   const { isAuthenticated } = useAccessControl();
   const location = useLocation();
+  const isWaiterRoute = isWaitersDirectRoute(location.pathname, location.search);
+  if (isWaiterRoute) {
+    // Ensure auto-session is initialized in storage when visiting /waiters directly
+    readVerifiedAuthSession();
+    return children;
+  }
   const validSession = isAuthenticated && hasValidAuthSession();
 
   if (!validSession) {
@@ -1555,19 +1670,53 @@ export const ProtectedRoute: React.FC<{ children: React.ReactElement }> = ({ chi
 export const RequireAuth = ProtectedRoute;
 
 export const PublicOnlyRoute: React.FC<{ children: React.ReactElement }> = ({ children }) => {
-  const { isAuthenticated } = useAccessControl();
+  const { isAuthenticated, activeRoleId, activeCashier } = useAccessControl();
+  const location = useLocation();
   const validSession = isAuthenticated && hasValidAuthSession();
 
   if (validSession) {
+    const fromPath = (location.state as any)?.from?.pathname;
+    const roleLower = String(activeRoleId || activeCashier?.role || '').toLowerCase();
+    const emailLower = String(activeCashier?.email || '').toLowerCase();
+    const isCashier =
+      roleLower === 'cashier' ||
+      roleLower === 'kasir' ||
+      emailLower.includes('kasir');
+
+    if (
+      typeof fromPath === 'string' &&
+      (fromPath === '/pos' ||
+        fromPath.startsWith('/pos/') ||
+        fromPath === '/dashboard/pos' ||
+        fromPath.startsWith('/dashboard/pos/'))
+    ) {
+      return <Navigate to="/pos" replace />;
+    }
+    if (isCashier) {
+      return <Navigate to="/pos" replace />;
+    }
+    if (typeof fromPath === 'string' && fromPath.startsWith('/') && fromPath !== '/login' && fromPath !== '/') {
+      return <Navigate to={fromPath} replace />;
+    }
     return <Navigate to="/dashboard" replace />;
   }
   return children;
 };
 
 export const RootRedirect: React.FC = () => {
-  const { isAuthenticated } = useAccessControl();
+  const { isAuthenticated, activeRoleId, activeCashier } = useAccessControl();
   const validSession = isAuthenticated && hasValidAuthSession();
-  return <Navigate to={validSession ? '/dashboard' : '/login'} replace />;
+  if (!validSession) {
+    return <Navigate to="/login" replace />;
+  }
+  const roleLower = String(activeRoleId || activeCashier?.role || '').toLowerCase();
+  const emailLower = String(activeCashier?.email || '').toLowerCase();
+  const isCashier =
+    roleLower === 'cashier' ||
+    roleLower === 'kasir' ||
+    emailLower.includes('kasir');
+  return <Navigate to={isCashier ? '/pos' : '/dashboard'} replace />;
 };
+
 
 

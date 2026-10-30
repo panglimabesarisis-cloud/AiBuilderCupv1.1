@@ -1,6 +1,19 @@
 import { initializeApp, getApps } from 'firebase-admin/app';
 import { getAuth, type DecodedIdToken } from 'firebase-admin/auth';
-import firebaseConfig from '../../firebase-applet-config.json';
+import { existsSync, readFileSync } from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+let firebaseConfig: Record<string, any> = {};
+try {
+  const cfgPath = path.resolve(__dirname, '../../firebase-applet-config.json');
+  if (existsSync(cfgPath)) {
+    firebaseConfig = JSON.parse(readFileSync(cfgPath, 'utf-8'));
+  }
+} catch {}
 
 const resolvedProjectId =
   process.env.VITE_FIREBASE_PROJECT_ID ||

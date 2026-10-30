@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { collection, onSnapshot, doc, updateDoc, query, limit } from 'firebase/firestore';
+import { collection, onSnapshot, doc, updateDoc, query, limit, where } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../../firebase';
+import { ACTIVE_STORE_ID } from '../../config/store';
 import { FraudLog, Transaction } from '../../types';
 import {
   ShieldAlert,
@@ -27,6 +28,8 @@ import {
 } from 'lucide-react';
 import { useLanguage } from '../../context/LanguageContext';
 import { useAppData } from '../../context/AppDataContext';
+import { checkAndRecordAiCooldown } from '../../utils/aiCooldown';
+import { AiRunControlBar, useAiFeatureControl } from '../common/AiRunControlBar';
 
 export interface CartVoidEvidenceLog {
   id: string;
@@ -79,7 +82,11 @@ export const AntiFraudInspector: React.FC = () => {
   const [sandboxVelocity, setSandboxVelocity] = useState<number>(0);
 
   useEffect(() => {
-    const qLogs = query(collection(db, 'fraud_logs'), limit(30));
+    const qLogs = query(
+      collection(db, 'fraud_logs'),
+      where('storeId', '==', ACTIVE_STORE_ID),
+      limit(30)
+    );
     const unsub = onSnapshot(
       qLogs,
       (snapshot) => {
@@ -136,7 +143,11 @@ export const AntiFraudInspector: React.FC = () => {
     mergeAndPublishVoidLogs();
 
     const unsubAudit = onSnapshot(
-      query(collection(db, 'audit_logs'), limit(60)),
+      query(
+        collection(db, 'audit_logs'),
+        where('storeId', '==', ACTIVE_STORE_ID),
+        limit(30)
+      ),
       (snap) => {
         const list: CartVoidEvidenceLog[] = [];
         snap.forEach((d) => {
@@ -156,7 +167,11 @@ export const AntiFraudInspector: React.FC = () => {
     );
 
     const unsubProdLogs = onSnapshot(
-      query(collection(db, 'product_logs'), limit(60)),
+      query(
+        collection(db, 'product_logs'),
+        where('storeId', '==', ACTIVE_STORE_ID),
+        limit(30)
+      ),
       (snap) => {
         const list: CartVoidEvidenceLog[] = [];
         snap.forEach((d) => {
@@ -185,9 +200,19 @@ export const AntiFraudInspector: React.FC = () => {
     };
   }, []);
 
-  const handleRunAiAudit = async () => {
+  const handleRunAiAudit = async (signal?: AbortSignal) => {
     if (products.length === 0 && transactions.length === 0) {
       setAuditResult(null);
+      return;
+    }
+    const cooldown = checkAndRecordAiCooldown('fraud-audit');
+    if (!cooldown.allowed) {
+      setAuditResult({
+        overallHealth: 'warning',
+        summary: cooldown.message,
+        suspiciousPatterns: [],
+        actionableRecommendations: ['Tunggu hingga cooldown 30 detik selesai sebelum menjalankan audit AI ulang.'],
+      } as any);
       return;
     }
     setIsAuditing(true);
@@ -232,7 +257,9 @@ export const AntiFraudInspector: React.FC = () => {
       const res = await fetch('/api/ai/fraud-audit', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        signal,
         body: JSON.stringify({
+          manualTrigger: true,
           transactions: liveTxBatch,
           inventoryVariances: varianceLogs,
           timeRange: 'last_30_records',
@@ -243,12 +270,20 @@ export const AntiFraudInspector: React.FC = () => {
 
       const data = await res.json();
       setAuditResult(data);
-    } catch (error) {
+    } catch (error: any) {
+      if (error?.name === 'AbortError') return;
       console.warn('Audit notice:', error);
     } finally {
       setIsAuditing(false);
     }
   };
+
+  const aiAntiFraudControl = useAiFeatureControl({
+    featureKey: 'ai_anti_fraud_inspector',
+    onRun: async (signal) => {
+      await handleRunAiAudit(signal);
+    },
+  });
 
   const handleResolveLog = async (logId: string) => {
     try {
@@ -614,23 +649,13 @@ export const AntiFraudInspector: React.FC = () => {
             </p>
           </div>
 
-          <button
-            onClick={handleRunAiAudit}
-            disabled={isAuditing}
-            className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs transition shadow-lg shadow-rose-600/20"
-          >
-            {isAuditing ? (
-              <>
-                <RefreshCw className="w-4 h-4 animate-spin" />
-                Analyzing with Gemini...
-              </>
-            ) : (
-              <>
-                <Play className="w-4 h-4 fill-white" />
-                Run AI Forensic Audit
-              </>
-            )}
-          </button>
+          <AiRunControlBar
+            featureLabel="AI Preventif Anti-Fraud"
+            enabled={aiAntiFraudControl.enabled}
+            isRunning={aiAntiFraudControl.isRunning || isAuditing}
+            onToggle={aiAntiFraudControl.toggleEnabled}
+            onRun={() => void aiAntiFraudControl.runNow()}
+          />
         </div>
 
         {/* Sandbox Sliders / Inputs */}

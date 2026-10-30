@@ -475,7 +475,6 @@ function normalizeGeminiModelId(rawModel?: string, fallbackModel?: string): stri
 }
 
 export function loadGlobalDefaultAIModel(): string {
-  initFirestoreAIAgentsSync();
   if (globalDefaultModelCache) return globalDefaultModelCache;
   try {
     const raw = localStorage.getItem(GLOBAL_MODEL_STORAGE_KEY);
@@ -874,7 +873,6 @@ function loadFromLocalStorageOnly(): AIAgentInstructionConfig[] {
 }
 
 export function loadAIAgentInstructions(): AIAgentInstructionConfig[] {
-  initFirestoreAIAgentsSync();
   if (memoryCache) return memoryCache;
   const loaded = loadFromLocalStorageOnly();
   memoryCache = loaded;
@@ -1712,18 +1710,39 @@ export function buildRealFirestoreContextJson(data: {
     }));
 
   const summaryPayload = {
-    modulAcuanSinkronisasi: data.referenceModules || 'Seluruh Ekosistem Database RiskCart',
+    modulAcuanSinkronisasi: data.referenceModules || 'Seluruh Ekosistem Database RiskCart (via dailyStats Summary Docs)',
+    dailyStatsSummaryDocs: Array.isArray(data.dailyStats) ? data.dailyStats : [],
     ringkasanDatabaseRealTime: {
+      sumberKonteksUtama: 'dailyStats/{storeId}_{YYYYMMDD}',
+      jumlahHariRingkasanDailyStats: Array.isArray(data.dailyStats) ? data.dailyStats.length : 0,
       jumlahProdukKatalog: products.length,
       jumlahProdukMarginTipis: thinMarginProducts.length,
       jumlahBahanBaku: rawMaterialSummary.length,
-      jumlahTransaksiTotal: transactions.length,
-      totalOmzetPOS,
-      totalProfitPOS,
+      jumlahTransaksiTotal:
+        Array.isArray(data.dailyStats) && data.dailyStats.length > 0
+          ? data.dailyStats.reduce((s: number, d: any) => s + Number(d.txCount || 0), 0)
+          : transactions.length,
+      totalOmzetPOS:
+        Array.isArray(data.dailyStats) && data.dailyStats.length > 0
+          ? data.dailyStats.reduce((s: number, d: any) => s + Number(d.totalRevenue || 0), 0)
+          : totalOmzetPOS,
+      totalProfitPOS:
+        Array.isArray(data.dailyStats) && data.dailyStats.length > 0
+          ? data.dailyStats.reduce((s: number, d: any) => s + Number(d.totalProfit || 0), 0)
+          : totalProfitPOS,
       breakdownPembayaran: {
-        tunai: totalTunai,
-        qrisDanDigital: totalQRIS,
-        piutangPelanggan: totalPiutang,
+        tunai:
+          Array.isArray(data.dailyStats) && data.dailyStats.length > 0
+            ? data.dailyStats.reduce((s: number, d: any) => s + Number(d.cashRevenue || 0), 0)
+            : totalTunai,
+        qrisDanDigital:
+          Array.isArray(data.dailyStats) && data.dailyStats.length > 0
+            ? data.dailyStats.reduce((s: number, d: any) => s + Number(d.qrisRevenue || 0), 0)
+            : totalQRIS,
+        piutangPelanggan:
+          Array.isArray(data.dailyStats) && data.dailyStats.length > 0
+            ? data.dailyStats.reduce((s: number, d: any) => s + Number(d.debtAmount || 0), 0)
+            : totalPiutang,
       },
       saldoBrankasModal: computedBrankasModal,
       totalHutangSupplierPO,

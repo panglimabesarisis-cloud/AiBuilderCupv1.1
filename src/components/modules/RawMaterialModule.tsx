@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useRef } from 'react';
+import { checkAndRecordAiCooldown } from '../../utils/aiCooldown';
 import {
   Boxes,
   Plus,
@@ -72,6 +73,7 @@ import {
   addStorageLocation,
 } from '../../services/masterDataService';
 import { saveProductDocToAllPaths } from '../../services/productService';
+import { AiRunControlBar, useAiFeatureControl } from '../common/AiRunControlBar';
 
 export type RawMaterialSubRoute =
   | 'list'
@@ -754,13 +756,21 @@ export const RawMaterialModule: React.FC<RawMaterialModuleProps> = ({
     }>;
   } | null>(null);
 
-  const handleRunAiBahanBaku = async (customQuestion?: string) => {
+  const handleRunAiBahanBaku = async (customQuestion?: string, signal?: AbortSignal) => {
+    const cooldown = checkAndRecordAiCooldown('raw-materials-advisor');
+    if (!cooldown.allowed) {
+      showFlash(cooldown.message, 'error');
+      return;
+    }
+
     setAiLoading(true);
     try {
       const res = await fetch('/api/ai/raw-materials-advisor', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        signal,
         body: JSON.stringify({
+          manualTrigger: true,
           question: customQuestion || aiPrompt,
           rawMaterials: rawMaterials.map((r) => ({
             id: r.id,
@@ -788,11 +798,19 @@ export const RawMaterialModule: React.FC<RawMaterialModuleProps> = ({
         setAiReport(data.report);
       }
     } catch (err: any) {
+      if (err?.name === 'AbortError') return;
       showFlash('Gagal memuat analisis AI Bahan Baku.', 'error');
     } finally {
       setAiLoading(false);
     }
   };
+
+  const aiBahanBakuControl = useAiFeatureControl({
+    featureKey: 'ai_raw_materials_controller',
+    onRun: async (signal) => {
+      await handleRunAiBahanBaku(undefined, signal);
+    },
+  });
 
   const handleCreateAutoPrFromAi = async () => {
     if (!aiReport?.recommendations || aiReport.recommendations.length === 0) return;
@@ -2938,19 +2956,13 @@ export const RawMaterialModule: React.FC<RawMaterialModuleProps> = ({
                 </div>
               </div>
 
-              <button
-                type="button"
-                disabled={aiLoading}
-                onClick={() => handleRunAiBahanBaku()}
-                className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white text-xs font-extrabold flex items-center gap-2 cursor-pointer shadow-lg disabled:opacity-50"
-              >
-                <Sparkles className="w-4 h-4" />
-                <span>
-                  {aiLoading
-                    ? 'Menganalisis Gudang Bahan Baku & BOM...'
-                    : 'Jalankan Audit AI Bahan Baku Sekarang'}
-                </span>
-              </button>
+              <AiRunControlBar
+                featureLabel="AI Bahan Baku"
+                enabled={aiBahanBakuControl.enabled}
+                isRunning={aiBahanBakuControl.isRunning || aiLoading}
+                onToggle={aiBahanBakuControl.toggleEnabled}
+                onRun={() => void aiBahanBakuControl.runNow()}
+              />
             </div>
 
             {/* Live BOM Production Capacity Matrix (Always Live from Firestore) */}

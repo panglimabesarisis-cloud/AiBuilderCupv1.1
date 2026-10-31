@@ -135,14 +135,8 @@ const readEnv = (viteKey: string, fallbackKey?: string): string => {
   return '';
 };
 
-const DEFAULT_RUNTIME_DB_ID = 'ai-studio-remixaibuildercu-48df8cb9-94a3-45af-9c6f-c3ed1e47e70c';
-
 export const normalizeFirestoreDbId = (rawDbId?: string): string => {
-  const clean = String(rawDbId || '').trim();
-  if (!clean || clean === 'ai-studio-remixaibuildercu-48dfb619-9da3-46af-9c6f-c3edfe47e70c') {
-    return DEFAULT_RUNTIME_DB_ID;
-  }
-  return clean;
+  return String(rawDbId || '').trim();
 };
 
 const resolvedApiKey =
@@ -156,23 +150,23 @@ export const firebaseConfig = {
   authDomain:
     readEnv('VITE_FIREBASE_AUTH_DOMAIN', 'FIREBASE_AUTH_DOMAIN') ||
     appletConfig.authDomain ||
-    'aibuildercupv1-riskcart.firebaseapp.com',
+    '',
   projectId:
     readEnv('VITE_FIREBASE_PROJECT_ID', 'FIREBASE_PROJECT_ID') ||
     appletConfig.projectId ||
-    'aibuildercupv1-riskcart',
+    '',
   storageBucket:
     readEnv('VITE_FIREBASE_STORAGE_BUCKET', 'FIREBASE_STORAGE_BUCKET') ||
     appletConfig.storageBucket ||
-    'aibuildercupv1-riskcart.firebasestorage.app',
+    '',
   messagingSenderId:
     readEnv('VITE_FIREBASE_MESSAGING_SENDER_ID', 'FIREBASE_MESSAGING_SENDER_ID') ||
     appletConfig.messagingSenderId ||
-    '176423783758',
+    '',
   appId:
     readEnv('VITE_FIREBASE_APP_ID', 'FIREBASE_APP_ID') ||
     appletConfig.appId ||
-    '1:176423783758:web:87bdb0de824ef162e0621f',
+    '',
   measurementId:
     readEnv('VITE_FIREBASE_MEASUREMENT_ID', 'FIREBASE_MEASUREMENT_ID') ||
     appletConfig.measurementId ||
@@ -184,7 +178,7 @@ export const firebaseConfig = {
   oAuthClientId:
     readEnv('VITE_FIREBASE_OAUTH_CLIENT_ID', 'FIREBASE_OAUTH_CLIENT_ID') ||
     (appletConfig as any).oAuthClientId ||
-    '176423783758-scsj802l7fti2u079acogieedj9k18e6.apps.googleusercontent.com',
+    '',
   recaptchaSiteKey:
     readEnv('VITE_FIREBASE_RECAPTCHA_SITE_KEY', 'FIREBASE_RECAPTCHA_SITE_KEY') ||
     (appletConfig as any).recaptchaSiteKey ||

@@ -14,7 +14,7 @@
  *
  * ENV (server):
  *   PAYMENT_ENC_KEY       wajib untuk menyimpan secret di Firestore (string acak min 32 karakter)
- *   PUBLIC_BASE_URL       URL publik app (untuk callback/webhook), contoh https://riskcart.ai.studio
+ *   PUBLIC_BASE_URL       URL publik app (untuk callback/webhook), contoh <URL_APP_ANDA>
  *   Override opsional (prioritas di atas Firestore):
  *   XENDIT_SECRET_KEY, XENDIT_CALLBACK_TOKEN, MIDTRANS_SERVER_KEY, MIDTRANS_CLIENT_KEY,
  *   DOKU_CLIENT_ID, DOKU_SECRET_KEY, TRIPAY_API_KEY, TRIPAY_PRIVATE_KEY, TRIPAY_MERCHANT_CODE
@@ -621,6 +621,65 @@ export function registerPaymentGatewayRoutes(app: Express, store: ServerStore) {
     }
   });
 
+  const resolveAndValidateTargetDoc = async (rawId: string, user: any) => {
+    const id = String(rawId || '').trim();
+    if (!id) {
+      return { ok: false as const, status: 400, error: 'transactionId atau orderId wajib diisi.' };
+    }
+    const [txSnap, orderSnap] = await Promise.all([
+      getDoc(doc(db, 'transactions', id)),
+      getDoc(doc(db, 'orders', id)),
+    ]);
+    const txData: any = txSnap.exists() ? txSnap.data() : null;
+    const orderData: any = orderSnap.exists() ? orderSnap.data() : null;
+    if (!txData && !orderData) {
+      return { ok: false as const, status: 404, error: 'Dokumen transaksi atau pesanan tidak ditemukan.' };
+    }
+
+    const role = String(user?.role || '').toLowerCase();
+    if (role === 'customer') {
+      const uid = String(user?.uid || '').trim();
+      const docCustomerUid = String(txData?.customerUid || orderData?.customerUid || '').trim();
+      if (!uid || !docCustomerUid || docCustomerUid !== uid) {
+        return { ok: false as const, status: 403, error: 'Akses ditolak: dokumen bukan milik pelanggan ini.' };
+      }
+    }
+
+    const isPaidStatus = (d: any) => {
+      if (!d) return false;
+      const ps = String(d.paymentStatus || '').toUpperCase();
+      const psl = String(d.paymentStatusLabel || '').toUpperCase();
+      return ps === 'LUNAS' || ps === 'PAID' || ps === 'SETTLED' || psl === 'LUNAS' || psl === 'PAID';
+    };
+
+    if (isPaidStatus(txData) || isPaidStatus(orderData)) {
+      return { ok: false as const, status: 400, error: 'Transaksi atau pesanan sudah LUNAS.' };
+    }
+
+    const totalAmount = Math.round(
+      Number(
+        txData?.totalAmount ??
+          orderData?.totalAmount ??
+          txData?.total ??
+          orderData?.total ??
+          txData?.totalRevenue ??
+          orderData?.totalRevenue ??
+          0
+      )
+    );
+    if (!Number.isFinite(totalAmount) || totalAmount <= 0) {
+      return { ok: false as const, status: 400, error: 'totalAmount pada dokumen transaksi/pesanan tidak valid.' };
+    }
+
+    return {
+      ok: true as const,
+      id,
+      totalAmount,
+      isOrder: !txData && !!orderData,
+      docData: txData || orderData,
+    };
+  };
+
   // =====================================================================
   // Direct Payment Gateway Proxy: POST /api/payment/create & /api/payment/create-invoice
   // Supports Midtrans (Snap), Xendit (Invoices v2), Tripay (Closed Payment HMAC-SHA256), Doku (Checkout v1 HMAC-SHA256)
@@ -633,13 +692,19 @@ export function registerPaymentGatewayRoutes(app: Express, store: ServerStore) {
         orderId,
         transactionId,
         invoiceNumber,
-        amount,
         customerName = 'Pelanggan POS',
         customerEmail = 'customer@riskcart.id',
         customerPhone = '08123456789',
-        method,
         credentials: inlineCreds,
       } = req.body || {};
+
+      const verified = await resolveAndValidateTargetDoc(
+        String(transactionId || orderId || invoiceNumber || ''),
+        (req as any).user
+      );
+      if (!verified.ok) {
+        return res.status(verified.status).json({ success: false, error: verified.error });
+      }
 
       const pub = await readPublic();
       const targetGwRaw = String(gateway || pub.activeQrisProvider || 'midtrans').toLowerCase() as ProviderId;
@@ -659,11 +724,8 @@ export function registerPaymentGatewayRoutes(app: Express, store: ServerStore) {
           ? inlineCreds.isSandbox
           : stored.mode !== 'production';
 
-      const resolvedOrderId = String(orderId || transactionId || invoiceNumber || `INV-${Date.now()}`).trim();
-      const grossAmount = Math.round(Number(amount) || 0);
-      if (!resolvedOrderId || grossAmount <= 0) {
-        return res.status(400).json({ success: false, error: 'Parameter orderId dan amount (> 0) wajib diisi' });
-      }
+      const resolvedOrderId = verified.id;
+      const grossAmount = verified.totalAmount;
 
       let resultData: {
         gateway: string;
@@ -845,6 +907,7 @@ export function registerPaymentGatewayRoutes(app: Express, store: ServerStore) {
           mode: sandboxMode ? 'sandbox' : 'production',
           amount: grossAmount,
           customerName,
+          isOrder: verified.isOrder,
           status: 'PENDING',
           qrString: resultData.qrString || '',
           qrImageUrl: resultData.qrUrl || '',
@@ -891,82 +954,21 @@ export function registerPaymentGatewayRoutes(app: Express, store: ServerStore) {
     }
   };
 
-  app.post('/api/payment/create', handleDirectPaymentCreate);
-  app.post('/api/payment/create-invoice', handleDirectPaymentCreate);
+  app.post('/api/payment/create', requireAuth as any, handleDirectPaymentCreate);
+  app.post('/api/payment/create-invoice', requireAuth as any, handleDirectPaymentCreate);
 
-  // Unified Webhook Callback Endpoint: POST /api/payment/webhook
-  app.post('/api/payment/webhook', async (req, res) => {
+  app.post('/api/payments/create', requireAuth as any, async (req, res) => {
     try {
-      const payload: any = req.body || {};
-      const orderId = String(
-        payload.order_id ||
-          payload.external_id ||
-          payload.merchant_ref ||
-          payload.order?.invoice_number ||
-          payload.data?.reference_id ||
-          ''
-      ).trim();
-      const rawStatus = String(
-        payload.transaction_status ||
-          payload.status ||
-          payload.transaction?.status ||
-          payload.data?.status ||
-          ''
-      ).toUpperCase();
-      const gatewayRaw = String(
-        payload.gateway ||
-          (payload.order_id ? 'midtrans' : payload.external_id ? 'xendit' : payload.merchant_ref ? 'tripay' : 'doku')
-      ).toLowerCase() as ProviderId;
-
-      if (
-        orderId &&
-        ['SETTLEMENT', 'CAPTURE', 'PAID', 'SUCCEEDED', 'COMPLETED', 'SUCCESS', 'LUNAS'].includes(rawStatus)
-      ) {
-        const intentSnap = await getDoc(doc(db, 'payment_intents', orderId));
-        const intentAmt = intentSnap.exists() ? Number((intentSnap.data() as any)?.amount || 0) : 0;
-        const paidAmount =
-          Number(payload.gross_amount || payload.amount || payload.total_amount || payload.order?.amount || intentAmt) ||
-          intentAmt;
-
-        if (intentSnap.exists() && paidAmount > 0) {
-          await markPaid(PROVIDERS.includes(gatewayRaw) ? gatewayRaw : 'midtrans', orderId, {
-            paidAmount,
-            providerRef: String(payload.transaction_id || payload.id || payload.reference || orderId),
-            raw: payload,
-          });
-        } else {
-          const nowIso = new Date().toISOString();
-          await Promise.all([
-            setDoc(
-              doc(db, 'transactions', orderId),
-              { status: 'completed', paymentStatus: 'LUNAS', paidAt: nowIso, updatedAt: nowIso },
-              { merge: true }
-            ),
-            setDoc(
-              doc(db, 'stores', STORE_ID, 'transactions', orderId),
-              { status: 'completed', paymentStatus: 'LUNAS', paidAt: nowIso, updatedAt: nowIso },
-              { merge: true }
-            ),
-            setDoc(
-              doc(db, 'payment_intents', orderId),
-              { status: 'PAID', paidAt: nowIso, updatedAt: nowIso },
-              { merge: true }
-            ),
-          ]);
-        }
+      const { transactionId, orderId, invoiceNumber, customerName = 'Walk-in Customer', provider, isOrder = false } = req.body || {};
+      const verified = await resolveAndValidateTargetDoc(
+        String(transactionId || orderId || ''),
+        (req as any).user
+      );
+      if (!verified.ok) {
+        return res.status(verified.status).json({ success: false, error: verified.error });
       }
-      res.status(200).json({ received: true, orderId, status: rawStatus });
-    } catch (err: any) {
-      res.status(500).json({ error: err.message });
-    }
-  });
-
-  app.post('/api/payments/create', async (req, res) => {
-    try {
-      const { transactionId, invoiceNumber, amount, customerName = 'Walk-in Customer', provider, isOrder = false } = req.body || {};
-      const txId = String(transactionId || '').trim();
-      const gross = Math.round(Number(amount) || 0);
-      if (!txId) return res.status(400).json({ success: false, error: 'transactionId wajib.' });
+      const txId = verified.id;
+      const gross = verified.totalAmount;
       if (gross < 1500) return res.status(400).json({ success: false, error: 'Minimal QRIS Rp 1.500.' });
 
       const pub = await readPublic();
@@ -1008,7 +1010,7 @@ export function registerPaymentGatewayRoutes(app: Express, store: ServerStore) {
         mode: cfg.mode,
         amount: gross,
         customerName,
-        isOrder: !!isOrder,
+        isOrder: Boolean(isOrder || verified.isOrder),
         status: 'PENDING',
         qrString: out.qrString || '',
         qrImageUrl: out.qrImageUrl || '',
@@ -1053,67 +1055,6 @@ export function registerPaymentGatewayRoutes(app: Express, store: ServerStore) {
     const d: any = s.data();
     res.json({ success: true, status: d.status, provider: d.provider, amount: d.amount, vaNumber: d.vaNumber || '', paidAt: d.paidAt || null });
   });
-
-  /** Simulasi pelunasan langsung (Dummy Sandbox Mode) untuk QRIS / VA / Checkout tanpa memerlukan API key asli */
-  const handleSimulateDummyPayment = async (req: Request, res: Response) => {
-    try {
-      const txId = String(req.body?.transactionId || req.body?.orderId || req.body?.invoiceNumber || '').trim();
-      if (!txId) {
-        return res.status(400).json({ success: false, error: 'transactionId atau orderId wajib diisi.' });
-      }
-      const nowIso = new Date().toISOString();
-      const s = await getDoc(doc(db, 'payment_intents', txId));
-      if (s.exists()) {
-        const intent: any = s.data();
-        const p = (intent.provider || 'doku') as ProviderId;
-        await markPaid(p, txId, {
-          paidAmount: Number(intent.amount || req.body?.amount || 0),
-          providerRef: intent.providerRef || `DUMMY-${txId}`,
-          simulated: true,
-        });
-      }
-
-      // Pastikan dokumen transactions, orders, dan doku_settlements juga langsung berstatus PAID / LUNAS
-      const paidPatch = {
-        status: 'completed',
-        fulfillmentStatus: 'completed',
-        paymentStatus: 'LUNAS',
-        paymentVerifiedBy: 'dummy-sandbox-simulator',
-        paidAt: nowIso,
-        updatedAt: nowIso,
-      };
-      const orderPaidPatch = {
-        status: 'completed',
-        fulfillmentStatus: 'completed',
-        paymentStatus: 'paid',
-        paymentStatusLabel: 'LUNAS',
-        paidAt: nowIso,
-        updatedAt: nowIso,
-      };
-      await Promise.all([
-        setDoc(doc(db, 'transactions', txId), paidPatch, { merge: true }).catch(() => {}),
-        setDoc(doc(db, 'stores', STORE_ID, 'transactions', txId), paidPatch, { merge: true }).catch(() => {}),
-        setDoc(doc(db, 'orders', txId), orderPaidPatch, { merge: true }).catch(() => {}),
-        setDoc(doc(db, 'stores', STORE_ID, 'orders', txId), orderPaidPatch, { merge: true }).catch(() => {}),
-        setDoc(doc(db, 'doku_settlements', txId), { status: 'LUNAS (SETTLED)', paymentStatus: 'LUNAS', paidAt: nowIso, updatedAt: nowIso }, { merge: true }).catch(() => {}),
-        setDoc(doc(db, 'payment_intents', txId), { status: 'PAID', paidAt: nowIso, simulated: true, updatedAt: nowIso }, { merge: true }).catch(() => {}),
-      ]);
-
-      return res.json({
-        success: true,
-        status: 'PAID',
-        paymentStatus: 'LUNAS',
-        transactionId: txId,
-        paidAt: nowIso,
-        message: `Simulasi Pelunasan Dummy berhasil! Pesanan #${txId} kini berstatus PAID / LUNAS.`,
-      });
-    } catch (e: any) {
-      return res.status(500).json({ success: false, error: e?.message || 'Gagal mensimulasikan pembayaran dummy' });
-    }
-  };
-
-  app.post('/api/payments/dummy/simulate-pay', handleSimulateDummyPayment);
-  app.post('/api/payments/simulate-paid', handleSimulateDummyPayment);
 
   // ------------------------------ WEBHOOKS ------------------------------
   app.post('/api/webhooks/xendit', async (req, res) => {

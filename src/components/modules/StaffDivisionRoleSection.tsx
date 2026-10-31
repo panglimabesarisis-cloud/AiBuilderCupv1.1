@@ -80,7 +80,7 @@ export const StaffDivisionRoleSection: React.FC<StaffDivisionRoleSectionProps> =
   const [memberName, setMemberName] = useState<string>('');
   const [memberEmail, setMemberEmail] = useState<string>('');
   const [memberPhone, setMemberPhone] = useState<string>('');
-  const [memberPin, setMemberPin] = useState<string>('123456');
+  const [memberPin, setMemberPin] = useState<string>('');
   const [memberDivisionId, setMemberDivisionId] = useState<string>('div_kitchen');
   const [memberRole, setMemberRole] = useState<string>('Executive Chef');
   const [memberStation, setMemberStation] = useState<string>('Pass & Command Center');
@@ -220,7 +220,7 @@ export const StaffDivisionRoleSection: React.FC<StaffDivisionRoleSectionProps> =
     setMemberName('');
     setMemberEmail('');
     setMemberPhone('+62 812-');
-    setMemberPin(String(Math.floor(100000 + Math.random() * 900000)));
+    setMemberPin('');
     setMemberDivisionId(divObj?.id || 'div_kitchen');
     setMemberRole(defaultRoleObj?.name || 'Executive Chef');
     setMemberStation(defaultRoleObj?.defaultStation || 'Pass & Command Center');
@@ -235,7 +235,7 @@ export const StaffDivisionRoleSection: React.FC<StaffDivisionRoleSectionProps> =
     setMemberName(member.name);
     setMemberEmail(member.email);
     setMemberPhone(member.phone);
-    setMemberPin(member.pin || '123456');
+    setMemberPin('');
     setMemberDivisionId(member.divisionId || 'div_kitchen');
     setMemberRole(member.role);
     setMemberStation(member.station || 'Operasional Utama');
@@ -245,16 +245,25 @@ export const StaffDivisionRoleSection: React.FC<StaffDivisionRoleSectionProps> =
     setShowStaffModal(true);
   };
 
+  const FORBIDDEN_PINS = ['123456', '000000', '111111', '123123'];
+
   const handleSaveStaffMember = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!memberName.trim() || !memberRole.trim()) return;
+    const cleanPin = memberPin.trim();
+    if (!/^\d{6}$/.test(cleanPin) || FORBIDDEN_PINS.includes(cleanPin)) {
+      showToast(
+        'PIN wajib diisi manual 6 digit angka dan tidak boleh 123456, 000000, 111111, atau 123123.'
+      );
+      return;
+    }
     const divObj = divisions.find((d) => d.id === memberDivisionId);
     const saved = await saveMember({
       id: editingMember?.id,
       name: memberName.trim(),
       email: memberEmail.trim(),
       phone: memberPhone.trim(),
-      pin: memberPin.trim(),
+      pin: cleanPin,
       divisionId: memberDivisionId,
       divisionName: divObj?.name || 'Divisi Kitchen (Dapur)',
       role: memberRole.trim(),
@@ -983,7 +992,7 @@ export const StaffDivisionRoleSection: React.FC<StaffDivisionRoleSectionProps> =
                           {member.name}
                         </div>
                         <div className="text-[10px] text-zinc-500 font-mono">
-                          {member.email} &bull; PIN: {member.pin || '123456'}
+                          {member.email}
                         </div>
                       </td>
                       <td className="py-3 px-4 font-semibold">
@@ -1443,10 +1452,16 @@ export const StaffDivisionRoleSection: React.FC<StaffDivisionRoleSectionProps> =
                   />
                 </div>
                 <div>
-                  <label className="block font-bold mb-1">PIN Akses (6 Angka)</label>
+                  <label className="block font-bold mb-1">
+                    PIN Akses (6 Angka) <span className="text-rose-500">*</span>
+                  </label>
                   <input
-                    type="text"
+                    type="password"
+                    inputMode="numeric"
+                    required
+                    minLength={6}
                     maxLength={6}
+                    placeholder="6 digit angka"
                     value={memberPin}
                     onChange={(e) =>
                       setMemberPin(e.target.value.replace(/[^0-9]/g, '').slice(0, 6))

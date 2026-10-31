@@ -891,26 +891,15 @@ export const LoginPage: React.FC = () => {
                 {isSubmitting ? 'Signing In...' : 'Sign In'}
               </button>
 
-              <a
-                href="https://riskcart.ai.studio/client-pwa"
+              <button
+                type="button"
                 id="clientAppOrderBtn"
-                onClick={(e) => {
-                  e.preventDefault();
-                  if (
-                    typeof window !== 'undefined' &&
-                    window.location.hostname === 'riskcart.ai.studio'
-                  ) {
-                    window.location.href = 'https://riskcart.ai.studio/client-pwa';
-                  } else {
-                    navigate('/client-pwa');
-                  }
-                }}
+                onClick={() => navigate('/client-pwa')}
                 className="btn-demo !mt-3 !mb-0 !h-[48px] w-full flex items-center justify-center gap-2 text-sm font-extrabold tracking-wide no-underline"
-                title="https://riskcart.ai.studio/client-pwa"
               >
                 <span>🛍️ Client App Order</span>
                 <span className="text-xs opacity-80">→</span>
-              </a>
+              </button>
             </form>
           </section>
         </div>

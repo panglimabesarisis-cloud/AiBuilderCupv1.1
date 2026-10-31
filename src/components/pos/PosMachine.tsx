@@ -916,19 +916,15 @@ export const PosMachine: React.FC<PosMachineProps> = ({
       const saved = localStorage.getItem('riskcart_active_cashier');
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (parsed && parsed.name && /muhammad\s+irfan/i.test(String(parsed.name))) {
-          parsed.name = String(parsed.name).replace(/muhammad\s+irfan/gi, 'Dede Fajar Kurniawan');
-          localStorage.setItem('riskcart_active_cashier', JSON.stringify(parsed));
-        }
-        return parsed;
+        if (parsed) return parsed;
       }
     } catch {}
     return (
       DEFAULT_STAFF_MEMBERS[0] || {
         id: 'staff_001',
-        name: 'Dede Fajar Kurniawan',
-        email: 'dede.kasir@riskcart.com',
-        pin: '123456',
+        name: 'Owner',
+        email: '',
+        pin: '',
         role: 'Head Cashier',
         divisionId: 'div_cashier',
         divisionName: 'Divisi Front Office / Kasir',
@@ -955,7 +951,7 @@ export const PosMachine: React.FC<PosMachineProps> = ({
             id: d.id,
             name: d.name,
             email: d.email || existing?.email || '',
-            pin: d.pin || existing?.pin || '123456',
+            pin: '',
             role: d.role,
             divisionId: d.divisionId,
             divisionName: d.divisionName,
@@ -1567,15 +1563,66 @@ export const PosMachine: React.FC<PosMachineProps> = ({
 
   // Helper 5: Synchronize Transaction (Google Sheet Auto-Synced with FileName = Nomor Transaksi) or Cart Void Evidence Photo to Google Drive via Backend Proxy
 
+  const [posDriveModal, setPosDriveModal] = useState<{
+    loading: boolean;
+    error?: string;
+    fileName: string;
+    docContentText: string;
+    evidencePhoto: string;
+  } | null>(null);
+
+  const isSafePhotoSrc = (src?: string | null): boolean =>
+    Boolean(src && (src.startsWith('data:image/') || src.startsWith('https://')));
+
+  const openPosDriveModal = async (endpointUrl: string, fallbackTitle?: string) => {
+    const cleanEndpoint = String(endpointUrl || '').trim();
+    if (!cleanEndpoint) return;
+    setPosDriveModal({
+      loading: true,
+      fileName: fallbackTitle || 'Memuat Dokumen...',
+      docContentText: '',
+      evidencePhoto: '',
+    });
+    try {
+      const res = await apiFetch(cleanEndpoint);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setPosDriveModal({
+          loading: false,
+          error: data?.error || 'Dokumen belum tersedia.',
+          fileName: fallbackTitle || 'Dokumen Transaksi',
+          docContentText: '',
+          evidencePhoto: '',
+        });
+        return;
+      }
+      const photoVal = String(data?.evidencePhoto || '').trim();
+      setPosDriveModal({
+        loading: false,
+        fileName: String(data?.fileName || fallbackTitle || 'Dokumen Transaksi'),
+        docContentText: String(data?.docContentText || ''),
+        evidencePhoto: isSafePhotoSrc(photoVal) ? photoVal : '',
+      });
+    } catch (err: any) {
+      setPosDriveModal({
+        loading: false,
+        error: err?.message || 'Gagal memuat dokumen.',
+        fileName: fallbackTitle || 'Dokumen Transaksi',
+        docContentText: '',
+        evidencePhoto: '',
+      });
+    }
+  };
+
   const syncTransactionToGoogleDrive = async (
     payload: Record<string, any>
   ): Promise<{ googleDocUrl: string; googleDrivePhotoUrl: string }> => {
     const rawFileName = String(
       payload.fileName || payload.orderNumber || payload.id || `POS-${Date.now()}`
     ).trim();
-    const fallbackSyncId = rawFileName.replace(/[^a-zA-Z0-9_-]/g, '_');
+    const fallbackSyncId = String(payload.id || rawFileName).replace(/[^a-zA-Z0-9_-]/g, '_');
     let googleDocUrl = `/api/google-drive/doc/${encodeURIComponent(fallbackSyncId)}`;
-    let googleDrivePhotoUrl = payload.evidencePhoto
+    let googleDrivePhotoUrl = isSafePhotoSrc(payload.evidencePhoto)
       ? `/api/google-drive/photo/${encodeURIComponent(fallbackSyncId)}`
       : '';
 
@@ -1981,9 +2028,14 @@ export const PosMachine: React.FC<PosMachineProps> = ({
       const voidId = `VOID-${Date.now()}`;
       const fileName = `VOID-POS-${nowIso.slice(0, 10).replace(/-/g, '')}-${voidId.slice(-6)}`;
 
-      const fallbackGoogleDocUrl = `/api/google-drive/doc/${encodeURIComponent(
-        fileName.replace(/[^a-zA-Z0-9_-]/g, '_')
-      )}`;
+      const fallbackSyncKey = encodeURIComponent(
+        voidId.replace(/[^a-zA-Z0-9_-]/g, '_')
+      );
+      const fallbackGoogleDocUrl = `/api/google-drive/doc/${fallbackSyncKey}`;
+      const safeCancelPhoto = isSafePhotoSrc(cancelEvidencePhoto) ? cancelEvidencePhoto : '';
+      const fallbackGooglePhotoUrl = safeCancelPhoto
+        ? `/api/google-drive/photo/${fallbackSyncKey}`
+        : '';
 
       const logEntry = {
         id: voidId,
@@ -1998,9 +2050,9 @@ export const PosMachine: React.FC<PosMachineProps> = ({
         cancelledItems: affectedItems,
         totalNominal: totalCancelledNominal,
         reason: reasonText,
-        evidencePhoto: cancelEvidencePhoto,
+        evidencePhoto: safeCancelPhoto,
         googleDocUrl: fallbackGoogleDocUrl,
-        googleDrivePhotoUrl: cancelEvidencePhoto,
+        googleDrivePhotoUrl: fallbackGooglePhotoUrl,
       };
 
       // Save to localStorage fallback immediately
@@ -2026,7 +2078,7 @@ export const PosMachine: React.FC<PosMachineProps> = ({
         cancelledItems: affectedItems,
         totalNominal: totalCancelledNominal,
         reason: reasonText,
-        evidencePhoto: cancelEvidencePhoto,
+        evidencePhoto: safeCancelPhoto,
       }).catch(() => {});
 
       // Save to Firestore `audit_logs`, `product_logs`, and `fraud_logs` in background
@@ -2052,7 +2104,7 @@ export const PosMachine: React.FC<PosMachineProps> = ({
             timestamp: nowIso,
             resolved: status === 'CONFIRMED_BY_OWNER_PIN',
             googleDocUrl: fallbackGoogleDocUrl,
-            googleDrivePhotoUrl: cancelEvidencePhoto,
+            googleDrivePhotoUrl: fallbackGooglePhotoUrl,
           },
           { merge: true }
         ).catch(() => {}),
@@ -6977,19 +7029,91 @@ export const PosMachine: React.FC<PosMachineProps> = ({
               </div>
             )}
 
-            <div className="flex gap-2 pt-2">
+            <div className="flex flex-col gap-2 pt-2">
+              {completedTxReceipt.googleDocUrl && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    void openPosDriveModal(
+                      completedTxReceipt.googleDocUrl,
+                      completedTxReceipt.googleDocFileName || completedTxReceipt.orderNumber
+                    )
+                  }
+                  className="w-full flex items-center justify-center gap-1.5 py-2 rounded-xl bg-zinc-950 hover:bg-zinc-800 border border-zinc-800 text-amber-300 font-semibold text-xs cursor-pointer"
+                >
+                  <FileText className="w-3.5 h-3.5" />
+                  <span>Lihat Dokumen Cloud Sync</span>
+                </button>
+              )}
+              <div className="flex gap-2">
+                <button
+                  onClick={() => handlePrintReceipt(completedTxReceipt)}
+                  className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-white font-semibold text-xs"
+                >
+                  <Printer className="w-3.5 h-3.5" />
+                  {completedTxReceipt?.printedAt ? 'Cetak Ulang' : 'Print Receipt'}
+                </button>
+                <button
+                  onClick={() => setCompletedTxReceipt(null)}
+                  className="flex-1 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Preview Dokumen & Bukti Google Drive (via apiFetch) */}
+      {posDriveModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-sm p-4">
+          <div className="w-full max-w-2xl rounded-2xl bg-zinc-900 border border-amber-500/40 p-5 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
+              <div className="flex items-center gap-2">
+                <FileText className="w-4 h-4 text-amber-400" />
+                <h3 className="text-sm font-black text-white">{posDriveModal.fileName}</h3>
+              </div>
               <button
-                onClick={() => handlePrintReceipt(completedTxReceipt)}
-                className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-white font-semibold text-xs"
+                type="button"
+                onClick={() => setPosDriveModal(null)}
+                className="p-1.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white cursor-pointer"
               >
-                <Printer className="w-3.5 h-3.5" />
-                {completedTxReceipt?.printedAt ? 'Cetak Ulang' : 'Print Receipt'}
+                <X className="w-4 h-4" />
               </button>
+            </div>
+            {posDriveModal.loading ? (
+              <div className="p-6 text-center text-xs text-zinc-400">Memuat dokumen...</div>
+            ) : (
+              <div className="space-y-3">
+                {posDriveModal.error && (
+                  <div className="p-3 rounded-xl bg-amber-950/40 border border-amber-500/30 text-xs text-amber-200">
+                    {posDriveModal.error}
+                  </div>
+                )}
+                {posDriveModal.docContentText && (
+                  <pre className="p-4 rounded-xl bg-zinc-950 border border-zinc-800 text-xs font-mono text-zinc-200 whitespace-pre-wrap break-words max-h-[45vh] overflow-y-auto">
+                    {posDriveModal.docContentText}
+                  </pre>
+                )}
+                {isSafePhotoSrc(posDriveModal.evidencePhoto) && (
+                  <div className="bg-black rounded-xl border border-amber-500/30 p-3 flex justify-center">
+                    <img
+                      src={posDriveModal.evidencePhoto}
+                      alt={posDriveModal.fileName}
+                      className="max-h-[48vh] w-auto object-contain rounded-lg"
+                    />
+                  </div>
+                )}
+              </div>
+            )}
+            <div className="flex justify-end pt-2 border-t border-zinc-800">
               <button
-                onClick={() => setCompletedTxReceipt(null)}
-                className="flex-1 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs"
+                type="button"
+                onClick={() => setPosDriveModal(null)}
+                className="px-4 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 font-bold text-xs cursor-pointer"
               >
-                Close
+                Tutup
               </button>
             </div>
           </div>

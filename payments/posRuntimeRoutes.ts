@@ -8,7 +8,7 @@
 import type { Express, Request } from 'express';
 import net from 'net';
 import type { ServerStore } from './serverStore.ts';
-import { verifySignedSessionToken } from '../src/middleware/auth.ts';
+import { verifySignedSessionToken, requireAuth, type AuthRequest } from '../src/middleware/auth.ts';
 import {
   recordTransactionToSql,
   recordAiMonitoringLogToSql,
@@ -89,14 +89,19 @@ export function registerPosRuntimeRoutes(app: Express, store: ServerStore) {
     });
   });
 
-  app.post('/api/audit-log', async (req, res) => {
+  app.post('/api/audit-log', requireAuth, async (req: AuthRequest, res) => {
     try {
-      const s = sessionFrom(req);
+      const s = req.user || sessionFrom(req);
+      if (!s || !s.uid || !s.role) {
+        return res.status(401).json({ success: false, error: 'Unauthorized' });
+      }
       const b = req.body || {};
       const nowIso = new Date().toISOString();
       const action = String(b.action || '').slice(0, 80);
       if (!action) return res.status(400).json({ success: false, error: 'action wajib' });
       const detailsText = String(b.details || b.target || '').slice(0, 600);
+      const verifiedUserName = String(s.uid).slice(0, 120);
+      const verifiedUserRole = String(s.role).slice(0, 40);
       const entry = {
         action,
         type: String(b.type || action).slice(0, 80),
@@ -104,13 +109,13 @@ export function registerPosRuntimeRoutes(app: Express, store: ServerStore) {
         details: detailsText,
         target: detailsText,
         severity: String(b.severity || 'INFO').toUpperCase(),
-        userName: String(b.userName || b.user || s?.uid || 'Staff Aktif').slice(0, 120),
-        user: String(b.user || b.userName || s?.uid || 'Staff Aktif').slice(0, 120),
-        userEmail: String(b.userEmail || s?.uid || 'staff@riskcart.id').slice(0, 120),
-        userRole: String(b.userRole || s?.role || 'Owner / Admin').slice(0, 40),
-        verifiedUid: s?.uid || null,
-        verifiedRole: s?.role || null,
-        verified: !!s,
+        userName: verifiedUserName,
+        user: verifiedUserName,
+        userEmail: verifiedUserName,
+        userRole: verifiedUserRole,
+        verifiedUid: s.uid,
+        verifiedRole: s.role,
+        verified: true,
         ip: clientIp(req),
         userAgent: String(req.headers['user-agent'] || '').slice(0, 200),
         meta: typeof b.meta === 'object' && b.meta ? b.meta : null,

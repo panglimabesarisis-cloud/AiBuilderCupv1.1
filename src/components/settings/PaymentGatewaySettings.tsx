@@ -333,7 +333,8 @@ export const PaymentGatewaySettings: React.FC<Props> = ({ initialProvider = 'mid
   };
 
   const rp = (n: any) => `Rp ${Number(n || 0).toLocaleString('id-ID')}`;
-  const webhookUrl = `${typeof window !== 'undefined' ? window.location.origin : ''}/api/payment/webhook`;
+  const webhookUrl = (provider: GatewayProviderId) =>
+    `${typeof window !== 'undefined' ? window.location.origin : ''}/api/webhooks/${provider}`;
 
   if (loading) {
     return <div className="p-6 text-zinc-400 text-xs">Memuat konfigurasi Payment Gateway dari Firestore...</div>;
@@ -575,12 +576,12 @@ export const PaymentGatewaySettings: React.FC<Props> = ({ initialProvider = 'mid
                     <div className="flex items-center gap-2">
                       <input
                         readOnly
-                        value={webhookUrl}
+                        value={webhookUrl(gw.id)}
                         className="w-full bg-zinc-950/70 border border-zinc-800 rounded-xl px-3 py-1.5 text-cyan-300 font-mono text-[11px]"
                       />
                       <button
                         type="button"
-                        onClick={() => navigator.clipboard?.writeText(webhookUrl)}
+                        onClick={() => navigator.clipboard?.writeText(webhookUrl(gw.id))}
                         className="p-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-xl border border-zinc-700 cursor-pointer"
                         title="Salin URL Webhook"
                       >

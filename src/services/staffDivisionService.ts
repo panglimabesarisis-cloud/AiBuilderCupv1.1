@@ -9,6 +9,7 @@ import {
 import { db } from '../firebase';
 import { ACTIVE_STORE_ID } from '../config/store';
 import { publishRealtimeEvent, subscribeRealtimeEvent } from '../utils/realtimeSyncBus';
+import { apiFetch } from './firebaseSession';
 
 export interface StaffRolePreset {
   id: string;
@@ -297,8 +298,8 @@ export const DEFAULT_STAFF_DIVISIONS: StaffDivision[] = [
 export const DEFAULT_STAFF_DIVISION_ROSTER: StaffDivisionMember[] = [
   {
     id: 'staff_001',
-    name: 'Dede Fajar Kurniawan',
-    email: 'panglimabesarisis@gmail.com',
+    name: 'Owner',
+    email: '',
     phone: '0811-1000-001',
     pin: '',
     divisionId: 'div_cashier',
@@ -609,12 +610,7 @@ export function saveStaffDivisionsToLocal(divisions: StaffDivision[]): void {
 }
 
 export function normalizeStaffDisplayName(rawName?: string): string {
-  const trimmed = String(rawName || '').trim();
-  if (!trimmed) return 'Dede Fajar Kurniawan';
-  if (/muhammad\s+irfan/i.test(trimmed) || /^irfan\s+kasir$/i.test(trimmed)) {
-    return trimmed.replace(/muhammad\s+irfan/gi, 'Dede Fajar Kurniawan').replace(/^irfan\s+kasir$/i, 'Dede Fajar Kurniawan');
-  }
-  return trimmed;
+  return String(rawName || '').trim();
 }
 
 export function loadStaffRosterFromLocal(): StaffDivisionMember[] {
@@ -707,6 +703,11 @@ export async function saveStaffMemberWithDivisionInDb(
   const memberId = member.id || `staff_${Date.now()}`;
   removeDeletedStaffMemberId(memberId);
 
+  const rawPin =
+    member.pin && /^\d{6}$/.test(String(member.pin).trim())
+      ? String(member.pin).trim()
+      : '';
+
   const fullMember: StaffDivisionMember = {
     id: memberId,
     name: member.name.trim(),
@@ -714,10 +715,7 @@ export async function saveStaffMemberWithDivisionInDb(
       member.email?.trim() ||
       `${member.name.trim().toLowerCase().replace(/[^a-z0-9]/g, '.')}@riskcart.com`,
     phone: member.phone?.trim() || '+62 812-0000-0000',
-    pin:
-      member.pin && /^\d{6}$/.test(String(member.pin))
-        ? String(member.pin)
-        : '',
+    pin: '',
     divisionId: targetDiv?.id || member.divisionId || inferred.divisionId,
     divisionName: targetDiv?.name || member.divisionName || inferred.divisionName,
     role: member.role.trim(),
@@ -743,6 +741,7 @@ export async function saveStaffMemberWithDivisionInDb(
   saveStaffRosterToLocal(nextRoster);
 
   const payload = JSON.parse(JSON.stringify(fullMember));
+  delete payload.pin;
   await Promise.all([
     setDoc(doc(db, 'staff', fullMember.id), payload, { merge: true }).catch(() => {}),
     setDoc(doc(db, 'staff_members', fullMember.id), payload, { merge: true }).catch(
@@ -754,6 +753,18 @@ export async function saveStaffMemberWithDivisionInDb(
       { merge: true }
     ).catch(() => {}),
   ]);
+
+  if (rawPin) {
+    await apiFetch('/api/staff/set-secret', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        staffId: fullMember.id,
+        storeId: ACTIVE_STORE_ID,
+        pin: rawPin,
+      }),
+    }).catch(() => {});
+  }
 
   publishRealtimeEvent('staff_roster_updated', { member: fullMember });
   return fullMember;

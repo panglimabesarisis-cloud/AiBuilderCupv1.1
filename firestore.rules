@@ -8,17 +8,20 @@ service cloud.firestore {
     function isOwner() { return isStaff() && role() in ['owner','super_admin']; }
     function isDemo() { return signedIn() && !isAnon() && role() in ['demo_owner','demo_cashier']; }
     function isCustomer() { return signedIn() && !isAnon() && role() == 'customer'; }
-    function serverOnly(col, id) { return col in ['otp_sessions','ai_agents_private','payment_gateway_secrets'] || (col == 'settings' && id == 'payment_gateway_secrets'); }
+    function serverOnly(col, id) { return col in ['otp_sessions','otp_verifications','ai_agents_private','payment_gateway_secrets','staff_secrets','customer_secrets','auth_lockouts'] || (col == 'settings' && id == 'payment_gateway_secrets'); }
     function publicCatalog(col) { return col in ['products','categories','brands','promotions','promo_banners','stores','pwa_page_configs','reward_targets','marketing_targets','ui_text_overrides','ui_layout_overrides']; }
     function customerCol(col) { return col in ['customers','orders','transactions','pwa_chats','reward_claims','point_ledger']; }
-    function staffOnlyRead(col) { return col in ['staff','users','settings','staff_roles','staff_divisions','audit_logs']; }
+    function demoBlocked(col) { return col in ['staff','users','settings','staff_roles','staff_divisions','audit_logs','customers','pwa_chats','reward_claims','point_ledger','google_drive_docs']; }
+    function ownerWriteOnly(col) { return col in ['settings','staff','users','staff_roles','staff_divisions']; }
     function ownerDeleteOnly(col) { return col in ['transactions','orders','staff','users','settings','shifts','shift_history','cash_logs','cash_flows','cash_mutations','brangkas_toko_logs','brangkas_modal','safe_deposits','pos_incomes','expenses','audit_logs','dailyStats']; }
     function ownsExisting() { return isCustomer() && resource.data.customerUid == request.auth.uid; }
-    function createsOwn() { return isCustomer() && request.resource.data.customerUid == request.auth.uid; }
-    function customerSafeUpdate() { return ownsExisting() && request.resource.data.customerUid == request.auth.uid && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['status','paymentStatus','fulfillmentStatus','totalAmount','paidAt','points']); }
-    function canRead(col, id) { return !serverOnly(col, id) && (publicCatalog(col) || isStaff() || (isDemo() && !staffOnlyRead(col)) || (customerCol(col) && ownsExisting())); }
-    function canCreate(col, id) { return !serverOnly(col, id) && (isStaff() || (customerCol(col) && createsOwn())); }
-    function canUpdate(col, id) { return !serverOnly(col, id) && (isStaff() || (customerCol(col) && customerSafeUpdate())); }
+    function createsOwn(col) { return isCustomer() && request.resource.data.customerUid == request.auth.uid
+      && (!(col in ['orders','transactions']) || (request.resource.data.get('status','pending') in ['pending','pending_approval'] && request.resource.data.get('paymentStatus','UNPAID') in ['UNPAID','PENDING','unpaid','pending']))
+      && (col != 'customers' || (request.resource.data.get('points',0) == 0 && request.resource.data.get('debtAmount',0) == 0 && request.resource.data.get('totalSpent',0) == 0 && !('creditLimit' in request.resource.data))); }
+    function customerSafeUpdate() { return ownsExisting() && request.resource.data.customerUid == request.auth.uid && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['status','paymentStatus','fulfillmentStatus','totalAmount','paidAt','points','creditLimit','debtAmount','totalSpent','totalOrders','type','typeCode']); }
+    function canRead(col, id) { return !serverOnly(col, id) && (publicCatalog(col) || isStaff() || (isDemo() && !demoBlocked(col)) || (customerCol(col) && ownsExisting())); }
+    function canCreate(col, id) { return !serverOnly(col, id) && (ownerWriteOnly(col) ? isOwner() : (isStaff() || (customerCol(col) && createsOwn(col)))); }
+    function canUpdate(col, id) { return !serverOnly(col, id) && (ownerWriteOnly(col) ? isOwner() : (isStaff() || (customerCol(col) && customerSafeUpdate()))); }
     function canDelete(col, id) { return !serverOnly(col, id) && (isOwner() || (isStaff() && !ownerDeleteOnly(col))); }
 
     match /{col}/{id} {
@@ -26,14 +29,14 @@ service cloud.firestore {
       allow create: if canCreate(col, id);
       allow update: if canUpdate(col, id);
       allow delete: if canDelete(col, id);
-      match /{sub=**} { allow read, write: if !serverOnly(col, id) && isStaff(); }
+      match /{sub=**} { allow read, write: if !serverOnly(col, id) && col != 'stores' && isStaff(); }
     }
     match /stores/{storeId}/{col}/{id} {
       allow read: if canRead(col, id);
       allow create: if canCreate(col, id);
       allow update: if canUpdate(col, id);
       allow delete: if canDelete(col, id);
-      match /{sub=**} { allow read, write: if isStaff(); }
+      match /{sub=**} { allow read: if isStaff(); allow write: if isStaff() && !ownerWriteOnly(col); }
     }
   }
 }

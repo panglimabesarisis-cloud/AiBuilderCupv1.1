@@ -175,8 +175,8 @@ export interface StaffMemberItem {
 export const DEFAULT_STAFF_MEMBERS: StaffMemberItem[] = [
   {
     id: 'staff_001',
-    name: 'Dede Fajar Kurniawan',
-    email: 'panglimabesarisis@gmail.com',
+    name: 'Owner',
+    email: '',
     pin: '',
     role: 'Owner',
     outlet: 'Cabang Utama (Pusat)',
@@ -271,17 +271,6 @@ export const StaffModule: React.FC<StaffModuleProps> = ({
           ) {
             await deleteStaffMemberWithDivisionFromDb(docSnap.id);
             continue;
-          }
-          if (d?.name && /muhammad\s+irfan/i.test(String(d.name))) {
-            const updatedName = String(d.name).replace(
-              /muhammad\s+irfan/gi,
-              'Dede Fajar Kurniawan'
-            );
-            await setDoc(
-              doc(db, 'staff', docSnap.id),
-              { name: updatedName, updatedAt: serverTimestamp() },
-              { merge: true }
-            );
           }
         }
       } catch (err) {
@@ -1669,7 +1658,7 @@ export const StaffModule: React.FC<StaffModuleProps> = ({
                 <input
                   type="text"
                   required
-                  placeholder="Contoh: Dede Fajar Kurniawan"
+                  placeholder="Nama lengkap staf"
                   value={newStaffName}
                   onChange={(e) => setNewStaffName(e.target.value)}
                   className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-white placeholder-zinc-500 focus:outline-none focus:border-purple-500"
@@ -1799,7 +1788,7 @@ export const StaffModule: React.FC<StaffModuleProps> = ({
                     <input
                       type="email"
                       required
-                      placeholder="irfan.kasir@riskcart.com"
+                      placeholder="staf@toko.com"
                       value={newStaffEmail}
                       onChange={(e) => setNewStaffEmail(e.target.value)}
                       className="w-full bg-zinc-900 border border-zinc-800 rounded-xl pl-9 pr-3 py-2 text-white placeholder-zinc-500 focus:outline-none focus:border-purple-500 text-xs font-mono"

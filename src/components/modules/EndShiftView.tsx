@@ -139,14 +139,14 @@ export const EndShiftView: React.FC<EndShiftViewProps> = ({
 
   const loggedInCashierName = useMemo(() => {
     if (activeCashier?.name) {
-      return String(activeCashier.name).replace(/muhammad\s+irfan/gi, 'Dede Fajar Kurniawan');
+      return String(activeCashier.name);
     }
     if (currentUser?.displayName) {
-      return String(currentUser.displayName).replace(/muhammad\s+irfan/gi, 'Dede Fajar Kurniawan');
+      return String(currentUser.displayName);
     }
     if (currentUser?.email) return currentUser.email.split('@')[0];
-    return 'Dede Fajar Kurniawan';
-  }, [activeCashier, currentUser]);
+    return staffList[0]?.name || 'Kasir';
+  }, [activeCashier, currentUser, staffList]);
 
   // 2. CASHIER INPUT FORM STATE
   // Uang Laci, Kas Aktual, Bonus, Pemasukan Lain, Catatan Shift
@@ -514,7 +514,7 @@ export const EndShiftView: React.FC<EndShiftViewProps> = ({
         role: activeCashier?.role || 'Cashier',
         outlet: activeCashier?.outlet || 'RiskCart Flagship Store (Pusat)',
         shift: sessionName,
-        email: activeCashier?.email || 'irfan.kasir@riskcart.com',
+        email: activeCashier?.email || '',
         phone: activeCashier?.phone || '-',
       };
 

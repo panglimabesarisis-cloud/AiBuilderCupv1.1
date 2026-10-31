@@ -406,7 +406,7 @@ export const DEFAULT_PWA_PAGE_CONFIGS: AllPwaPageConfigs = {
     announcements: [],
   },
   'chat-admin': {
-    whatsappCsNumber: '6287785604021',
+    whatsappCsNumber: '',
     csOperatingHours: 'Senin - Minggu (07:00 - 21:00 WIB)',
     autoGreetingTemplateId:
       'Halo Admin RiskCart, saya butuh bantuan terkait pesanan saya.',

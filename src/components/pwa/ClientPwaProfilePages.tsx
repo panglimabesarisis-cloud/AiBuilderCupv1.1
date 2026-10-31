@@ -40,8 +40,15 @@ import {
   useRewardClaims,
 } from '../../services/pwaPageConfigService';
 
-export const WA_ADMIN_CS_URL =
-  'https://wa.me/6287785604021?text=Halo%20Admin%20RiskCart%2C%20saya%20butuh%20bantuan%20terkait%20pesanan%20saya.';
+export let WA_ADMIN_CS_URL = '';
+const formatWaAdminUrl = (whatsappCsNumber?: string, greetingText?: string): string => {
+  const digits = String(whatsappCsNumber || '').replace(/[^0-9]/g, '');
+  const norm = digits.startsWith('0') ? '62' + digits.slice(1) : digits;
+  const text = encodeURIComponent(
+    greetingText || 'Halo Admin RiskCart, saya butuh bantuan terkait pesanan saya.'
+  );
+  return norm ? `https://wa.me/${norm}?text=${text}` : '';
+};
 
 export type ProfileSubRoute =
   | 'index'
@@ -118,13 +125,20 @@ export const ClientPwaProfilePages: React.FC<ClientPwaProfilePagesProps> = ({
 }) => {
   const tr = (en: string, id: string) => (language === 'id' ? id : en);
 
+  const { configs } = useAllPwaPageConfigs();
+  const waCsNumber = String((configs['chat-admin'] as any)?.whatsappCsNumber || '').trim();
+  const waAdminCsUrl = formatWaAdminUrl(
+    waCsNumber,
+    (configs['chat-admin'] as any)?.autoGreetingTemplateId
+  );
+  WA_ADMIN_CS_URL = waAdminCsUrl;
+
   // Automatic redirect if /client-pwa/profile/chat-admin is accessed directly
   useEffect(() => {
-    if (subRoute === 'chat-admin') {
-      window.location.href = WA_ADMIN_CS_URL;
+    if (subRoute === 'chat-admin' && waAdminCsUrl) {
+      window.location.href = waAdminCsUrl;
     }
-  }, [subRoute]);
-  const { configs } = useAllPwaPageConfigs();
+  }, [subRoute, waAdminCsUrl]);
   const normPhone = String(member.phone || '').replace(/\D/g, '');
   const normalizedPhoneKey = normPhone.startsWith('0')
     ? '62' + normPhone.slice(1)
@@ -905,8 +919,8 @@ export const ClientPwaProfilePages: React.FC<ClientPwaProfilePagesProps> = ({
       sub: 'chat-admin',
       titleId: '9. Chat Admin & CS',
       titleEn: '9. Chat Admin & Support',
-      descId: 'Hubungi langsung Admin & CS via WhatsApp (+6287785604021)',
-      descEn: 'Direct WhatsApp chat with Admin & Support (+6287785604021)',
+      descId: `Hubungi langsung Admin & CS via WhatsApp${waCsNumber ? ` (+${waCsNumber.replace(/^\+/, '')})` : ''}`,
+      descEn: `Direct WhatsApp chat with Admin & Support${waCsNumber ? ` (+${waCsNumber.replace(/^\+/, '')})` : ''}`,
       icon: MessageSquare,
       badge: 'WA Live',
     },
@@ -2326,17 +2340,22 @@ export const ClientPwaProfilePages: React.FC<ClientPwaProfilePagesProps> = ({
               {tr('Redirecting to RiskCart Admin WhatsApp...', 'Mengarahkan ke WhatsApp Admin & CS RiskCart...')}
             </h3>
             <p className="text-xs text-zinc-400">
-              WhatsApp: <span className="font-mono text-amber-300">+62 877-8560-4021</span>
+              WhatsApp: <span className="font-mono text-amber-300">{waCsNumber ? `+${waCsNumber.replace(/^\+/, '')}` : '-'}</span>
             </p>
           </div>
           <a
-            href={WA_ADMIN_CS_URL}
+            href={waAdminCsUrl || '#'}
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs transition"
           >
             <Phone className="w-4 h-4" />
-            <span>{tr('Open WhatsApp (+6287785604021)', 'Buka Chat WhatsApp (+6287785604021)')}</span>
+            <span>
+              {tr(
+                `Open WhatsApp${waCsNumber ? ` (+${waCsNumber.replace(/^\+/, '')})` : ''}`,
+                `Buka Chat WhatsApp${waCsNumber ? ` (+${waCsNumber.replace(/^\+/, '')})` : ''}`
+              )}
+            </span>
           </a>
         </div>
       )}

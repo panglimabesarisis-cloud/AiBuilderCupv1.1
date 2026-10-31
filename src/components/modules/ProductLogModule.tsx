@@ -289,10 +289,7 @@ export const ProductLogModule: React.FC<ProductLogModuleProps> = ({
             stockAfter: foundProd ? foundProd.stockInUnits : undefined,
             unitPrice: Number(item.unitPrice || foundProd?.pricePerUnit || 0),
             totalValue: Number(item.subtotal || qty * Number(item.unitPrice || 0)),
-            picName: String((tx as any).cashierName || 'Dede Fajar Kurniawan').replace(
-              /muhammad\s+irfan|irfan\s+kasir/gi,
-              'Dede Fajar Kurniawan'
-            ),
+            picName: String((tx as any).cashierName || (tx as any).cashier || '-'),
             picRole: (tx as any).cashierRole || 'Kasir On Duty',
             notes: (tx as any).aiExplanation || `Penjualan ${tx.paymentMethod?.toUpperCase() || 'Tunai'} kasir POS (Batch FEFO: ${resolvedBatchCode}).`,
             status: tx.status === 'flagged_fraud' ? 'FLAGGED AI' : 'SUKSES',

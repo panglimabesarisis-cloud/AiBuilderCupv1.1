@@ -44,11 +44,11 @@
 **Env server (AI Studio → Secrets / Cloud Run → Variables):**
 ```
 PAYMENT_ENC_KEY=<string acak ≥32 karakter>     # wajib untuk simpan secret di DB
-PUBLIC_BASE_URL=https://riskcart.ai.studio  # URL publik app, untuk webhook
+PUBLIC_BASE_URL=<URL_APP_ANDA>  # URL publik app, untuk webhook
 PIN_SALT=<string acak>
 FIREBASE_SERVICE_ACCOUNT=<isi JSON service account>  # WAJIB untuk rules ketat
 ```
-Cara dapat `FIREBASE_SERVICE_ACCOUNT`: Firebase Console → project **aibuildercupv1-riskcart** → ⚙ Project settings → **Service accounts** → **Generate new private key** → buka file JSON → copy seluruh isinya ke secret tersebut.
+Cara dapat `FIREBASE_SERVICE_ACCOUNT`: Firebase Console → project **<PROJECT_ID>** → ⚙ Project settings → **Service accounts** → **Generate new private key** → buka file JSON → copy seluruh isinya ke secret tersebut.
 
 Deploy rules: Firebase Console → Firestore → (database `ai-studio-…`) → **Rules** → tempel isi `firestore.rules` → **Publish**.
 Opsional (lebih aman, prioritas di atas DB): `XENDIT_SECRET_KEY, XENDIT_CALLBACK_TOKEN, MIDTRANS_SERVER_KEY, DOKU_CLIENT_ID, DOKU_SECRET_KEY, TRIPAY_API_KEY, TRIPAY_PRIVATE_KEY, TRIPAY_MERCHANT_CODE`.

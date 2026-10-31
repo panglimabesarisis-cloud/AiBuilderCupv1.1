@@ -20,7 +20,7 @@ const resolvedProjectId =
   firebaseConfig.projectId ||
   process.env.VITE_FIREBASE_PROJECT_ID ||
   process.env.FIREBASE_PROJECT_ID ||
-  'aibuildercupv1-riskcart';
+  '';
 
 const VERIFIER_APP_NAME = 'riskcart-token-verifier';
 let verifierApp: App;

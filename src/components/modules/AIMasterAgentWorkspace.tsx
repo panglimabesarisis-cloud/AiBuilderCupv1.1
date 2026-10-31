@@ -1669,149 +1669,115 @@ export const AIMasterAgentWorkspace: React.FC<AIMasterAgentWorkspaceProps> = ({
                 </div>
               ) : (
                 <div className="w-full space-y-4">
-                  <div className="overflow-x-auto rounded-2xl border border-amber-500/35 bg-zinc-950 shadow-inner max-h-[720px] overflow-y-auto custom-scrollbar">
-                    <table className="w-full text-xs text-left border-collapse">
-                      <thead className="bg-zinc-900/95 text-zinc-400 uppercase text-[10px] sticky top-0 z-10 border-b border-zinc-800">
-                        <tr>
-                          <th className="p-3 w-10 text-center">No</th>
-                          <th className="p-3 w-24">Waktu</th>
-                          <th className="p-3 w-48">Agen / Pengirim</th>
-                          <th className="p-3 w-36">Model AI</th>
-                          <th className="p-3">Hasil Analisa &amp; Rekomendasi Eksekutif</th>
-                          <th className="p-3 w-36">Token &amp; Latency</th>
-                          <th className="p-3 w-28 text-right">Biaya</th>
-                          <th className="p-3 w-16 text-center">Salin</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-zinc-800/80 text-zinc-200">
-                        {messages.map((msg, idx) => {
-                          const isUser = msg.role === 'user';
-                          const detectedTags = extractChartShortcutsFromPrompt(msg.content);
-                          const fallbackTag =
-                            DEFAULT_AGENT_CHART_TAG[canonicalSlug] || '#ExecutiveOverview';
-                          const fallbackTagsList = extractChartShortcutsFromPrompt(fallbackTag);
-                          const chartsToRender =
-                            !isUser
-                              ? detectedTags.length > 0
-                                ? detectedTags
-                                : fallbackTagsList.length > 0
-                                ? fallbackTagsList
-                                : [fallbackTag]
-                              : detectedTags;
-                          const cleanParagraph = isUser
-                            ? msg.content.trim()
-                            : formatAIExecutiveParagraph(msg.content);
+                  <div className="w-full space-y-4 max-h-[720px] overflow-y-auto custom-scrollbar">
+                    {messages.map((msg) => {
+                      const isUser = msg.role === 'user';
+                      const detectedTags = extractChartShortcutsFromPrompt(msg.content);
+                      const fallbackTag =
+                        DEFAULT_AGENT_CHART_TAG[canonicalSlug] || '#ExecutiveOverview';
+                      const fallbackTagsList = extractChartShortcutsFromPrompt(fallbackTag);
+                      const chartsToRender =
+                        !isUser
+                          ? detectedTags.length > 0
+                            ? detectedTags
+                            : fallbackTagsList.length > 0
+                            ? fallbackTagsList
+                            : [fallbackTag]
+                          : detectedTags;
+                      const cleanParagraph = isUser
+                        ? msg.content.trim()
+                        : formatAIExecutiveParagraph(msg.content);
+                      const timeStr = new Date(msg.timestamp).toLocaleTimeString('id-ID', {
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        second: '2-digit',
+                      });
 
-                          return (
-                            <React.Fragment key={msg.id}>
-                              <tr
-                                className={
-                                  isUser
-                                    ? 'bg-amber-500/5 hover:bg-amber-500/10 transition align-top'
-                                    : 'bg-zinc-950 hover:bg-zinc-900/60 transition align-top'
-                                }
-                              >
-                                <td className="p-3 text-center font-mono text-zinc-500">
-                                  {idx + 1}
-                                </td>
-                                <td className="p-3 font-mono text-[11px] text-zinc-400 whitespace-nowrap">
-                                  {new Date(msg.timestamp).toLocaleTimeString('id-ID', {
-                                    hour: '2-digit',
-                                    minute: '2-digit',
-                                    second: '2-digit',
-                                  })}
-                                </td>
-                                <td className="p-3">
-                                  <div className="font-bold text-amber-300">
-                                    {isUser
-                                      ? 'Instruksi Operator'
-                                      : `${activeAgent.icon} ${activeAgent.nameId}`}
-                                  </div>
-                                  <div className="text-[10px] text-zinc-500 mt-0.5">
-                                    {isUser ? 'Input Prompt' : 'Hasil Analisa AI'}
-                                  </div>
-                                </td>
-                                <td className="p-3 font-mono text-[10px]">
-                                  {isUser ? (
-                                    <span className="text-zinc-500">—</span>
-                                  ) : (
-                                    <span className="px-2 py-0.5 rounded bg-blue-500/20 text-blue-300 border border-blue-500/30 font-bold inline-block">
-                                      {msg.modelId || selectedModelId}
-                                    </span>
-                                  )}
-                                </td>
-                                <td className="p-3">
-                                  <div className="leading-relaxed text-amber-50/95 text-xs sm:text-sm">
-                                    {cleanParagraph}
-                                  </div>
-                                  {chartsToRender.length > 0 && !isUser && (
-                                    <div className="w-full space-y-2 pt-3 mt-3 border-t border-zinc-800/80">
-                                      <div className="flex items-center justify-between gap-2 text-[10px] font-bold text-amber-300 font-mono">
-                                        <span className="flex items-center gap-1.5">
-                                          <BarChart3 className="w-3.5 h-3.5 text-amber-400" />
-                                          Visualisasi Data Real-Time ({chartsToRender.join(', ')})
-                                        </span>
-                                        <span className="text-zinc-400">
-                                          Sumber: Firestore Live ({currency})
-                                        </span>
-                                      </div>
-                                      <div className="w-full space-y-2">
-                                        {chartsToRender.map((tag) => (
-                                          <ShortcutChartRenderer key={tag} tag={tag} />
-                                        ))}
-                                      </div>
-                                    </div>
-                                  )}
-                                </td>
-                                <td className="p-3 font-mono text-[10px] text-zinc-400 whitespace-nowrap">
-                                  {isUser ? (
-                                    <span className="text-zinc-600">—</span>
-                                  ) : (
-                                    <div className="space-y-0.5">
-                                      <div>
-                                        Total:{' '}
-                                        <strong className="text-amber-300">
-                                          {msg.totalTokens || 0} tok
-                                        </strong>
-                                      </div>
-                                      <div className="text-zinc-500">
-                                        In: {msg.tokenIn || 0} • Out: {msg.tokenOut || 0}
-                                      </div>
-                                      <div className="text-emerald-400">
-                                        Latency: {msg.latencyMs || 0} ms
-                                      </div>
-                                    </div>
-                                  )}
-                                </td>
-                                <td className="p-3 text-right font-mono font-bold text-emerald-400 whitespace-nowrap">
-                                  {isUser ? '—' : formatMoney(msg.costIdr || 0)}
-                                </td>
-                                <td className="p-3 text-center">
-                                  {!isUser && (
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        navigator.clipboard?.writeText(cleanParagraph);
-                                        setCopiedId(msg.id);
-                                        setTimeout(() => setCopiedId(null), 2000);
-                                      }}
-                                      className="p-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white cursor-pointer inline-flex items-center justify-center"
-                                      title="Salin hasil analisa"
-                                    >
-                                      {copiedId === msg.id ? (
-                                        <Check className="w-3.5 h-3.5 text-emerald-400" />
-                                      ) : (
-                                        <Copy className="w-3.5 h-3.5" />
-                                      )}
-                                    </button>
-                                  )}
-                                </td>
-                              </tr>
-                            </React.Fragment>
-                          );
-                        })}
-                      </tbody>
-                    </table>
+                      if (isUser) {
+                        return (
+                          <div
+                            key={msg.id}
+                            className="w-full rounded-2xl bg-amber-500/5 border border-amber-500/25 p-4 space-y-1.5"
+                          >
+                            <div className="flex items-center justify-between gap-2 text-xs">
+                              <span className="font-bold text-amber-300">Instruksi Operator</span>
+                              <span className="font-mono text-[11px] text-zinc-400">{timeStr}</span>
+                            </div>
+                            <div className="text-sm text-amber-50 whitespace-pre-line">
+                              {cleanParagraph}
+                            </div>
+                          </div>
+                        );
+                      }
+
+                      const totalTokens = msg.totalTokens || 0;
+                      const tokenIn = msg.tokenIn || 0;
+                      const tokenOut = msg.tokenOut || 0;
+                      const latencyMs = msg.latencyMs || 0;
+                      const costIdr = msg.costIdr || 0;
+
+                      return (
+                        <div
+                          key={msg.id}
+                          className="w-full rounded-2xl bg-zinc-950 border border-amber-500/35 p-5 space-y-4"
+                        >
+                          <div className="flex items-center justify-between gap-3 flex-wrap">
+                            <div className="flex items-center gap-2.5 flex-wrap text-xs">
+                              <span className="font-bold text-amber-300">
+                                {activeAgent.icon} {activeAgent.nameId}
+                              </span>
+                              <span className="px-2 py-0.5 rounded bg-blue-500/20 text-blue-300 border border-blue-500/30 font-mono text-[10px] font-bold">
+                                {msg.modelId || selectedModelId}
+                              </span>
+                              <span className="font-mono text-[11px] text-zinc-400">{timeStr}</span>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                navigator.clipboard?.writeText(cleanParagraph);
+                                setCopiedId(msg.id);
+                                setTimeout(() => setCopiedId(null), 2000);
+                              }}
+                              className="p-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white cursor-pointer inline-flex items-center justify-center"
+                              title="Salin hasil analisa"
+                            >
+                              {copiedId === msg.id ? (
+                                <Check className="w-3.5 h-3.5 text-emerald-400" />
+                              ) : (
+                                <Copy className="w-3.5 h-3.5" />
+                              )}
+                            </button>
+                          </div>
+
+                          <div className="w-full text-sm sm:text-base leading-relaxed text-amber-50/95 whitespace-pre-line">
+                            {cleanParagraph}
+                          </div>
+
+                          {chartsToRender.length > 0 && (
+                            <div className="w-full space-y-2 pt-3 border-t border-zinc-800">
+                              <div className="flex items-center justify-between gap-2 text-[10px] font-bold text-amber-300 font-mono">
+                                <span className="flex items-center gap-1.5">
+                                  <BarChart3 className="w-3.5 h-3.5 text-amber-400" />
+                                  Visualisasi Data Real-Time ({chartsToRender.join(', ')})
+                                </span>
+                                <span className="text-zinc-400">
+                                  Sumber: Firestore Live ({currency})
+                                </span>
+                              </div>
+                              <div className="w-full space-y-2">
+                                {chartsToRender.map((tag) => (
+                                  <ShortcutChartRenderer key={tag} tag={tag} />
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          <div className="text-[11px] font-mono text-zinc-500 pt-2 border-t border-zinc-800/60">
+                            Token {totalTokens} (in {tokenIn} • out {tokenOut}) • {latencyMs} ms • Biaya {formatMoney(costIdr)}
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
 
                   {isGenerating && (

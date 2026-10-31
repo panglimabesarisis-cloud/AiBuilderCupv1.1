@@ -87,7 +87,7 @@ export const PaymentIntegrationModule: React.FC<PaymentIntegrationModuleProps> =
       publicKey: '',
       secretKey: '',
       verified: false,
-      webhookUrl: `${window.location.origin}/api/payment/webhook`,
+      webhookUrl: `${window.location.origin}/api/webhooks/xendit`,
       qrisEnabled: true,
       vaEnabled: true,
       retailOutletEnabled: false,
@@ -101,7 +101,7 @@ export const PaymentIntegrationModule: React.FC<PaymentIntegrationModuleProps> =
       sharedKey: initialCachedDoku.sharedKey,
       verified: true,
       dokuEnabled: initialCachedDoku.enabled,
-      webhookUrl: `${window.location.origin}/api/payment/webhook`,
+      webhookUrl: `${window.location.origin}/api/webhooks/doku`,
       qrisEnabled: initialCachedDoku.enabled,
       vaEnabled: true,
       retailOutletEnabled: true,
@@ -115,7 +115,7 @@ export const PaymentIntegrationModule: React.FC<PaymentIntegrationModuleProps> =
       clientKey: '',
       merchantCode: '',
       verified: false,
-      webhookUrl: `${window.location.origin}/api/payment/webhook`,
+      webhookUrl: `${window.location.origin}/api/webhooks/midtrans`,
       qrisEnabled: true,
       vaEnabled: true,
       retailOutletEnabled: true,
@@ -129,7 +129,7 @@ export const PaymentIntegrationModule: React.FC<PaymentIntegrationModuleProps> =
       apiKey: '',
       privateKey: '',
       verified: false,
-      webhookUrl: `${window.location.origin}/api/payment/webhook`,
+      webhookUrl: `${window.location.origin}/api/webhooks/tripay`,
       qrisEnabled: true,
       vaEnabled: true,
       retailOutletEnabled: true,
@@ -185,7 +185,7 @@ export const PaymentIntegrationModule: React.FC<PaymentIntegrationModuleProps> =
         d.clientId ?? gws.doku?.clientId ?? gws.doku?.merchantCode ?? gws.doku?.clientKey ?? '';
       const resolvedSecretKey =
         d.secretKey ?? d.sharedKey ?? gws.doku?.sharedKey ?? gws.doku?.secretKey ?? '';
-      const dokuWebhook = `${window.location.origin}/api/payment/webhook`;
+      const dokuWebhook = `${window.location.origin}/api/webhooks/doku`;
 
       setDokuEnabled(resolvedDokuEnabled);
       syncDokuToLocalStorage({
@@ -213,7 +213,7 @@ export const PaymentIntegrationModule: React.FC<PaymentIntegrationModuleProps> =
           secretKey: maskIfDemo(
             String(gws.xendit?.secretKey ?? gws.xendit?.apiKey ?? prev.xendit.secretKey ?? '')
           ),
-          webhookUrl: `${window.location.origin}/api/payment/webhook`,
+          webhookUrl: `${window.location.origin}/api/webhooks/xendit`,
         },
         doku: {
           ...prev.doku,
@@ -236,7 +236,7 @@ export const PaymentIntegrationModule: React.FC<PaymentIntegrationModuleProps> =
           serverKey: maskIfDemo(
             String(gws.midtrans?.serverKey ?? gws.midtrans?.secretKey ?? prev.midtrans.serverKey ?? '')
           ),
-          webhookUrl: `${window.location.origin}/api/payment/webhook`,
+          webhookUrl: `${window.location.origin}/api/webhooks/midtrans`,
         },
         tripay: {
           ...prev.tripay,
@@ -249,7 +249,7 @@ export const PaymentIntegrationModule: React.FC<PaymentIntegrationModuleProps> =
           privateKey: maskIfDemo(
             String(gws.tripay?.privateKey ?? gws.tripay?.secretKey ?? prev.tripay.privateKey ?? '')
           ),
-          webhookUrl: `${window.location.origin}/api/payment/webhook`,
+          webhookUrl: `${window.location.origin}/api/webhooks/tripay`,
         },
       }));
     };
@@ -334,7 +334,7 @@ export const PaymentIntegrationModule: React.FC<PaymentIntegrationModuleProps> =
   const handleToggleDokuEnabled = async (nextEnabled: boolean) => {
     setIsTogglingDoku(true);
     setDokuEnabled(nextEnabled);
-    const dokuWebhook = `${window.location.origin}/api/payment/webhook`;
+    const dokuWebhook = `${window.location.origin}/api/webhooks/doku`;
     const updatedDoku = {
       ...gateways.doku,
       dokuEnabled: nextEnabled,
@@ -658,7 +658,7 @@ export const PaymentIntegrationModule: React.FC<PaymentIntegrationModuleProps> =
               dokuEnabled,
               enabled: dokuEnabled,
               qrisEnabled: dokuEnabled,
-              webhookUrl: `${window.location.origin}/api/payment/webhook`,
+              webhookUrl: `${window.location.origin}/api/webhooks/doku`,
             }
           : {}),
       };
@@ -681,7 +681,7 @@ export const PaymentIntegrationModule: React.FC<PaymentIntegrationModuleProps> =
             clientKey: activeSub === 'xendit' ? pubKey : gateways.xendit.publicKey,
             secretKey: activeSub === 'xendit' ? secKey : gateways.xendit.secretKey,
             apiKey: activeSub === 'xendit' ? secKey : gateways.xendit.secretKey,
-            webhookUrl: `${window.location.origin}/api/payment/webhook`,
+            webhookUrl: `${window.location.origin}/api/webhooks/xendit`,
           },
           doku: {
             ...DEFAULT_PAYMENT_GATEWAY_CONFIG.gateways.doku,
@@ -690,7 +690,7 @@ export const PaymentIntegrationModule: React.FC<PaymentIntegrationModuleProps> =
             merchantCode: activeSub === 'doku' ? pubKey : gateways.doku.clientId,
             clientKey: activeSub === 'doku' ? pubKey : gateways.doku.clientId,
             secretKey: activeSub === 'doku' ? secKey : gateways.doku.sharedKey,
-            webhookUrl: `${window.location.origin}/api/payment/webhook`,
+            webhookUrl: `${window.location.origin}/api/webhooks/doku`,
           },
           midtrans: {
             ...DEFAULT_PAYMENT_GATEWAY_CONFIG.gateways.midtrans,
@@ -700,7 +700,7 @@ export const PaymentIntegrationModule: React.FC<PaymentIntegrationModuleProps> =
             clientKey: activeSub === 'midtrans' ? pubKey : gateways.midtrans.clientKey,
             serverKey: activeSub === 'midtrans' ? secKey : gateways.midtrans.serverKey,
             secretKey: activeSub === 'midtrans' ? secKey : gateways.midtrans.serverKey,
-            webhookUrl: `${window.location.origin}/api/payment/webhook`,
+            webhookUrl: `${window.location.origin}/api/webhooks/midtrans`,
           },
           tripay: {
             ...DEFAULT_PAYMENT_GATEWAY_CONFIG.gateways.tripay,
@@ -710,13 +710,13 @@ export const PaymentIntegrationModule: React.FC<PaymentIntegrationModuleProps> =
             apiKey: activeSub === 'tripay' ? pubKey : gateways.tripay.apiKey,
             privateKey: activeSub === 'tripay' ? secKey : gateways.tripay.privateKey,
             secretKey: activeSub === 'tripay' ? secKey : gateways.tripay.privateKey,
-            webhookUrl: `${window.location.origin}/api/payment/webhook`,
+            webhookUrl: `${window.location.origin}/api/webhooks/tripay`,
           },
         },
       };
 
       if (activeSub === 'doku') {
-        const dokuWebhook = `${window.location.origin}/api/payment/webhook`;
+        const dokuWebhook = `${window.location.origin}/api/webhooks/doku`;
         const posQrisSyncPayload = {
           acceptQris: dokuEnabled,
           enableQRIS: dokuEnabled,

@@ -709,21 +709,6 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
     if (typeof window !== 'undefined') {
       void ensureArabianFoodMasterSynced();
       void autoResyncLocalCachesToServer();
-
-      // Local-only normalization (zero extra Firestore getDocs scans to conserve quota)
-      try {
-        for (let i = 0; i < localStorage.length; i++) {
-          const key = localStorage.key(i);
-          if (!key) continue;
-          const rawVal = localStorage.getItem(key);
-          if (rawVal && /muhammad\s+irfan/i.test(rawVal)) {
-            localStorage.setItem(
-              key,
-              rawVal.replace(/muhammad\s+irfan/gi, 'Dede Fajar Kurniawan')
-            );
-          }
-        }
-      } catch {}
     }
 
     let unsubProducts: () => void = () => {};
@@ -911,7 +896,7 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
         ? raw.reviewedBy && raw.reviewedBy !== 'Administrator'
           ? raw.reviewedBy
           : 'Order Online (PWA)'
-        : 'Dede Fajar Kurniawan';
+        : 'Kasir';
 
       const totalAmount = Number(
         raw.totalAmount ?? raw.total ?? raw.totalRevenue ?? raw.subtotal ?? 0
@@ -987,10 +972,7 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
         fraudFlags: Array.isArray(raw.fraudFlags) ? raw.fraudFlags : [],
         riskLevel: raw.riskLevel || 'clean',
         cashierId: raw.cashierId || raw.staffId || 'staff_001',
-        cashierName: String(raw.cashierName || raw.cashier || defaultCashierName).replace(
-          /muhammad\s+irfan/gi,
-          'Dede Fajar Kurniawan'
-        ),
+        cashierName: String(raw.cashierName || raw.cashier || defaultCashierName),
         cashierRole: raw.cashierRole || 'Cashier',
         cashierEmail: raw.cashierEmail || '',
         deliveryStaffId: raw.deliveryStaffId || null,

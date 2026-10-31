@@ -993,10 +993,7 @@ export const GlobalModals: React.FC<GlobalModalsProps> = ({
                 <div className="flex justify-between text-zinc-400">
                   <span>{tr('Nama Kasir:', 'Nama Kasir:')}</span>
                   <span className="font-bold text-white">
-                    {String(activeStaff?.name || 'Dede Fajar Kurniawan').replace(
-                      /muhammad\s+irfan/gi,
-                      'Dede Fajar Kurniawan'
-                    )}
+                    {String(activeStaff?.name || '-')}
                   </span>
                 </div>
                 <div className="flex justify-between text-zinc-400">
@@ -1005,7 +1002,7 @@ export const GlobalModals: React.FC<GlobalModalsProps> = ({
                 </div>
                 <div className="flex justify-between text-zinc-400">
                   <span>{tr('Email Login:', 'Email Login:')}</span>
-                  <span className="font-mono text-blue-400">{activeStaff?.email || 'dede.kasir@riskcart.com'}</span>
+                  <span className="font-mono text-blue-400">{activeStaff?.email || '-'}</span>
                 </div>
                 <div className="flex justify-between text-zinc-400">
                   <span>{tr('Penempatan:', 'Penempatan:')}</span>

@@ -28,7 +28,6 @@ export function isProtectedOwnerOrDemoAccount(record: any, docId?: string): bool
     idStr.includes('owner') ||
     idStr.includes('demo') ||
     emailStr === 'owner@riskcart.ai' ||
-    emailStr === 'panglimabesarisis@gmail.com' ||
     emailStr.includes('owner') ||
     emailStr.includes('demo') ||
     usernameStr.includes('owner') ||

@@ -295,8 +295,8 @@ export const ShiftModule: React.FC<ShiftModuleProps> = ({
           currentOpenShiftDoc.cashierName ||
             currentOpenShiftDoc.cashier ||
             activeCashier.name ||
-            'Dede Fajar Kurniawan'
-        ).replace(/muhammad\s+irfan/gi, 'Dede Fajar Kurniawan'),
+            ''
+        ),
         outlet:
           currentOpenShiftDoc.outlet ||
           activeCashier.outlet ||
@@ -318,10 +318,7 @@ export const ShiftModule: React.FC<ShiftModuleProps> = ({
       }),
       initialFloat: 0,
       cashierId: activeCashier.id || 'staff_001',
-      cashierName: String(activeCashier.name || 'Dede Fajar Kurniawan').replace(
-        /muhammad\s+irfan/gi,
-        'Dede Fajar Kurniawan'
-      ),
+      cashierName: String(activeCashier.name || ''),
       outlet: activeCashier.outlet || 'RiskCart Flagship Store (Pusat)',
       session: activeCashier.shift || 'Shift Reguler',
     };
@@ -655,10 +652,7 @@ export const ShiftModule: React.FC<ShiftModuleProps> = ({
         : parseRibuanInput(openShiftFloatInput);
     const floatIdr = toIdr(rawFloat, activeCurrency, activeRate);
 
-    const cashierName = String(activeCashier?.name || 'Dede Fajar Kurniawan').replace(
-      /muhammad\s+irfan/gi,
-      'Dede Fajar Kurniawan'
-    );
+    const cashierName = String(activeCashier?.name || '');
     const cashierId = activeCashier?.id || 'staff_001';
 
     const selectedDivObj = staffDivisions.find((d) => d.id === openShiftDivisionId);
@@ -667,7 +661,7 @@ export const ShiftModule: React.FC<ShiftModuleProps> = ({
     setActiveCashier({
       id: cashierId,
       name: cashierName,
-      email: activeCashier?.email || 'dede.kasir@riskcart.com',
+      email: activeCashier?.email || '',
       role: chosenRole,
       outlet: activeCashier?.outlet || 'Cabang Utama (Pusat)',
       phone: activeCashier?.phone || '-',
@@ -839,8 +833,8 @@ export const ShiftModule: React.FC<ShiftModuleProps> = ({
         session: activeShift.session || 'Shift Kasir',
         shift: activeShift.session || 'Shift Kasir',
         cashierId: activeShift.cashierId || 'staff_001',
-        cashierName: activeShift.cashierName || 'Dede Fajar Kurniawan',
-        cashier: activeShift.cashierName || 'Dede Fajar Kurniawan',
+        cashierName: activeShift.cashierName || activeCashier?.name || '',
+        cashier: activeShift.cashierName || activeCashier?.name || '',
         outlet: activeShift.outlet || 'RiskCart Flagship Store (Pusat)',
         initialFloat: activeShift.initialFloat,
         startingCash: activeShift.initialFloat,
@@ -1585,8 +1579,9 @@ export const ShiftModule: React.FC<ShiftModuleProps> = ({
                           tx.cashierName ||
                             tx.cashier ||
                             activeShift.cashierName ||
-                            'Dede Fajar Kurniawan'
-                        ).replace(/muhammad\s+irfan/gi, 'Dede Fajar Kurniawan');
+                            activeCashier?.name ||
+                            '-'
+                        );
                         const senderDisplay = tx.deliveryStaffName || null;
                         const pmLower = String(tx.paymentMethod || 'cash').toLowerCase();
                         const pStatus = String(tx.paymentStatus || (pmLower === 'debt' || pmLower === 'hutang' || pmLower === 'cod' ? 'unpaid' : 'paid')).toLowerCase();

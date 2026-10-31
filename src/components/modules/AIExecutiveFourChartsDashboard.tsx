@@ -509,7 +509,7 @@ export const AIExecutiveFourChartsDashboard: React.FC<AIExecutiveFourChartsDashb
       if (!s) return;
       const key = s.id || s.name;
       if (key) {
-        const cleanName = String(s.name || 'Staff').replace(/muhammad\s+irfan/gi, 'Dede Fajar Kurniawan');
+        const cleanName = String(s.name || 'Staff');
         mergedStaffMap.set(key, { ...s, name: cleanName });
       }
     });
@@ -520,7 +520,7 @@ export const AIExecutiveFourChartsDashboard: React.FC<AIExecutiveFourChartsDashb
     const presetTopStaff = [
       {
         id: 'stf_top_1',
-        name: 'Dede Fajar Kurniawan',
+        name: realStaffList[0]?.name || 'Owner',
         role: 'Head Cashier / Executive Ops',
         division: 'Front Office & Kasir POS',
         kpiScore: 99.4,
@@ -582,7 +582,7 @@ export const AIExecutiveFourChartsDashboard: React.FC<AIExecutiveFourChartsDashb
         const kpiScore = Math.min(100, Math.max(85, Math.round(rawScore * 10) / 10));
         return {
           id: s.id || `staff_${idx}`,
-          name: String(s.name || 'Staff').replace(/muhammad\s+irfan/gi, 'Dede Fajar Kurniawan'),
+          name: String(s.name || 'Staff'),
           role: s.role || s.jabatan || s.position || 'Cashier POS / Operasional',
           division: s.division || s.divisi || s.department || 'Operasional Toko',
           kpiScore,
@@ -633,7 +633,7 @@ export const AIExecutiveFourChartsDashboard: React.FC<AIExecutiveFourChartsDashb
       salesInsight: `Total Omzet 7 hari tercatat ${formatMoney(salesChartBundle.sumOmzet)} dengan Laba Bersih ${formatMoney(salesChartBundle.sumLaba)} (Margin Rata-rata ${salesChartBundle.avgMarginPct}%). Kontribusi pembayaran didominasi Tunai (${formatMoney(salesChartBundle.sumTunai)}) & QRIS (${formatMoney(salesChartBundle.sumQris)}), sedangkan Piutang (${formatMoney(salesChartBundle.sumPiutang)}) terkendali.`,
       apModalInsight: `Saldo likuiditas tersedia (Brankas Modal ${formatMoney(apVsModalBundle.effectiveBrankasModal)} + Kas Toko ${formatMoney(apVsModalBundle.effectiveKasToko)} = ${formatMoney(apVsModalBundle.totalModalTersedia)}) dibandingkan total Hutang PO Supplier ${formatMoney(apVsModalBundle.totalHutangSupplier)} menghasilkan Safety Coverage Ratio ${apVsModalBundle.coverageRatio}x (${apVsModalBundle.coverageRatio >= 1.5 ? 'Sangat Aman untuk pelunasan jatuh tempo' : 'Waspada likuiditas kas modal'}).`,
       safetyStockInsight: `Dari ${safetyStockBundle.rows.length} item Bahan Baku & SKU utama yang dipantau, terdapat ${safetyStockBundle.criticalCount} item berstatus KRITIS (Merah - di bawah standar aman) dan ${safetyStockBundle.warningCount} item WASPADA (Amber). Segera terbitkan PO Pengadaan untuk item di bawah garis batas aman.`,
-      staffKpiInsight: `Top 5 Karyawan Terbaik mencatat disiplin kehadiran 100% On-Time (0x Telat) dipimpin oleh ${staffKpiBundle.top5Staff[0]?.name || 'Dede Fajar Kurniawan'} (Skor KPI ${staffKpiBundle.top5Staff[0]?.kpiScore || 99.4}%). Direkomendasikan pemberian insentif tepat waktu pada penutupan buku bulanan.`,
+      staffKpiInsight: `Top 5 Karyawan Terbaik mencatat disiplin kehadiran 100% On-Time (0x Telat) dipimpin oleh ${staffKpiBundle.top5Staff[0]?.name || 'Staff Terbaik'} (Skor KPI ${staffKpiBundle.top5Staff[0]?.kpiScore || 99.4}%). Direkomendasikan pemberian insentif tepat waktu pada penutupan buku bulanan.`,
       updatedAt: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
       promptUsed: promptSnippet,
       moduleRefUsed: activeModuleReference,

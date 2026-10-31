@@ -79,9 +79,18 @@ async function printViaBrowser(receipt: any, s: Settings) {
     s?.printReceiptBarcode !== false
       ? await QRCode.toDataURL(`RISKCART-TX:${receipt.id || receipt.orderNumber || ''}`, { margin: 1, width: 160 })
       : '';
-  const logo = s?.printStoreLogo !== false ? `<img src="${s?.storeLogoUrl || '/pwa-192x192.png'}" style="width:40%;filter:grayscale(1);display:block;margin:0 auto 4px" />` : '';
+  const rawLogoUrl = typeof s?.storeLogoUrl === 'string' ? s.storeLogoUrl.trim() : '';
+  const safeLogoUrl =
+    rawLogoUrl.startsWith('https://') || rawLogoUrl.startsWith('data:image/')
+      ? rawLogoUrl
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+      : '/pwa-192x192.png';
+  const logo = s?.printStoreLogo !== false ? `<img src="${safeLogoUrl}" style="width:40%;filter:grayscale(1);display:block;margin:0 auto 4px" />` : '';
   const copies = Math.min(Math.max(Number(s?.printCopies) || 1, 1), 3);
-  const block = `<div class="r">${logo}<pre>${lines.map((l) => l.replace(/</g, '&lt;')).join('\n')}</pre>${
+  const block = `<div class="r">${logo}<pre>${lines.map((l) => l.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')).join('\n')}</pre>${
     qr ? `<img src="${qr}" style="width:45%;display:block;margin:4px auto" />` : ''
   }</div>`;
   const html = `<!doctype html><html><head><meta charset="utf-8"><style>

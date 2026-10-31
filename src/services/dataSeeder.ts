@@ -444,7 +444,6 @@ export function isOwnerOrDemoAccountDoc(data: any, docId?: string): boolean {
     idStr.includes('owner') ||
     idStr.includes('demo') ||
     email === 'owner@riskcart.ai' ||
-    email === 'panglimabesarisis@gmail.com' ||
     email.includes('owner') ||
     email.includes('demo') ||
     username.includes('owner') ||
@@ -777,8 +776,8 @@ export async function seedInitialData(): Promise<{ restored: string[] }> {
   try {
     const ownerPayload = {
       id: 'staff_001',
-      name: 'Dede Fajar Kurniawan',
-      email: 'panglimabesarisis@gmail.com',
+      name: 'Owner',
+      email: '',
       role: 'Owner',
       outlet: 'Cabang Utama (Pusat)',
       phone: '0811-1000-001',

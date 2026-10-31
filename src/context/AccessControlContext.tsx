@@ -835,8 +835,8 @@ export interface ActiveCashierProfile {
 
 const DEFAULT_ACTIVE_CASHIER: ActiveCashierProfile = {
   id: 'staff_001',
-  name: 'Dede Fajar Kurniawan',
-  email: 'panglimabesarisis@gmail.com',
+  name: 'Owner',
+  email: '',
   role: 'Owner / Super Admin',
   outlet: 'Cabang Utama (Pusat)',
   phone: '0811-1000-001',
@@ -1363,14 +1363,11 @@ export const AccessControlProvider: React.FC<{ children: React.ReactNode }> = ({
 
   const setActiveCashier = useCallback(
     (cashier: ActiveCashierProfile) => {
-      const cleanName = String(cashier.name || 'Owner RiskCart').replace(
-        /muhammad\s+irfan/gi,
-        'Dede Fajar Kurniawan'
-      );
+      const cleanName = String(cashier.name || 'Owner').trim();
       const clean: ActiveCashierProfile = {
         id: cashier.id || 'staff_001',
         name: cleanName,
-        email: cashier.email || 'owner@riskcart.ai',
+        email: cashier.email || '',
         role: cashier.role || 'Owner / Super Admin',
         outlet: cashier.outlet || 'Cabang Utama (Pusat)',
         phone: cashier.phone || '-',

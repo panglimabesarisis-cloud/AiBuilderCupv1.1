@@ -328,13 +328,10 @@ export const FinanceModule: React.FC<FinanceModuleProps> = ({
             String(s.name).toLowerCase() === String(activeCashier.name).toLowerCase())
       );
       if (matched?.name) {
-        return String(matched.name).replace(/muhammad\s+irfan/gi, 'Dede Fajar Kurniawan');
+        return String(matched.name);
       }
     }
-    return String(activeCashier?.name || 'Dede Fajar Kurniawan').replace(
-      /muhammad\s+irfan/gi,
-      'Dede Fajar Kurniawan'
-    );
+    return String(activeCashier?.name || staffList?.[0]?.name || '');
   }, [staffList, activeCashier]);
 
   // Modal State for Add / Edit Journal Entry (Catat Mutasi / Setoran Brankas)

@@ -306,7 +306,8 @@ export const CustomerModule: React.FC<CustomerModuleProps> = ({
   const [showAddCustomer, setShowAddCustomer] = useState(false);
   const [newName, setNewName] = useState('');
   const [newPhone, setNewPhone] = useState('');
-  const [newPin, setNewPin] = useState('123456');
+  const [newPin, setNewPin] = useState('');
+  const [pinError, setPinError] = useState<string | null>(null);
   const [newAddress, setNewAddress] = useState('');
   const [newType, setNewType] = useState('Pelanggan Reguler');
   const [newCreditLimit, setNewCreditLimit] = useState('500000');
@@ -329,17 +330,24 @@ export const CustomerModule: React.FC<CustomerModuleProps> = ({
   const [ptsAmount, setPtsAmount] = useState('100');
   const [ptsReason, setPtsReason] = useState('Kompensasi Keterlambatan Pengiriman');
 
+  const FORBIDDEN_PINS = ['123456', '000000', '111111', '123123'];
+
   // Handle Create or Update Customer
   const handleCreateCustomer = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newName) return;
-    const secretPin = newPin.trim() || '123456';
+    const secretPin = newPin.trim();
+    if (!/^\d{6}$/.test(secretPin) || FORBIDDEN_PINS.includes(secretPin)) {
+      setPinError(
+        'PIN wajib diisi manual 6 digit angka dan tidak boleh 123456, 000000, 111111, atau 123123.'
+      );
+      return;
+    }
+    setPinError(null);
     if (editingCustomer?.id) {
       await updateCustomerDoc(editingCustomer.id, {
         name: newName,
         phone: newPhone || '+62 812-0000-0000',
-        pin: secretPin,
-        password: secretPin,
         address: newAddress || 'Area Sekitar Outlet',
         type: newType,
         creditLimit: Number(newCreditLimit) || 0,
@@ -358,9 +366,7 @@ export const CustomerModule: React.FC<CustomerModuleProps> = ({
         name: newName,
         phone: newPhone || '+62 812-0000-0000',
         normalizedPhone: normPhone,
-        pin: secretPin,
-        password: secretPin,
-        email: `${newName.toLowerCase().replace(/\s+/g, '')}@gmail.com`,
+        email: '',
         address: newAddress || 'Area Sekitar Outlet',
         type: newType,
         creditLimit: Number(newCreditLimit) || 0,
@@ -374,11 +380,16 @@ export const CustomerModule: React.FC<CustomerModuleProps> = ({
       };
       await addCustomerDoc(item);
     }
+    await apiFetch('/api/customer/set-pin', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phone: newPhone, pin: secretPin }),
+    }).catch(() => {});
     setShowAddCustomer(false);
     setEditingCustomer(null);
     setNewName('');
     setNewPhone('');
-    setNewPin('123456');
+    setNewPin('');
     setNewAddress('');
   };
 
@@ -701,7 +712,8 @@ export const CustomerModule: React.FC<CustomerModuleProps> = ({
                               setEditingCustomer(c);
                               setNewName(c.name || '');
                               setNewPhone(c.phone || '');
-                              setNewPin(String((c as any).pin || (c as any).password || '123456'));
+                              setNewPin('');
+                              setPinError(null);
                               setNewAddress(c.address || '');
                               setNewType(c.type || 'Pelanggan Reguler');
                               setNewCreditLimit(String(c.creditLimit || 0));
@@ -1777,17 +1789,28 @@ export const CustomerModule: React.FC<CustomerModuleProps> = ({
                   />
                 </div>
                 <div>
-                  <label className="block text-zinc-400 font-bold mb-1">PIN / Password Login PWA:</label>
+                  <label className="block text-zinc-400 font-bold mb-1">PIN Login PWA (6 Digit):</label>
                   <input
-                    type="text"
+                    type="password"
+                    inputMode="numeric"
                     required
-                    placeholder="Default: 123456"
+                    minLength={6}
+                    maxLength={6}
+                    placeholder="6 digit angka"
                     value={newPin}
-                    onChange={(e) => setNewPin(e.target.value)}
-                    className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-amber-300 font-mono font-bold"
+                    onChange={(e) => {
+                      setNewPin(e.target.value.replace(/[^0-9]/g, '').slice(0, 6));
+                      setPinError(null);
+                    }}
+                    className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-amber-300 font-mono font-bold tracking-widest"
                   />
                 </div>
               </div>
+              {pinError && (
+                <div className="p-2.5 rounded-xl bg-rose-950/60 border border-rose-500/40 text-rose-300 text-xs font-bold">
+                  {pinError}
+                </div>
+              )}
               <div>
                 <label className="block text-zinc-400 font-bold mb-1">Alamat Domisili / Warung:</label>
                 <input

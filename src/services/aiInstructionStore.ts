@@ -1668,7 +1668,7 @@ export function buildRealFirestoreContextJson(data: {
   const normalizedStaff = (staffList.length > 0
     ? staffList
     : [
-        { id: 'staff_001', name: 'Dede Fajar Kurniawan', role: 'Owner / Executive Lead', divisionName: 'Manajemen & Operasional', kpiScore: 100, lateCount: 0, onTimeRate: 100 },
+        { id: 'staff_001', name: 'Owner', role: 'Owner / Executive Lead', divisionName: 'Manajemen & Operasional', kpiScore: 100, lateCount: 0, onTimeRate: 100 },
         { id: 'staff_002', name: 'Rizky Pratama', role: 'Executive Chef', divisionName: 'Divisi Kitchen (Dapur)', kpiScore: 98, lateCount: 0, onTimeRate: 100 },
         { id: 'staff_003', name: 'Siti Nurhaliza', role: 'Head Cashier', divisionName: 'Divisi Front Office / Kasir', kpiScore: 97, lateCount: 0, onTimeRate: 100 },
         { id: 'staff_004', name: 'Andi Saputra', role: 'Restaurant Captain', divisionName: 'Divisi Service / Floor', kpiScore: 96, lateCount: 0, onTimeRate: 100 },
@@ -1676,7 +1676,7 @@ export function buildRealFirestoreContextJson(data: {
       ]
   ).map((s: any) => ({
     id: s.id,
-    nama: String(s.name || 'Staff').replace(/Muhammad Irfan/gi, 'Dede Fajar Kurniawan'),
+    nama: String(s.name || 'Staff'),
     jabatan: s.roleName || s.role || 'Staff Operasional',
     divisi: s.divisionName || s.division || 'Operasional',
     kpiScore: Number(s.kpiScore ?? 95),

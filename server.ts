@@ -73,84 +73,70 @@ try {
 try {
   setLogLevel('silent');
 } catch {}
-const DEFAULT_SERVER_DB_ID = 'ai-studio-remixaibuildercu-48df8cb9-94a3-45af-9c6f-c3ed1e47e70c';
-const normalizeServerDbId = (rawDbId?: string): string => {
-  const clean = String(rawDbId || '').trim();
-  if (!clean || clean === 'ai-studio-remixaibuildercu-48dfb619-9da3-46af-9c6f-c3edfe47e70c') {
-    return DEFAULT_SERVER_DB_ID;
-  }
-  return clean;
-};
-const decodeServerB64 = (encoded?: string): string => {
-  if (!encoded || !String(encoded).trim()) return '';
-  try {
-    return Buffer.from(String(encoded).trim(), 'base64').toString('utf8').trim();
-  } catch {
-    return '';
-  }
-};
 const serverFirebaseConfig = {
   ...appletConfigRaw,
   apiKey:
     process.env.VITE_FIREBASE_API_KEY ||
     process.env.FIREBASE_API_KEY ||
-    decodeServerB64(process.env.VITE_FIREBASE_API_KEY_B64 || process.env.FIREBASE_API_KEY_B64) ||
     appletConfigRaw.apiKey ||
-    decodeServerB64(['QUl6YVN5QmhVbC1OMWVm', 'OVl2OFprRnBhZjJzNHBm', 'TFNPWXZCRnpV'].join('')),
+    '',
   authDomain:
     process.env.VITE_FIREBASE_AUTH_DOMAIN ||
     process.env.FIREBASE_AUTH_DOMAIN ||
     appletConfigRaw.authDomain ||
-    'aibuildercupv1-riskcart.firebaseapp.com',
+    '',
   projectId:
     process.env.VITE_FIREBASE_PROJECT_ID ||
     process.env.FIREBASE_PROJECT_ID ||
     appletConfigRaw.projectId ||
-    'aibuildercupv1-riskcart',
+    '',
   storageBucket:
     process.env.VITE_FIREBASE_STORAGE_BUCKET ||
     process.env.FIREBASE_STORAGE_BUCKET ||
     appletConfigRaw.storageBucket ||
-    'aibuildercupv1-riskcart.firebasestorage.app',
+    '',
   messagingSenderId:
     process.env.VITE_FIREBASE_MESSAGING_SENDER_ID ||
     process.env.FIREBASE_MESSAGING_SENDER_ID ||
     appletConfigRaw.messagingSenderId ||
-    '176423783758',
+    '',
   appId:
     process.env.VITE_FIREBASE_APP_ID ||
     process.env.FIREBASE_APP_ID ||
     appletConfigRaw.appId ||
-    '1:176423783758:web:87bdb0de824ef162e0621f',
+    '',
   measurementId:
     process.env.VITE_FIREBASE_MEASUREMENT_ID ||
     process.env.FIREBASE_MEASUREMENT_ID ||
     appletConfigRaw.measurementId ||
     '',
-  firestoreDatabaseId: normalizeServerDbId(
+  firestoreDatabaseId:
     process.env.VITE_FIREBASE_DATABASE_ID ||
-      process.env.FIREBASE_DATABASE_ID ||
-      appletConfigRaw.firestoreDatabaseId
-  ),
+    process.env.FIREBASE_DATABASE_ID ||
+    appletConfigRaw.firestoreDatabaseId ||
+    '',
 };
 const firebaseServerApp =
   getApps().length > 0 ? getApp() : initializeApp(serverFirebaseConfig);
-const targetServerDbId =
-  serverFirebaseConfig.firestoreDatabaseId || DEFAULT_SERVER_DB_ID;
+const targetServerDbId = serverFirebaseConfig.firestoreDatabaseId || undefined;
 let firestoreDbInstance;
 try {
-  firestoreDbInstance = initializeFirestore(
-    firebaseServerApp,
-    { ignoreUndefinedProperties: true },
-    targetServerDbId
-  );
+  firestoreDbInstance = targetServerDbId
+    ? initializeFirestore(
+        firebaseServerApp,
+        { ignoreUndefinedProperties: true },
+        targetServerDbId
+      )
+    : initializeFirestore(firebaseServerApp, { ignoreUndefinedProperties: true });
 } catch {
-  firestoreDbInstance = getFirestore(firebaseServerApp, targetServerDbId);
+  firestoreDbInstance = targetServerDbId
+    ? getFirestore(firebaseServerApp, targetServerDbId)
+    : getFirestore(firebaseServerApp);
 }
 const firestoreDb = firestoreDbInstance;
 
 const app = express();
-app.set('trust proxy', true);
+app.set('trust proxy', 1);
 const PORT = Number(process.env.PORT) || 3000;
 
 // Security headers (Helmet-equivalent baseline) & reduced JSON body limit
@@ -196,12 +182,14 @@ const SERVER_ONLY_COLLECTIONS = new Set([
   'otp_sessions',
   'ai_agents_private',
   'payment_gateway_secrets',
+  'auth_lockouts',
+  'staff_secrets',
 ]);
 
 app.post(
   '/api/db/sync',
   requireAuth,
-  requireRole(['owner', 'admin', 'super_admin', 'supervisor', 'manager', 'cashier', 'staff']),
+  requireRole(['owner']),
   async (req, res) => {
     try {
     const { op, collectionPath, docId, data, merge } = req.body || {};
@@ -257,15 +245,38 @@ app.post(['/api/auth/firebase-token', '/api/auth/firebase-custom-token'], requir
 async function migrateAndPersistStaffSecretHashes(
   docPaths: string[],
   baseDoc: Record<string, any>,
-  updates: { passwordHash?: string; pinHash?: string }
+  updates: { passwordHash?: string; pinHash?: string },
+  explicitUid?: string
 ): Promise<void> {
+  const fallbackUid =
+    docPaths
+      .map((p) => String(p || '').split('/').filter(Boolean).pop() || '')
+      .find(Boolean) || '';
+  const uid = String(explicitUid || baseDoc?.id || fallbackUid).trim();
+
+  if (uid && (updates.passwordHash || updates.pinHash)) {
+    await serverStore
+      .setDoc(
+        `staff_secrets/${uid}`,
+        {
+          id: uid,
+          ...(updates.passwordHash ? { passwordHash: updates.passwordHash } : {}),
+          ...(updates.pinHash ? { pinHash: updates.pinHash } : {}),
+          updatedAt: new Date().toISOString(),
+        },
+        { merge: true }
+      )
+      .catch(() => {});
+  }
+
   const cleanedDoc: Record<string, any> = {
     ...baseDoc,
-    ...updates,
     updatedAt: new Date().toISOString(),
   };
   delete cleanedDoc.password;
   delete cleanedDoc.pin;
+  delete cleanedDoc.passwordHash;
+  delete cleanedDoc.pinHash;
 
   const adminAppInstance = getAdminApp();
   const adminFs = adminAppInstance
@@ -279,8 +290,8 @@ async function migrateAndPersistStaffSecretHashes(
         await adminFs
           .doc(docPath)
           .update({
-            ...(updates.passwordHash ? { passwordHash: updates.passwordHash } : {}),
-            ...(updates.pinHash ? { pinHash: updates.pinHash } : {}),
+            passwordHash: FieldValue.delete(),
+            pinHash: FieldValue.delete(),
             password: FieldValue.delete(),
             pin: FieldValue.delete(),
           })
@@ -289,8 +300,8 @@ async function migrateAndPersistStaffSecretHashes(
         await setDoc(
           doc(firestoreDb, docPath),
           {
-            ...(updates.passwordHash ? { passwordHash: updates.passwordHash } : {}),
-            ...(updates.pinHash ? { pinHash: updates.pinHash } : {}),
+            passwordHash: deleteField(),
+            pinHash: deleteField(),
             password: deleteField(),
             pin: deleteField(),
           },
@@ -299,6 +310,304 @@ async function migrateAndPersistStaffSecretHashes(
       }
     })
   );
+  invalidateStaffAndUsersCache();
+}
+
+async function getOrMigrateStaffSecrets(
+  uid: string,
+  baseDoc?: Record<string, any>,
+  docPaths?: string[],
+  storeId = 'store_001'
+): Promise<{ passwordHash: string; pinHash: string }> {
+  const cleanUid = String(uid || baseDoc?.id || '').trim();
+  if (!cleanUid) {
+    return { passwordHash: '', pinHash: '' };
+  }
+
+  let secretData: Record<string, any> = {};
+  try {
+    const snap = await serverStore.getDoc(`staff_secrets/${cleanUid}`);
+    if (snap.exists()) {
+      secretData = (snap.data() || {}) as Record<string, any>;
+    }
+  } catch {}
+
+  const legacyPassHash = String(baseDoc?.passwordHash || '').trim();
+  const legacyPinHash = String(baseDoc?.pinHash || '').trim();
+  const hasOriginSecretFields =
+    Boolean(legacyPassHash) ||
+    Boolean(legacyPinHash) ||
+    Boolean(baseDoc?.password) ||
+    Boolean(baseDoc?.pin);
+
+  const resolvedPassHash = String(secretData.passwordHash || legacyPassHash || '').trim();
+  const resolvedPinHash = String(secretData.pinHash || legacyPinHash || '').trim();
+
+  if (hasOriginSecretFields && baseDoc) {
+    const targetPaths =
+      docPaths && docPaths.length > 0
+        ? docPaths
+        : [`staff/${cleanUid}`, `stores/${storeId}/staff/${cleanUid}`, `users/${cleanUid}`];
+    await migrateAndPersistStaffSecretHashes(
+      targetPaths,
+      baseDoc,
+      {
+        ...(resolvedPassHash ? { passwordHash: resolvedPassHash } : {}),
+        ...(resolvedPinHash ? { pinHash: resolvedPinHash } : {}),
+      },
+      cleanUid
+    );
+  }
+
+  return {
+    passwordHash: resolvedPassHash,
+    pinHash: resolvedPinHash,
+  };
+}
+
+async function stripPosPinHashesFromSettingsDoc(
+  storeId = 'store_001',
+  currentData?: Record<string, any>
+): Promise<void> {
+  const settingsRef = `stores/${storeId}/settings/pos`;
+  let baseData = currentData;
+  if (!baseData) {
+    try {
+      const snap = await serverStore.getDoc(settingsRef);
+      if (snap.exists()) {
+        baseData = (snap.data() || {}) as Record<string, any>;
+      }
+    } catch {}
+  }
+
+  if (baseData) {
+    const cleaned: Record<string, any> = { ...baseData };
+    delete cleaned.ownerPinHash;
+    delete cleaned.supervisorPinHash;
+    delete cleaned.managerPinHash;
+    delete cleaned.cashierPinHash;
+    await serverStore.setDoc(settingsRef, cleaned, { merge: false }).catch(() => {});
+  }
+
+  const adminAppInstance = getAdminApp();
+  const adminFs = adminAppInstance
+    ? getAdminFirestore(adminAppInstance, targetServerDbId)
+    : null;
+
+  if (adminFs) {
+    await adminFs
+      .doc(settingsRef)
+      .update({
+        ownerPinHash: FieldValue.delete(),
+        supervisorPinHash: FieldValue.delete(),
+        managerPinHash: FieldValue.delete(),
+        cashierPinHash: FieldValue.delete(),
+      })
+      .catch(() => {});
+  } else {
+    await setDoc(
+      doc(firestoreDb, settingsRef),
+      {
+        ownerPinHash: deleteField(),
+        supervisorPinHash: deleteField(),
+        managerPinHash: deleteField(),
+        cashierPinHash: deleteField(),
+      },
+      { merge: true }
+    ).catch(() => {});
+  }
+}
+
+async function getOrMigratePosPins(storeId = 'store_001'): Promise<Record<string, any>> {
+  let posPins: Record<string, any> = {};
+  try {
+    const secretSnap = await serverStore.getDoc('staff_secrets/pos_pins');
+    if (secretSnap.exists()) {
+      posPins = (secretSnap.data() || {}) as Record<string, any>;
+    }
+  } catch {}
+
+  try {
+    const settingsRef = `stores/${storeId}/settings/pos`;
+    const legacySnap = await serverStore.getDoc(settingsRef);
+    if (legacySnap.exists()) {
+      const legacyData = (legacySnap.data() || {}) as Record<string, any>;
+      const hasLegacyPins = Boolean(
+        legacyData.ownerPinHash ||
+          legacyData.supervisorPinHash ||
+          legacyData.managerPinHash ||
+          legacyData.cashierPinHash
+      );
+      if (hasLegacyPins) {
+        const migratedPins: Record<string, any> = {
+          ...(legacyData.ownerPinHash && !posPins.ownerPinHash
+            ? { ownerPinHash: legacyData.ownerPinHash }
+            : {}),
+          ...(legacyData.supervisorPinHash && !posPins.supervisorPinHash
+            ? { supervisorPinHash: legacyData.supervisorPinHash }
+            : {}),
+          ...(legacyData.managerPinHash && !posPins.managerPinHash
+            ? { managerPinHash: legacyData.managerPinHash }
+            : {}),
+          ...(legacyData.cashierPinHash && !posPins.cashierPinHash
+            ? { cashierPinHash: legacyData.cashierPinHash }
+            : {}),
+          updatedAt: new Date().toISOString(),
+        };
+        posPins = { ...posPins, ...migratedPins };
+        await serverStore.setDoc('staff_secrets/pos_pins', posPins, { merge: true }).catch(() => {});
+        await stripPosPinHashesFromSettingsDoc(storeId, legacyData);
+      }
+    }
+  } catch {}
+
+  return posPins;
+}
+
+const LOCKOUT_MAX_ATTEMPTS = 5;
+const LOCKOUT_DURATION_MS = 15 * 60 * 1000; // 15 menit
+const authLockoutMemory = new Map<
+  string,
+  { failedCount: number; lockedUntil: number; updatedAt: number }
+>();
+
+function normalizeAccountKey(rawAccount: string): string {
+  const cleaned = String(rawAccount || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9@._:-]/g, '_')
+    .replace(/\//g, '_')
+    .slice(0, 128);
+  return cleaned || 'anonymous';
+}
+
+async function isLockedOut(rawAccount: string): Promise<{ locked: boolean; remainingMs: number }> {
+  const key = normalizeAccountKey(rawAccount);
+  const now = Date.now();
+  const mem = authLockoutMemory.get(key);
+  if (mem && mem.lockedUntil > now) {
+    return { locked: true, remainingMs: mem.lockedUntil - now };
+  }
+
+  try {
+    const snap = await serverStore.getDoc(`auth_lockouts/${key}`);
+    if (snap.exists()) {
+      const data = (snap.data() || {}) as Record<string, any>;
+      const lockedUntil = Number(data.lockedUntil || 0);
+      const failedCount = Number(data.failedCount || 0);
+      authLockoutMemory.set(key, {
+        failedCount,
+        lockedUntil,
+        updatedAt: Number(data.updatedAt || now),
+      });
+      if (lockedUntil > now) {
+        return { locked: true, remainingMs: lockedUntil - now };
+      }
+    }
+  } catch {}
+
+  return { locked: false, remainingMs: 0 };
+}
+
+async function recordFailedAttempt(
+  rawAccount: string,
+  reset = false
+): Promise<{ locked: boolean; failedCount: number; lockedUntil: number }> {
+  const key = normalizeAccountKey(rawAccount);
+  const now = Date.now();
+
+  if (reset) {
+    authLockoutMemory.delete(key);
+    await serverStore.deleteDoc(`auth_lockouts/${key}`).catch(() => {});
+    return { locked: false, failedCount: 0, lockedUntil: 0 };
+  }
+
+  let current = authLockoutMemory.get(key);
+  if (!current) {
+    try {
+      const snap = await serverStore.getDoc(`auth_lockouts/${key}`);
+      if (snap.exists()) {
+        const data = (snap.data() || {}) as Record<string, any>;
+        current = {
+          failedCount: Number(data.failedCount || 0),
+          lockedUntil: Number(data.lockedUntil || 0),
+          updatedAt: Number(data.updatedAt || 0),
+        };
+      }
+    } catch {}
+  }
+
+  const windowExpired =
+    !current ||
+    (current.lockedUntil > 0 && current.lockedUntil <= now) ||
+    now - current.updatedAt > LOCKOUT_DURATION_MS;
+
+  const nextCount = windowExpired ? 1 : current.failedCount + 1;
+  const lockedUntil = nextCount >= LOCKOUT_MAX_ATTEMPTS ? now + LOCKOUT_DURATION_MS : 0;
+  const record = {
+    account: key,
+    failedCount: nextCount,
+    lockedUntil,
+    updatedAt: now,
+    updatedAtIso: new Date(now).toISOString(),
+  };
+
+  authLockoutMemory.set(key, {
+    failedCount: nextCount,
+    lockedUntil,
+    updatedAt: now,
+  });
+
+  await serverStore.setDoc(`auth_lockouts/${key}`, record, { merge: true }).catch(() => {});
+  return { locked: lockedUntil > now, failedCount: nextCount, lockedUntil };
+}
+
+const ACCOUNT_CACHE_TTL_MS = 60 * 1000; // 60 detik
+const staffAndUsersCache = new Map<
+  string,
+  {
+    expiresAt: number;
+    usersDocs: Array<{ id: string; data: Record<string, any> }>;
+    staffDocs: Array<{ id: string; data: Record<string, any> }>;
+    storeStaffDocs: Array<{ id: string; data: Record<string, any> }>;
+  }
+>();
+
+function invalidateStaffAndUsersCache(): void {
+  staffAndUsersCache.clear();
+}
+
+async function getCachedStaffAndUsers(storeId = 'store_001') {
+  const cleanStoreId = String(storeId || 'store_001').trim() || 'store_001';
+  const now = Date.now();
+  const cached = staffAndUsersCache.get(cleanStoreId);
+  if (cached && cached.expiresAt > now) {
+    return cached;
+  }
+
+  const [usersSnap, staffSnap, storeStaffSnap] = await Promise.all([
+    serverStore.listDocs('users').catch(() => []),
+    serverStore.listDocs('staff').catch(() => []),
+    serverStore.listDocs(`stores/${cleanStoreId}/staff`).catch(() => []),
+  ]);
+
+  const toPlainList = (list: any[]) =>
+    list.map((docSnap) => ({
+      id: String(docSnap.id || (docSnap.data?.() || {}).id || '').trim(),
+      data: ((typeof docSnap.data === 'function' ? docSnap.data() : docSnap.data) || {}) as Record<
+        string,
+        any
+      >,
+    }));
+
+  const entry = {
+    expiresAt: now + ACCOUNT_CACHE_TTL_MS,
+    usersDocs: toPlainList(usersSnap),
+    staffDocs: toPlainList(staffSnap),
+    storeStaffDocs: toPlainList(storeStaffSnap),
+  };
+  staffAndUsersCache.set(cleanStoreId, entry);
+  return entry;
 }
 
 app.post('/api/auth/demo-login', async (req, res) => {
@@ -391,17 +700,23 @@ app.post('/api/auth/login', async (req, res) => {
       });
     }
 
-    const [usersDocs, staffDocs, storeStaffDocs] = await Promise.all([
-      serverStore.listDocs('users').catch(() => []),
-      serverStore.listDocs('staff').catch(() => []),
-      serverStore.listDocs('stores/store_001/staff').catch(() => []),
-    ]);
+    const lockStatus = await isLockedOut(cleanId);
+    if (lockStatus.locked) {
+      const waitMinutes = Math.max(1, Math.ceil(lockStatus.remainingMs / 60000));
+      return res.status(429).json({
+        ok: false,
+        valid: false,
+        message: `Akun dikunci sementara karena 5 kali gagal login. Coba lagi dalam ${waitMinutes} menit.`,
+      });
+    }
+
+    const { usersDocs, staffDocs, storeStaffDocs } = await getCachedStaffAndUsers('store_001');
 
     const accountMap = new Map<string, { data: Record<string, any>; paths: Set<string> }>();
-    const collectDocs = (colPrefix: string, list: any[]) => {
-      list.forEach((docSnap) => {
-        const d = (docSnap.data() || {}) as Record<string, any>;
-        const id = String(docSnap.id || d.id || '').trim();
+    const collectDocs = (colPrefix: string, list: Array<{ id: string; data: Record<string, any> }>) => {
+      list.forEach((docItem) => {
+        const d = (docItem.data || {}) as Record<string, any>;
+        const id = String(docItem.id || d.id || '').trim();
         if (!id) return;
         const entry = accountMap.get(id) || { data: { id }, paths: new Set<string>() };
         entry.data = { ...entry.data, ...d, id };
@@ -420,20 +735,21 @@ app.post('/api/auth/login', async (req, res) => {
       if (String(d.status || '').toLowerCase() === 'nonaktif') continue;
       const dEmail = String(d.email || '').trim().toLowerCase();
       const dUser = String(d.username || '').trim().toLowerCase();
-      const dName = String(d.name || '').trim().toLowerCase();
-      const dPhone = String(d.phone || '').trim().toLowerCase();
-      if (
-        (dEmail && dEmail === cleanId) ||
-        (dUser && dUser === cleanId) ||
-        (dName && dName === cleanId) ||
-        (dPhone && dPhone !== '-' && dPhone === cleanId)
-      ) {
+      if ((dEmail && dEmail === cleanId) || (dUser && dUser === cleanId)) {
         matchedEntry = entry;
         break;
       }
     }
 
     if (!matchedEntry) {
+      const failState = await recordFailedAttempt(cleanId);
+      if (failState.locked) {
+        return res.status(429).json({
+          ok: false,
+          valid: false,
+          message: 'Akun dikunci selama 15 menit karena 5 kali percobaan login gagal.',
+        });
+      }
       return res.status(401).json({
         ok: false,
         valid: false,
@@ -442,7 +758,21 @@ app.post('/api/auth/login', async (req, res) => {
     }
 
     const matchedAccount = matchedEntry.data;
-    const inputHash = hashServerSecretWithSalt(cleanSecret);
+    const accountUid = String(matchedAccount.id || '').trim();
+    const matchedAccountId = accountUid.toLowerCase();
+    if (matchedAccountId && matchedAccountId !== cleanId) {
+      const idLock = await isLockedOut(matchedAccountId);
+      if (idLock.locked) {
+        const waitMinutes = Math.max(1, Math.ceil(idLock.remainingMs / 60000));
+        return res.status(429).json({
+          ok: false,
+          valid: false,
+          message: `Akun dikunci sementara karena 5 kali gagal login. Coba lagi dalam ${waitMinutes} menit.`,
+        });
+      }
+    }
+
+    const inputHash = hashServerSecretWithSalt(cleanSecret, accountUid);
     const safeCompareHex = (aHex: string, bHex: string): boolean => {
       if (!aHex || !bHex || aHex.length !== bHex.length) return false;
       try {
@@ -452,36 +782,83 @@ app.post('/api/auth/login', async (req, res) => {
       }
     };
 
-    const storedPassHash = String(matchedAccount.passwordHash || '').trim();
-    const storedPinHash = String(matchedAccount.pinHash || '').trim();
+    const targetPaths = Array.from(matchedEntry.paths);
+    const secretRecord = await getOrMigrateStaffSecrets(accountUid, matchedAccount, targetPaths);
+    const storedPassHash = secretRecord.passwordHash;
+    const storedPinHash = secretRecord.pinHash;
     const plainPass = String(matchedAccount.password || '').trim();
     const plainPin = String(matchedAccount.pin || '').trim();
 
-    let secretValid =
-      (storedPassHash && safeCompareHex(storedPassHash, inputHash)) ||
-      (storedPinHash && safeCompareHex(storedPinHash, inputHash));
+    const matchedCurrentPass = Boolean(storedPassHash && safeCompareHex(storedPassHash, inputHash));
+    const matchedCurrentPin = Boolean(storedPinHash && safeCompareHex(storedPinHash, inputHash));
+    let secretValid = matchedCurrentPass || matchedCurrentPin;
 
-    if (!secretValid && (plainPass || plainPin)) {
-      const matchesPlainPass = Boolean(plainPass && cleanSecret === plainPass);
-      const matchesPlainPin = Boolean(plainPin && cleanSecret === plainPin);
-      if (matchesPlainPass || matchesPlainPin) {
+    let matchedLegacyPass = false;
+    let matchedLegacyPin = false;
+    if (!secretValid) {
+      matchedLegacyPass = Boolean(storedPassHash && verifyLegacySecretHash(cleanSecret, storedPassHash));
+      matchedLegacyPin = Boolean(storedPinHash && verifyLegacySecretHash(cleanSecret, storedPinHash));
+      if (matchedLegacyPass || matchedLegacyPin) {
         secretValid = true;
-        const nextPassHash = plainPass ? hashServerSecretWithSalt(plainPass) : storedPassHash || undefined;
-        const nextPinHash = plainPin ? hashServerSecretWithSalt(plainPin) : storedPinHash || undefined;
-        const targetPaths = Array.from(matchedEntry.paths);
-        await migrateAndPersistStaffSecretHashes(targetPaths, matchedAccount, {
-          ...(nextPassHash ? { passwordHash: nextPassHash } : {}),
-          ...(nextPinHash ? { pinHash: nextPinHash } : {}),
-        });
       }
     }
 
+    let matchesPlainPass = false;
+    let matchesPlainPin = false;
+    if (!secretValid && (plainPass || plainPin)) {
+      matchesPlainPass = Boolean(plainPass && cleanSecret === plainPass);
+      matchesPlainPin = Boolean(plainPin && cleanSecret === plainPin);
+      if (matchesPlainPass || matchesPlainPin) {
+        secretValid = true;
+      }
+    }
+
+    if (secretValid && (matchedLegacyPass || matchedLegacyPin || matchesPlainPass || matchesPlainPin)) {
+      const nextPassHash =
+        matchedLegacyPass
+          ? inputHash
+          : plainPass
+          ? hashServerSecretWithSalt(plainPass, accountUid)
+          : storedPassHash || undefined;
+      const nextPinHash =
+        matchedLegacyPin
+          ? inputHash
+          : plainPin
+          ? hashServerSecretWithSalt(plainPin, accountUid)
+          : storedPinHash || undefined;
+      await migrateAndPersistStaffSecretHashes(
+        targetPaths,
+        matchedAccount,
+        {
+          ...(nextPassHash ? { passwordHash: nextPassHash } : {}),
+          ...(nextPinHash ? { pinHash: nextPinHash } : {}),
+        },
+        accountUid
+      );
+    }
+
     if (!secretValid) {
+      const failState = await recordFailedAttempt(cleanId);
+      if (matchedAccountId && matchedAccountId !== cleanId) {
+        await recordFailedAttempt(matchedAccountId);
+      }
+      if (failState.locked) {
+        return res.status(429).json({
+          ok: false,
+          valid: false,
+          message: 'Akun dikunci selama 15 menit karena 5 kali percobaan login gagal.',
+        });
+      }
       return res.status(401).json({
         ok: false,
         valid: false,
         message: 'Password atau PIN yang Anda masukkan tidak sesuai.',
       });
+    }
+
+    await recordFailedAttempt(cleanId, true);
+    if (matchedAccountId && matchedAccountId !== cleanId) {
+      await recordFailedAttempt(matchedAccountId, true);
     }
 
     const roleStr = String(matchedAccount.role || 'Cashier');
@@ -1743,7 +2120,7 @@ Analyze all provided records meticulously. Return a comprehensive forensic audit
 const OTP_TTL_MS = 5 * 60 * 1000;
 const serverOtpStore = new Map<
   string,
-  { otp: string; expiresAt: number; attempts: number; customerName: string }
+  { otpHash: string; expiresAt: number; attempts: number; customerName: string }
 >();
 
 function normalizeServerPhone(rawPhone: string): string {
@@ -1773,12 +2150,13 @@ app.post('/api/fonnte/send-otp', async (req, res) => {
       return res.status(429).json({ error: 'Terlalu banyak pengiriman OTP ke nomor ini. Silakan coba lagi dalam 10 menit.' });
     }
 
-    // Generate 6-digit OTP exclusively on the server
+    // Generate 6-digit OTP exclusively on the server and hash with OTP_HMAC_SECRET
     const generatedOtp = crypto.randomInt(100000, 1000000).toString();
+    const otpHash = hashOtpCode(cleanPhone, generatedOtp);
     const expiresAt = Date.now() + OTP_TTL_MS;
 
     serverOtpStore.set(cleanPhone, {
-      otp: generatedOtp,
+      otpHash,
       expiresAt,
       attempts: 0,
       customerName: String(customerName || 'Customer'),
@@ -1787,7 +2165,7 @@ app.post('/api/fonnte/send-otp', async (req, res) => {
     try {
       await serverStore.setDoc(`otp_verifications/${cleanPhone}`, {
         phone: cleanPhone,
-        otp: generatedOtp,
+        otpHash,
         expiresAt,
         attempts: 0,
         createdAt: new Date().toISOString(),
@@ -1823,8 +2201,6 @@ app.post('/api/fonnte/send-otp', async (req, res) => {
       } catch (networkErr: any) {
         console.warn('Fonnte network call warning:', networkErr.message);
       }
-    } else {
-      console.log(`[Fonnte OTP Server] Generated OTP for ${cleanPhone}: ${generatedOtp}`);
     }
 
     // Never return the OTP or API token to the client
@@ -1871,7 +2247,7 @@ app.post('/api/fonnte/verify-otp', async (req, res) => {
         if (snap.exists()) {
           const d = snap.data() as any;
           record = {
-            otp: String(d.otp || ''),
+            otpHash: String(d.otpHash || ''),
             expiresAt: Number(d.expiresAt || 0),
             attempts: Number(d.attempts || 0),
             customerName: String(d.customerName || ''),
@@ -1882,7 +2258,7 @@ app.post('/api/fonnte/verify-otp', async (req, res) => {
       }
     }
 
-    if (!record) {
+    if (!record || !record.otpHash) {
       return res.status(400).json({
         success: false,
         verified: false,
@@ -1902,7 +2278,12 @@ app.post('/api/fonnte/verify-otp', async (req, res) => {
       });
     }
 
-    if (record.otp !== submittedCode) {
+    const submittedHash = hashOtpCode(cleanPhone, submittedCode);
+    const isOtpMatch =
+      record.otpHash.length === submittedHash.length &&
+      crypto.timingSafeEqual(Buffer.from(record.otpHash, 'hex'), Buffer.from(submittedHash, 'hex'));
+
+    if (!isOtpMatch) {
       record.attempts += 1;
       if (record.attempts >= 5) {
         serverOtpStore.delete(cleanPhone);
@@ -1916,6 +2297,9 @@ app.post('/api/fonnte/verify-otp', async (req, res) => {
         });
       }
       serverOtpStore.set(cleanPhone, record);
+      await serverStore
+        .setDoc(`otp_verifications/${cleanPhone}`, { attempts: record.attempts }, { merge: true })
+        .catch(() => {});
       return res.status(400).json({
         success: false,
         verified: false,
@@ -2577,13 +2961,38 @@ async function handleDokuPaymentConfirmation(payload: {
 // Duplicate /api/webhooks/doku removed — handled by payments/gatewayRouter.ts
 
 
-function hashServerSecretWithSalt(secretVal: string): string {
-  const salt = process.env.PIN_SALT || 'riskcart-pin-salt-v1';
-  return crypto.createHash('sha256').update(`${secretVal}:${salt}`).digest('hex');
+function hashServerSecretWithSalt(secret: string, uid = ''): string {
+  const PIN_SALT = String(process.env.PIN_SALT || '').trim();
+  if (PIN_SALT.length < 32) {
+    throw new Error('PIN_SALT wajib dikonfigurasi minimal 32 karakter');
+  }
+  return crypto.scryptSync(String(secret), PIN_SALT + ':' + uid, 32).toString('hex');
 }
 
-// Secure Settings PIN Management (Server-side SHA-256 Hashing + Salt, Protected by requireAuth)
-app.post('/api/settings/pin', requireAuth, requireRole(['owner', 'supervisor', 'manager']), async (req: AuthRequest, res) => {
+function verifyLegacySecretHash(secret: string, storedHash: string): boolean {
+  if (!secret || !storedHash) return false;
+  const PIN_SALT = String(process.env.PIN_SALT || '').trim();
+  const candidates: string[] = [
+    crypto.createHash('sha256').update(`${secret}:riskcart-pin-salt-v1`).digest('hex'),
+  ];
+  if (PIN_SALT.length >= 32) {
+    candidates.push(
+      crypto.createHash('sha256').update(`${secret}:${PIN_SALT}`).digest('hex'),
+      crypto.scryptSync(String(secret), PIN_SALT + ':', 32).toString('hex')
+    );
+  }
+  return candidates.some((cand) => {
+    if (cand.length !== storedHash.length) return false;
+    try {
+      return crypto.timingSafeEqual(Buffer.from(cand, 'hex'), Buffer.from(storedHash, 'hex'));
+    } catch {
+      return false;
+    }
+  });
+}
+
+// Secure Settings PIN Management (Server-side Scrypt Hashing + Salt, Protected by requireAuth + owner only)
+app.post('/api/settings/pin', requireAuth, requireRole(['owner']), async (req: AuthRequest, res) => {
   try {
     const { storeId = 'store_001', role, pin } = req.body;
     if (!role || !pin) {
@@ -2598,18 +3007,18 @@ app.post('/api/settings/pin', requireAuth, requireRole(['owner', 'supervisor', '
       return res.status(400).json({ error: 'PIN/Password harus terdiri dari 4 hingga 64 karakter' });
     }
 
-    const pinHash = hashServerSecretWithSalt(cleanPin);
+    const pinHash = hashServerSecretWithSalt(cleanPin, cleanRole);
     const fieldMap: Record<string, string> = {
       owner: 'ownerPinHash',
       supervisor: 'supervisorPinHash',
       manager: 'managerPinHash',
       cashier: 'cashierPinHash',
     };
-    const updateField = fieldMap[cleanRole] || 'supervisorPinHash';
-    const settingsRef = `stores/${storeId}/settings/pos`;
+    const updateField = fieldMap[cleanRole];
 
+    await getOrMigratePosPins(storeId);
     await serverStore.set(
-      settingsRef,
+      'staff_secrets/pos_pins',
       {
         [updateField]: pinHash,
         updatedAt: new Date().toISOString(),
@@ -2617,6 +3026,7 @@ app.post('/api/settings/pin', requireAuth, requireRole(['owner', 'supervisor', '
       },
       { merge: true }
     );
+    await stripPosPinHashesFromSettingsDoc(storeId);
 
     return res.json({
       success: true,
@@ -2629,7 +3039,7 @@ app.post('/api/settings/pin', requireAuth, requireRole(['owner', 'supervisor', '
   }
 });
 
-// Server-side PIN & Owner Secret Verification (Hash + Salt + Rate Limit 5x/10 menit)
+// Server-side PIN & Owner Secret Verification (Scrypt + Salt + Lockout)
 app.post(['/api/settings/pin/verify', '/api/auth/verify-pin'], async (req, res) => {
   try {
     if (!enforceRateLimit(`pin_verify_ip:${req.ip}`, 15, 10 * 60 * 1000)) {
@@ -2640,13 +3050,25 @@ app.post(['/api/settings/pin/verify', '/api/auth/verify-pin'], async (req, res) 
       });
     }
 
-    const { storeId = 'store_001', role = 'supervisor', pin } = req.body || {};
+    const { storeId = 'store_001', role = 'supervisor', pin, accountId, email, username } = req.body || {};
     if (!pin) {
       return res.status(400).json({ valid: false, ok: false, error: 'PIN diperlukan' });
     }
     const cleanRole = String(role || 'supervisor').toLowerCase().trim();
     const cleanPin = String(pin).trim();
-    const inputHash = hashServerSecretWithSalt(cleanPin);
+    const pinLockKey = String(accountId || email || username || `pin_${storeId}_${cleanRole}`)
+      .trim()
+      .toLowerCase();
+
+    const lockStatus = await isLockedOut(pinLockKey);
+    if (lockStatus.locked) {
+      const waitMinutes = Math.max(1, Math.ceil(lockStatus.remainingMs / 60000));
+      return res.status(429).json({
+        valid: false,
+        ok: false,
+        error: `Verifikasi PIN dikunci sementara selama ${waitMinutes} menit karena 5 kali percobaan gagal.`,
+      });
+    }
 
     const safeCompareHex = (aHex: string, bHex: string): boolean => {
       if (!aHex || !bHex || aHex.length !== bHex.length) return false;
@@ -2658,102 +3080,154 @@ app.post(['/api/settings/pin/verify', '/api/auth/verify-pin'], async (req, res) 
     };
 
     let isValid = false;
-    let resolvedUid = `verified_${cleanRole}`;
-    let resolvedRole = cleanRole === 'owner' ? 'owner' : cleanRole;
-
-    let hasCustomConfiguredHash = false;
+    let resolvedUid = '';
+    let resolvedRole = '';
 
     // 1. Check server environment variables for Owner PIN / Password if configured
-    if (cleanRole === 'owner' || cleanRole === 'supervisor' || cleanRole === 'approver' || cleanRole === 'cashier') {
+    if (cleanRole === 'owner' || cleanRole === 'supervisor' || cleanRole === 'manager' || cleanRole === 'approver' || cleanRole === 'cashier') {
       const envOwnerPin = String(process.env.OWNER_PIN || '').trim();
       const envOwnerPass = String(process.env.OWNER_AUTH_PASSWORD || '').trim();
-      if (envOwnerPin || envOwnerPass) {
-        hasCustomConfiguredHash = true;
-      }
-      if (envOwnerPin && safeCompareHex(inputHash, hashServerSecretWithSalt(envOwnerPin))) {
+      const ownerInputHash = hashServerSecretWithSalt(cleanPin, 'owner');
+      if (envOwnerPin && safeCompareHex(ownerInputHash, hashServerSecretWithSalt(envOwnerPin, 'owner'))) {
         isValid = true;
+        resolvedUid = 'owner';
         resolvedRole = 'owner';
       }
-      if (!isValid && envOwnerPass && safeCompareHex(inputHash, hashServerSecretWithSalt(envOwnerPass))) {
+      if (!isValid && envOwnerPass && safeCompareHex(ownerInputHash, hashServerSecretWithSalt(envOwnerPass, 'owner'))) {
         isValid = true;
+        resolvedUid = 'owner';
         resolvedRole = 'owner';
       }
     }
 
-    // 2. Check stored hash in stores/{storeId}/settings/pos
+    // 2. Check stored hash in staff_secrets/pos_pins (migrated from stores/{storeId}/settings/pos, no cross-role fallback)
     if (!isValid) {
       try {
-        const settingsRef = `stores/${storeId}/settings/pos`;
-        const snap = await serverStore.getDoc(settingsRef);
-        if (snap.exists()) {
-          const data = snap.data() as any;
-          const fieldMap: Record<string, string> = {
-            owner: data.ownerPinHash || data.supervisorPinHash,
-            supervisor: data.supervisorPinHash || data.ownerPinHash,
-            manager: data.managerPinHash || data.ownerPinHash,
-            cashier: data.cashierPinHash,
-          };
-          const candidates =
-            cleanRole === 'approver' || cleanRole === 'cashier'
-              ? [data.ownerPinHash, data.supervisorPinHash, data.managerPinHash, data.cashierPinHash]
-              : [fieldMap[cleanRole]];
-          if (candidates.some((h: string) => Boolean(h))) {
-            hasCustomConfiguredHash = true;
-          }
-          if (candidates.some((h: string) => h && safeCompareHex(h, inputHash))) {
+        const data = await getOrMigratePosPins(storeId);
+        const rolePinMap: Record<
+          'owner' | 'supervisor' | 'manager' | 'cashier',
+          { role: 'owner' | 'supervisor' | 'manager' | 'cashier'; field: string; hash: string }
+        > = {
+          owner: { role: 'owner', field: 'ownerPinHash', hash: String(data.ownerPinHash || '').trim() },
+          supervisor: { role: 'supervisor', field: 'supervisorPinHash', hash: String(data.supervisorPinHash || '').trim() },
+          manager: { role: 'manager', field: 'managerPinHash', hash: String(data.managerPinHash || '').trim() },
+          cashier: { role: 'cashier', field: 'cashierPinHash', hash: String(data.cashierPinHash || '').trim() },
+        };
+
+        const candidateEntries =
+          cleanRole === 'owner'
+            ? [rolePinMap.owner]
+            : cleanRole === 'supervisor'
+            ? [rolePinMap.supervisor]
+            : cleanRole === 'manager'
+            ? [rolePinMap.manager]
+            : cleanRole === 'approver'
+            ? [rolePinMap.owner, rolePinMap.supervisor, rolePinMap.manager]
+            : [rolePinMap.cashier];
+
+        for (const entry of candidateEntries) {
+          if (!entry || !entry.hash) continue;
+          const expectedHash = hashServerSecretWithSalt(cleanPin, entry.role);
+          const matchedNew = safeCompareHex(entry.hash, expectedHash);
+          const matchedLegacy = !matchedNew && verifyLegacySecretHash(cleanPin, entry.hash);
+          if (matchedNew || matchedLegacy) {
             isValid = true;
+            resolvedRole = entry.role;
+            resolvedUid = `pos_pin_${entry.role}`;
+            if (matchedLegacy) {
+              await serverStore
+                .setDoc(
+                  'staff_secrets/pos_pins',
+                  { [entry.field]: expectedHash, updatedAt: new Date().toISOString() },
+                  { merge: true }
+                )
+                .catch(() => {});
+            }
+            break;
           }
         }
       } catch {}
     }
 
-    // 3. Check staff, stores/store_001/staff, and users collections on server if not matched yet
+    // 3. Check staff, stores/store_001/staff, and users collections + staff_secrets/{uid}
     let matchedStaffProfile: Record<string, any> | undefined;
     if (!isValid) {
       try {
-        const [staffSnap, storeStaffSnap, usersSnap] = await Promise.all([
-          serverStore.listDocs('staff').catch(() => []),
-          serverStore.listDocs(`stores/${storeId}/staff`).catch(() => []),
-          serverStore.listDocs('users').catch(() => []),
-        ]);
-        const allStaffDocs: Array<{ col: string; id: string; data: any }> = [];
-        staffSnap.forEach((d) => allStaffDocs.push({ col: 'staff', id: d.id, data: d.data() }));
-        storeStaffSnap.forEach((d) =>
-          allStaffDocs.push({ col: `stores/${storeId}/staff`, id: d.id, data: d.data() })
-        );
-        usersSnap.forEach((d) => allStaffDocs.push({ col: 'users', id: d.id, data: d.data() }));
+        const { staffDocs, storeStaffDocs, usersDocs } = await getCachedStaffAndUsers(storeId);
+        const accountMap = new Map<string, { data: Record<string, any>; paths: Set<string> }>();
+        const collectDocs = (colPrefix: string, list: Array<{ id: string; data: Record<string, any> }>) => {
+          list.forEach((docItem) => {
+            const d = (docItem.data || {}) as Record<string, any>;
+            const id = String(docItem.id || d.id || '').trim();
+            if (!id) return;
+            const entry = accountMap.get(id) || { data: { id }, paths: new Set<string>() };
+            entry.data = { ...entry.data, ...d, id };
+            entry.paths.add(`${colPrefix}/${id}`);
+            accountMap.set(id, entry);
+          });
+        };
 
-        for (const item of allStaffDocs) {
+        collectDocs(`stores/${storeId}/staff`, storeStaffDocs);
+        collectDocs('users', usersDocs);
+        collectDocs('staff', staffDocs);
+
+        for (const [accountUid, entry] of accountMap.entries()) {
           if (isValid) break;
-          const d = item.data as any;
-          if (d?.status === 'Nonaktif') continue;
-          const staffRole = String(d?.role || '').toLowerCase();
+          const d = entry.data as any;
+          if (String(d?.status || '').toLowerCase() === 'nonaktif') continue;
+
+          const staffRole = String(d?.role || '').trim().toLowerCase();
+          const accountRole: 'owner' | 'manager' | 'supervisor' | 'cashier' =
+            staffRole === 'owner' || staffRole === 'super_admin' || staffRole === 'super admin'
+              ? 'owner'
+              : staffRole.includes('manager') || staffRole.includes('manajer')
+              ? 'manager'
+              : staffRole.includes('supervisor') || staffRole.includes('admin')
+              ? 'supervisor'
+              : 'cashier';
+
           const roleAllowed =
-            cleanRole === 'cashier' ||
-            (cleanRole === 'approver' && /owner|admin|supervisor|manager/.test(staffRole)) ||
-            staffRole.includes(cleanRole) ||
-            staffRole.includes('owner') ||
-            staffRole.includes('admin');
+            cleanRole === 'owner'
+              ? accountRole === 'owner'
+              : cleanRole === 'manager'
+              ? accountRole === 'owner' || accountRole === 'manager'
+              : cleanRole === 'supervisor' || cleanRole === 'approver'
+              ? accountRole === 'owner' || accountRole === 'manager' || accountRole === 'supervisor'
+              : true;
           if (!roleAllowed) continue;
 
-          const storedPinHash = String(d?.pinHash || '').trim();
-          const storedPassHash = String(d?.passwordHash || '').trim();
+          const targetPaths = Array.from(entry.paths);
+          const secretRecord = await getOrMigrateStaffSecrets(accountUid, d, targetPaths, storeId);
+          const storedPinHash = secretRecord.pinHash;
+          const storedPassHash = secretRecord.passwordHash;
           const plainPin = String(d?.pin || '').trim();
           const plainPass = String(d?.password || '').trim();
 
-          const matchedByHash =
-            (storedPinHash && safeCompareHex(storedPinHash, inputHash)) ||
-            (storedPassHash && safeCompareHex(storedPassHash, inputHash));
-          const matchedByPlain =
-            !matchedByHash &&
-            ((plainPin && safeCompareHex(inputHash, hashServerSecretWithSalt(plainPin))) ||
-              (plainPass && safeCompareHex(inputHash, hashServerSecretWithSalt(plainPass))));
+          const expectedAccountHash = hashServerSecretWithSalt(cleanPin, accountUid);
+          const matchedNewPin = Boolean(storedPinHash && safeCompareHex(storedPinHash, expectedAccountHash));
+          const matchedNewPass = Boolean(storedPassHash && safeCompareHex(storedPassHash, expectedAccountHash));
+          const matchedLegacyPin =
+            !matchedNewPin && Boolean(storedPinHash && verifyLegacySecretHash(cleanPin, storedPinHash));
+          const matchedLegacyPass =
+            !matchedNewPass && Boolean(storedPassHash && verifyLegacySecretHash(cleanPin, storedPassHash));
+          const matchedPlainPin =
+            !matchedNewPin && !matchedLegacyPin && Boolean(plainPin && cleanPin === plainPin);
+          const matchedPlainPass =
+            !matchedNewPass && !matchedLegacyPass && Boolean(plainPass && cleanPin === plainPass);
 
-          if (matchedByHash || matchedByPlain) {
+          if (
+            matchedNewPin ||
+            matchedNewPass ||
+            matchedLegacyPin ||
+            matchedLegacyPass ||
+            matchedPlainPin ||
+            matchedPlainPass
+          ) {
             isValid = true;
-            resolvedUid = String(item.id || d?.id || resolvedUid);
+            resolvedUid = accountUid;
+            resolvedRole = accountRole;
             matchedStaffProfile = {
-              id: resolvedUid,
+              id: accountUid,
               name: d?.name,
               email: d?.email,
               role: d?.role,
@@ -2761,26 +3235,28 @@ app.post(['/api/settings/pin/verify', '/api/auth/verify-pin'], async (req, res) 
               phone: d?.phone,
               shift: d?.shift,
             };
-            if (staffRole.includes('owner')) resolvedRole = 'owner';
-            else if (
-              staffRole.includes('supervisor') ||
-              staffRole.includes('manager') ||
-              staffRole.includes('admin')
-            ) {
-              resolvedRole = 'supervisor';
-            } else {
-              resolvedRole = 'cashier';
-            }
-            if (matchedByPlain) {
-              const nextPinHash = plainPin ? hashServerSecretWithSalt(plainPin) : storedPinHash || undefined;
-              const nextPassHash = plainPass ? hashServerSecretWithSalt(plainPass) : storedPassHash || undefined;
+
+            if (matchedLegacyPin || matchedLegacyPass || matchedPlainPin || matchedPlainPass) {
+              const nextPinHash =
+                matchedLegacyPin
+                  ? expectedAccountHash
+                  : plainPin
+                  ? hashServerSecretWithSalt(plainPin, accountUid)
+                  : storedPinHash || undefined;
+              const nextPassHash =
+                matchedLegacyPass
+                  ? expectedAccountHash
+                  : plainPass
+                  ? hashServerSecretWithSalt(plainPass, accountUid)
+                  : storedPassHash || undefined;
               await migrateAndPersistStaffSecretHashes(
-                [`staff/${resolvedUid}`, `stores/${storeId}/staff/${resolvedUid}`, `users/${resolvedUid}`],
+                targetPaths,
                 d,
                 {
                   ...(nextPinHash ? { pinHash: nextPinHash } : {}),
                   ...(nextPassHash ? { passwordHash: nextPassHash } : {}),
-                }
+                },
+                accountUid
               );
             }
           }
@@ -2788,9 +3264,19 @@ app.post(['/api/settings/pin/verify', '/api/auth/verify-pin'], async (req, res) 
       } catch {}
     }
 
-    if (!isValid) {
+    if (!isValid || !resolvedRole || !resolvedUid) {
+      const failState = await recordFailedAttempt(pinLockKey);
+      if (failState.locked) {
+        return res.status(429).json({
+          valid: false,
+          ok: false,
+          error: 'Verifikasi PIN dikunci selama 15 menit karena 5 kali percobaan gagal.',
+        });
+      }
       return res.status(401).json({ valid: false, ok: false, error: 'PIN atau Password tidak valid.' });
     }
+
+    await recordFailedAttempt(pinLockKey, true);
 
     const sessionToken = createSignedSessionToken({
       uid: resolvedUid,
@@ -2840,13 +3326,14 @@ app.post(
       };
 
       const updates: { passwordHash?: string; pinHash?: string } = {};
-      if (cleanPass) updates.passwordHash = hashServerSecretWithSalt(cleanPass);
-      if (cleanPin) updates.pinHash = hashServerSecretWithSalt(cleanPin);
+      if (cleanPass) updates.passwordHash = hashServerSecretWithSalt(cleanPass, cleanStaffId);
+      if (cleanPin) updates.pinHash = hashServerSecretWithSalt(cleanPin, cleanStaffId);
 
       await migrateAndPersistStaffSecretHashes(
         [`staff/${cleanStaffId}`, `stores/${storeId}/staff/${cleanStaffId}`, `users/${cleanStaffId}`],
         baseData,
-        updates
+        updates,
+        cleanStaffId
       );
 
       return res.json({
@@ -2862,6 +3349,174 @@ app.post(
     }
   }
 );
+
+const FORBIDDEN_CUSTOMER_PINS = ['123456', '000000', '111111', '123123'];
+
+app.post('/api/customer/set-pin', async (req, res) => {
+  try {
+    if (!enforceRateLimit(`cust_setpin_ip:${req.ip}`, 15, 10 * 60 * 1000)) {
+      return res.status(429).json({ ok: false, error: 'Terlalu banyak permintaan. Coba lagi nanti.' });
+    }
+    const { phone, pin } = req.body || {};
+    const normPhone = normalizeServerPhone(phone);
+    const cleanPin = String(pin || '').trim();
+    if (!normPhone || normPhone.length < 9) {
+      return res.status(400).json({ ok: false, error: 'Nomor WhatsApp pelanggan tidak valid.' });
+    }
+    if (!/^\d{6}$/.test(cleanPin) || FORBIDDEN_CUSTOMER_PINS.includes(cleanPin)) {
+      return res.status(400).json({
+        ok: false,
+        error: 'PIN wajib diisi manual 6 digit angka dan tidak boleh 123456, 000000, 111111, atau 123123.',
+      });
+    }
+
+    const localPhone = normPhone.startsWith('62') ? '0' + normPhone.slice(2) : normPhone;
+    const nowIso = new Date().toISOString();
+
+    await Promise.all([
+      serverStore.setDoc(
+        `customer_secrets/${normPhone}`,
+        {
+          id: normPhone,
+          phone: normPhone,
+          pinHash: hashServerSecretWithSalt(cleanPin, normPhone),
+          updatedAt: nowIso,
+        },
+        { merge: true }
+      ),
+      localPhone !== normPhone
+        ? serverStore.setDoc(
+            `customer_secrets/${localPhone}`,
+            {
+              id: localPhone,
+              phone: localPhone,
+              pinHash: hashServerSecretWithSalt(cleanPin, localPhone),
+              updatedAt: nowIso,
+            },
+            { merge: true }
+          )
+        : Promise.resolve(),
+    ]);
+
+    return res.json({ ok: true, phone: normPhone });
+  } catch (err: any) {
+    return res.status(500).json({ ok: false, error: err?.message || 'Gagal menyimpan PIN pelanggan.' });
+  }
+});
+
+app.post('/api/customer/login', async (req, res) => {
+  try {
+    if (!enforceRateLimit(`cust_login_ip:${req.ip}`, 15, 10 * 60 * 1000)) {
+      return res.status(429).json({
+        ok: false,
+        valid: false,
+        error: 'Terlalu banyak percobaan login dari IP ini. Silakan tunggu beberapa menit.',
+      });
+    }
+
+    const { phone, pin } = req.body || {};
+    const rawPhoneStr = String(phone || '').trim();
+    const normPhone = normalizeServerPhone(rawPhoneStr);
+    const cleanPin = String(pin || '').trim();
+
+    if (!normPhone || normPhone.length < 8 || !cleanPin) {
+      return res.status(400).json({
+        ok: false,
+        valid: false,
+        error: 'Nomor WhatsApp dan PIN wajib diisi.',
+      });
+    }
+
+    const lockKey = `cust_login_${normPhone}`;
+    const lockStatus = await isLockedOut(lockKey);
+    if (lockStatus.locked) {
+      const waitMinutes = Math.max(1, Math.ceil(lockStatus.remainingMs / 60000));
+      return res.status(429).json({
+        ok: false,
+        valid: false,
+        error: `Akun pelanggan dikunci sementara selama ${waitMinutes} menit karena 5 kali percobaan gagal.`,
+      });
+    }
+
+    const localPhone = normPhone.startsWith('62') ? '0' + normPhone.slice(2) : normPhone;
+    const candidateKeys = Array.from(new Set([normPhone, localPhone, rawPhoneStr.replace(/[^0-9]/g, '')].filter(Boolean)));
+
+    const safeCompareHex = (aHex: string, bHex: string): boolean => {
+      if (!aHex || !bHex || aHex.length !== bHex.length) return false;
+      try {
+        return crypto.timingSafeEqual(Buffer.from(aHex, 'hex'), Buffer.from(bHex, 'hex'));
+      } catch {
+        return false;
+      }
+    };
+
+    const PIN_SALT = String(process.env.PIN_SALT || '').trim();
+    if (PIN_SALT.length < 32) {
+      throw new Error('PIN_SALT wajib dikonfigurasi minimal 32 karakter');
+    }
+
+    let isMatch = false;
+    for (const key of candidateKeys) {
+      if (isMatch) break;
+      const snap = await serverStore.getDoc(`customer_secrets/${key}`).catch(() => null);
+      if (!snap || !snap.exists()) continue;
+      const data = (snap.data() || {}) as Record<string, any>;
+      const storedHash = String(data.pinHash || data.passwordHash || data.hash || '').trim();
+      if (!storedHash) continue;
+
+      const hashWithKey = hashServerSecretWithSalt(cleanPin, key);
+      const hashWithNorm = hashServerSecretWithSalt(cleanPin, normPhone);
+      const hashDirectSalt = crypto.scryptSync(cleanPin, PIN_SALT, 32).toString('hex');
+
+      if (
+        safeCompareHex(storedHash, hashWithKey) ||
+        safeCompareHex(storedHash, hashWithNorm) ||
+        safeCompareHex(storedHash, hashDirectSalt)
+      ) {
+        isMatch = true;
+        break;
+      }
+    }
+
+    if (!isMatch) {
+      const failState = await recordFailedAttempt(lockKey);
+      if (failState.locked) {
+        return res.status(429).json({
+          ok: false,
+          valid: false,
+          error: 'Akun pelanggan dikunci selama 15 menit karena 5 kali percobaan gagal.',
+        });
+      }
+      return res.status(401).json({
+        ok: false,
+        valid: false,
+        error: 'Nomor WhatsApp atau PIN/Password salah.',
+      });
+    }
+
+    await recordFailedAttempt(lockKey, true);
+
+    const sessionToken = createSignedSessionToken({
+      uid: `cust_${normPhone}`,
+      role: 'customer',
+    });
+
+    return res.json({
+      ok: true,
+      valid: true,
+      phone: normPhone,
+      role: 'customer',
+      token: sessionToken,
+      sessionToken,
+    });
+  } catch (err: any) {
+    return res.status(500).json({
+      ok: false,
+      valid: false,
+      error: err?.message || 'Gagal memverifikasi login pelanggan.',
+    });
+  }
+});
 
 // Firestore-backed API Routes for Products & Modal Safes
 const productsApiCache = new Map<string, { data: any[]; expiresAt: number }>();
@@ -4326,12 +4981,61 @@ app.post(
   async (req: AuthRequest, res) => {
     try {
     const payload = req.body || {};
+    const callerUid = String(req.user?.uid || '').trim();
     const syncType = String(payload.type || 'TRANSACTION_DOC');
     const rawFileName = String(
       payload.fileName || payload.orderNumber || payload.id || `POS-${Date.now()}`
     ).trim();
     const syncId = String(payload.id || rawFileName).replace(/[^a-zA-Z0-9_-]/g, '_');
     const nowIso = new Date().toISOString();
+
+    const rawEvidencePhoto =
+      payload.evidencePhoto !== undefined && payload.evidencePhoto !== null
+        ? String(payload.evidencePhoto).trim()
+        : '';
+    if (rawEvidencePhoto) {
+      const photoMatch = rawEvidencePhoto.match(
+        /^data:image\/(png|jpeg|webp);base64,([A-Za-z0-9+/=]+)$/
+      );
+      if (!photoMatch) {
+        return res.status(400).json({
+          success: false,
+          error: 'evidencePhoto hanya boleh berformat data:image/(png|jpeg|webp);base64.',
+        });
+      }
+      const decodedBytes = Buffer.byteLength(photoMatch[2], 'base64');
+      if (decodedBytes <= 0 || decodedBytes > 2 * 1024 * 1024 || rawEvidencePhoto.length > Math.ceil((2 * 1024 * 1024 * 4) / 3) + 64) {
+        return res.status(400).json({
+          success: false,
+          error: 'Ukuran evidencePhoto maksimal 2 MB.',
+        });
+      }
+    }
+
+    let existingRecord = inMemoryDriveStore.get(syncId);
+    if (!existingRecord) {
+      try {
+        const existingSnap = await serverStore.get(`google_drive_docs/${syncId}`);
+        if (existingSnap.exists()) {
+          existingRecord = existingSnap.data();
+        }
+      } catch {}
+    }
+    if (existingRecord) {
+      const existingOwnerUid = String(
+        existingRecord.uid ||
+          existingRecord.ownerUid ||
+          existingRecord.createdByUid ||
+          existingRecord.payload?.uid ||
+          ''
+      ).trim();
+      if (existingOwnerUid !== callerUid) {
+        return res.status(403).json({
+          success: false,
+          error: 'Tidak diizinkan menimpa dokumen dengan ID yang sudah ada milik pengguna lain.',
+        });
+      }
+    }
 
     // Check Google Drive OAuth token / Apps Script Webhook from server environment or Firestore settings
     let accessToken = String(process.env.GOOGLE_DRIVE_ACCESS_TOKEN || '').trim();
@@ -4508,7 +5212,7 @@ app.post(
             formattedItemsLines || '(Tidak ada item)',
             `----------------------------------------------------------`,
             `TOTAL NOMINAL BATAL : Rp ${Number(payload.totalNominal || 0).toLocaleString('id-ID')}`,
-            `LAMPIRAN FOTO BUKTI : ${payload.evidencePhoto ? 'TERLAMPIR (TERSIMPAN DI DRIVE)' : 'TIDAK ADA'}`,
+            `LAMPIRAN FOTO BUKTI : ${rawEvidencePhoto ? 'TERLAMPIR (TERSIMPAN DI DRIVE)' : 'TIDAK ADA'}`,
             `==========================================================`,
           ].join('\n')
         : [
@@ -4542,14 +5246,14 @@ app.post(
           ].join('\n');
 
     let googleDocUrl = `/api/google-drive/doc/${encodeURIComponent(syncId)}`;
-    let googleDrivePhotoUrl = payload.evidencePhoto
+    let googleDrivePhotoUrl = rawEvidencePhoto
       ? `/api/google-drive/photo/${encodeURIComponent(syncId)}`
       : '';
     let externalDriveFileId = '';
     let externalPhotoFileId = '';
 
-    const cleanPhotoBase64 = payload.evidencePhoto
-      ? String(payload.evidencePhoto).replace(/^data:image\/[a-zA-Z0-9+.-]+;base64,/, '')
+    const cleanPhotoBase64 = rawEvidencePhoto
+      ? rawEvidencePhoto.replace(/^data:image\/(png|jpeg|webp);base64,/, '')
       : '';
 
     // 1. Forward payload to Google Apps Script Webhook URL to create real Google Sheet / Doc & Drive photo
@@ -4661,8 +5365,8 @@ app.post(
         }
 
         // Upload evidencePhoto to Google Drive if present
-        if (payload.evidencePhoto && String(payload.evidencePhoto).startsWith('data:image')) {
-          const base64Data = String(payload.evidencePhoto).split(',')[1] || '';
+        if (rawEvidencePhoto) {
+          const base64Data = rawEvidencePhoto.split(',')[1] || '';
           const photoMeta = {
             name: `FOTO_BUKTI_${rawFileName}.jpg`,
             mimeType: 'image/jpeg',
@@ -4707,6 +5411,9 @@ app.post(
 
     const recordToSave = {
       id: syncId,
+      uid: callerUid,
+      ownerUid: callerUid,
+      createdByUid: callerUid,
       type: syncType,
       fileName: rawFileName,
       folderId: folderId || 'RISKCART_POS_SHARED_DRIVE',
@@ -4715,17 +5422,18 @@ app.post(
       googleDrivePhotoUrl,
       externalDriveFileId,
       externalPhotoFileId,
-      evidencePhoto: payload.evidencePhoto || '',
+      evidencePhoto: rawEvidencePhoto,
       payload: {
         ...payload,
-        evidencePhoto: payload.evidencePhoto ? '[ATTACHED]' : '',
+        uid: callerUid,
+        evidencePhoto: rawEvidencePhoto ? '[ATTACHED]' : '',
       },
       createdAt: nowIso,
     };
 
     inMemoryDriveStore.set(syncId, {
       ...recordToSave,
-      evidencePhoto: payload.evidencePhoto || '',
+      evidencePhoto: rawEvidencePhoto,
     });
 
     try {
@@ -4757,60 +5465,27 @@ app.get(
   requireRole(['owner', 'admin', 'supervisor', 'manager', 'cashier', 'staff']),
   async (req: AuthRequest, res) => {
     try {
-    const syncId = String(req.params.id || '').trim();
-    let record = inMemoryDriveStore.get(syncId);
-    if (!record) {
-      try {
-        const snap = await serverStore.get(`google_drive_docs/${syncId}`);
-        if (snap.exists()) record = snap.data();
-      } catch {}
+      const syncId = String(req.params.id || '').trim();
+      let record = inMemoryDriveStore.get(syncId);
+      if (!record) {
+        try {
+          const snap = await serverStore.get(`google_drive_docs/${syncId}`);
+          if (snap.exists()) record = snap.data();
+        } catch {}
+      }
+      if (!record) {
+        return res.status(404).json({ error: 'Dokumen Google Spreadsheet Transaksi tidak ditemukan.' });
+      }
+      return res.json({
+        fileName: String(record.fileName || syncId),
+        docContentText: String(record.docContentText || ''),
+        evidencePhoto: sanitizeEvidencePhotoUrl(record.evidencePhoto),
+      });
+    } catch {
+      return res.status(500).json({ error: 'Gagal memuat dokumen.' });
     }
-    if (!record) {
-      return res.status(404).send('Dokumen Google Spreadsheet Transaksi tidak ditemukan.');
-    }
-    const safeTitle = String(record.fileName || syncId).replace(/[<>]/g, '');
-    const safeContent = String(record.docContentText || '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-    const photoHtml = record.evidencePhoto
-      ? `<div style="margin-top:24px;padding-top:16px;border-top:1px solid #dadce0;">
-           <h3 style="font-size:14px;color:#202124;margin-bottom:8px;">Lampiran Foto Bukti (Google Drive):</h3>
-           <img src="${record.evidencePhoto}" alt="Bukti Pembatalan" style="max-width:100%;max-height:480px;border-radius:8px;border:1px solid #dadce0;" />
-         </div>`
-      : '';
-
-    res.setHeader('Content-Type', 'text/html; charset=utf-8');
-    return res.send(`<!DOCTYPE html>
-<html lang="id">
-<head>
-  <meta charset="utf-8" />
-  <title>${safeTitle} - Google Sheet Auto-Synced</title>
-  <style>
-    body { margin: 0; background: #f8f9fa; font-family: 'Roboto', Arial, sans-serif; color: #202124; }
-    .topbar { background: #fff; border-bottom: 1px solid #dadce0; padding: 12px 24px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; }
-    .doc-title { font-size: 18px; font-weight: 600; color: #1a73e8; display: flex; align-items: center; gap: 10px; }
-    .badge { font-size: 11px; background: #e8f0fe; color: #1967d2; padding: 4px 10px; border-radius: 99px; font-weight: 600; }
-    .btn { background: #1a73e8; color: #fff; border: none; padding: 8px 16px; border-radius: 6px; font-weight: 600; cursor: pointer; font-size: 13px; }
-    .page { max-width: 760px; margin: 32px auto; background: #fff; border: 1px solid #dadce0; box-shadow: 0 2px 8px rgba(0,0,0,0.06); padding: 48px 56px; border-radius: 4px; }
-    pre { font-family: 'Courier New', monospace; font-size: 13px; line-height: 1.6; white-space: pre-wrap; word-wrap: break-word; margin: 0; color: #202124; }
-  </style>
-</head>
-<body>
-  <div class="topbar">
-    <div class="doc-title">
-      <span>📊 ${safeTitle}</span>
-      <span class="badge">Google Sheet Auto-Synced • RiskCart Cloud Sync</span>
-    </div>
-    <button class="btn" onclick="window.print()">🖨️ Cetak / Simpan PDF</button>
-  </div>
-  <div class="page">
-    <pre>${safeContent}</pre>
-    ${photoHtml}
-  </div>
-</body>
-</html>`);
-  } catch (err: any) {
-    return res.status(500).send('Gagal memuat dokumen.');
   }
-});
+);
 
 app.get(
   '/api/google-drive/photo/:id',
@@ -4818,46 +5493,27 @@ app.get(
   requireRole(['owner', 'admin', 'supervisor', 'manager', 'cashier', 'staff']),
   async (req: AuthRequest, res) => {
     try {
-    const syncId = String(req.params.id || '').trim();
-    let record = inMemoryDriveStore.get(syncId);
-    if (!record) {
-      try {
-        const snap = await serverStore.get(`google_drive_docs/${syncId}`);
-        if (snap.exists()) record = snap.data();
-      } catch {}
+      const syncId = String(req.params.id || '').trim();
+      let record = inMemoryDriveStore.get(syncId);
+      if (!record) {
+        try {
+          const snap = await serverStore.get(`google_drive_docs/${syncId}`);
+          if (snap.exists()) record = snap.data();
+        } catch {}
+      }
+      if (!record || !record.evidencePhoto) {
+        return res.status(404).json({ error: 'Foto bukti tidak ditemukan.' });
+      }
+      return res.json({
+        fileName: String(record.fileName || syncId),
+        docContentText: String(record.docContentText || ''),
+        evidencePhoto: sanitizeEvidencePhotoUrl(record.evidencePhoto),
+      });
+    } catch {
+      return res.status(500).json({ error: 'Gagal memuat foto bukti.' });
     }
-    if (!record || !record.evidencePhoto) {
-      return res.status(404).send('Foto bukti tidak ditemukan.');
-    }
-    const safeTitle = String(record.fileName || syncId).replace(/[<>]/g, '');
-    const safePhotoSrc = sanitizeEvidencePhotoUrl(record.evidencePhoto);
-    res.setHeader('Content-Type', 'text/html; charset=utf-8');
-    return res.send(`<!DOCTYPE html>
-<html lang="id">
-<head>
-  <meta charset="utf-8" />
-  <title>Foto Bukti ${safeTitle} - Google Drive</title>
-  <style>
-    body { margin: 0; background: #0f0f12; color: #fff; font-family: Arial, sans-serif; display: flex; flex-direction: column; align-items: center; min-height: 100vh; }
-    .bar { width: 100%; box-sizing: border-box; padding: 14px 24px; background: #18181b; border-bottom: 1px solid #27272a; display: flex; justify-content: space-between; align-items: center; }
-    .container { padding: 24px; max-width: 900px; text-align: center; }
-    img { max-width: 100%; max-height: 80vh; border-radius: 12px; border: 2px solid #f59e0b; box-shadow: 0 10px 30px rgba(0,0,0,0.6); }
-  </style>
-</head>
-<body>
-  <div class="bar">
-    <strong>🖼️ Foto Bukti Pembatalan Keranjang — ${safeTitle}</strong>
-    <a href="${safePhotoSrc}" download="BUKTI_${safeTitle}.jpg" rel="noopener noreferrer" style="color:#fbbf24;text-decoration:none;font-weight:bold;font-size:13px;">⬇ Download Foto</a>
-  </div>
-  <div class="container">
-    <img src="${safePhotoSrc}" alt="Foto Bukti Pembatalan" />
-  </div>
-</body>
-</html>`);
-  } catch {
-    return res.status(500).send('Gagal memuat foto bukti.');
   }
-});
+);
 
 // ============================================================================
 // SECURITY HELPERS, FONNTE OTP & AI PAGE BUILDER SANITIZATION
@@ -4902,15 +5558,17 @@ function hashOtpCode(phone: string, otp: string): string {
 function sanitizeEvidencePhotoUrl(urlVal: unknown): string {
   const raw = String(urlVal || '').trim();
   if (!raw) return '';
-  if (/^data:image\/(jpeg|jpg|png|webp|gif);base64,[A-Za-z0-9+/=\s]+$/i.test(raw)) {
-    return raw.replace(/\s+/g, '');
-  }
-  if (raw.startsWith('/') && !raw.startsWith('//')) {
-    return raw.replace(/["'<>]/g, '');
+  if (/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(raw)) {
+    const base64Part = raw.split(',')[1] || '';
+    const bytes = Buffer.byteLength(base64Part, 'base64');
+    if (bytes > 0 && bytes <= 2 * 1024 * 1024) {
+      return raw;
+    }
+    return '';
   }
   try {
     const parsed = new URL(raw);
-    if (parsed.protocol === 'https:' || parsed.protocol === 'http:') {
+    if (parsed.protocol === 'https:') {
       return parsed.toString().replace(/["'<>]/g, '');
     }
   } catch {
@@ -5438,8 +6096,8 @@ app.post(
     const nowIso = new Date().toISOString();
     const defaultOwnerStaff = {
       id: 'staff_001',
-      name: 'Dede Fajar Kurniawan',
-      email: 'panglimabesarisis@gmail.com',
+      name: 'Owner',
+      email: '',
       role: 'Owner',
       outlet: 'Cabang Utama (Pusat)',
       phone: '0811-1000-001',

@@ -835,15 +835,19 @@ export const ClientPwaApp: React.FC = () => {
       verifiedAt: verified ? nowIso : profile.verifiedAt || existing?.verifiedAt || null,
     };
 
-    const resolvedSecret =
-      customPinOrPassword?.trim() ||
-      regPassword?.trim() ||
-      existing?.pin ||
-      existing?.password ||
-      '123456';
-
     const targetDocId = existing?.id || docId;
     const currentUid = auth.currentUser?.uid;
+
+    if (customPinOrPassword?.trim() && /^\d{6}$/.test(customPinOrPassword.trim())) {
+      await apiFetch('/api/customer/set-pin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          phone: mergedProfile.phone,
+          pin: customPinOrPassword.trim(),
+        }),
+      }).catch(() => {});
+    }
 
     const customerPayload: Record<string, any> = {
       id: targetDocId,
@@ -854,8 +858,6 @@ export const ClientPwaApp: React.FC = () => {
       name: mergedProfile.name,
       phone: mergedProfile.phone,
       normalizedPhone: normPhone,
-      pin: resolvedSecret,
-      password: resolvedSecret,
       address: mergedProfile.address || existing?.address || 'Alamat Pengiriman Pelanggan',
       addressNotes: mergedProfile.addressNotes,
       latitude: mergedProfile.latitude ?? existing?.latitude ?? DEFAULT_STORE_CONFIG.latitude,
@@ -866,13 +868,8 @@ export const ClientPwaApp: React.FC = () => {
       verifiedAt: mergedProfile.verifiedAt,
       type: existing?.type || 'Member VIP PWA',
       typeCode: existing?.typeCode || 'CUST-PWA',
-      creditLimit: existing?.creditLimit ?? 500000,
-      points: existing?.points ?? 0,
-      debtAmount: existing?.debtAmount ?? 0,
       debtAgeDays: existing?.debtAgeDays ?? 0,
       subscriptionPlan: existing?.subscriptionPlan || 'Non-Langganan',
-      totalSpent: existing?.totalSpent ?? 0,
-      totalOrders: existing?.totalOrders ?? 0,
       lastTransactionDate: existing?.lastTransactionDate || 'Baru Terdaftar',
       channel: 'pwa_client',
       status: 'active',
@@ -1498,18 +1495,28 @@ export const ClientPwaApp: React.FC = () => {
         return;
       }
 
-      // Verify PIN / Password against Firestore customer record
-      // If customer was added via Admin Dashboard (/dashboard/pelanggan) or POS without a PIN yet,
-      // allow default PIN '123456' or save their entered PIN on first login.
-      const storedPin = String(matchedCustomer.pin || matchedCustomer.password || '').trim();
-      if (storedPin && enteredSecret !== storedPin && enteredSecret !== '123456') {
+      const loginRes = await apiFetch('/api/customer/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          phone: matchedCustomer.phone || formattedPhone,
+          pin: enteredSecret,
+        }),
+      });
+      const loginData = await loginRes.json().catch(() => ({}));
+      if (!loginRes.ok || !loginData?.valid) {
         setFormFeedbackMessage(
-          tr(
-            'Incorrect PIN / Password. Please try again or use default PIN 123456 if registered via Cashier.',
-            'PIN / Password salah. Silakan coba lagi atau gunakan PIN default 123456 jika didaftarkan dari Kasir.'
-          )
+          loginData?.error ||
+            tr('Incorrect PIN / Password. Please try again.', 'PIN / Password salah. Silakan coba lagi.')
         );
         return;
+      }
+
+      const issuedToken = String(loginData?.sessionToken || loginData?.token || '').trim();
+      if (issuedToken && typeof window !== 'undefined') {
+        try {
+          window.sessionStorage.setItem('riskcart_session_token', issuedToken);
+        } catch {}
       }
 
       const updatedProfile: MemberProfile = {
@@ -1527,8 +1534,7 @@ export const ClientPwaApp: React.FC = () => {
         verifiedAt: new Date().toLocaleTimeString(language === 'id' ? 'id-ID' : 'en-US'),
       };
 
-      const secretToPersist = storedPin || enteredSecret || '123456';
-      const syncedProfile = await syncMemberToFirestore(updatedProfile, true, secretToPersist);
+      const syncedProfile = await syncMemberToFirestore(updatedProfile, true);
       setMember(syncedProfile);
       setFormFeedbackMessage(null);
       setActiveHomeNav('home');
@@ -5050,7 +5056,7 @@ export const ClientPwaApp: React.FC = () => {
                           setRegOwnerName(e.target.value);
                           if (formFeedbackMessage) setFormFeedbackMessage(null);
                         }}
-                        placeholder={tr('Dede Fajar Kurniawan', 'Dede Fajar Kurniawan')}
+                        placeholder={tr('Owner Full Name', 'Nama Lengkap Pemilik')}
                         autoComplete="name"
                         required
                       />

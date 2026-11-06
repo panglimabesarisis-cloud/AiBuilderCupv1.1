@@ -7,12 +7,13 @@ import {
   query,
   where,
 } from 'firebase/firestore';
-import { db } from '../firebase';
+import { db, ensureFirebaseSession } from '../firebase';
 import { ACTIVE_STORE_ID } from '../config/store';
 import { ProductGroupItem, ProductVariantItem, variantToProduct } from './productMapper';
 import { Product, ProductBatchItem } from '../types';
 import { deductFefoBatches } from '../utils/expiryUtils';
 import { deductRawMaterialsForProductBom } from './rawMaterialService';
+import { syncDocToDatabase } from '../utils/dbSync';
 
 export const MAX_PRODUCT_DOC_BYTES = 900 * 1024; // 900 KB
 export const PHOTO_TOO_LARGE_MESSAGE = 'Ukuran foto terlalu besar, kurangi foto galeri';
@@ -65,6 +66,7 @@ export async function saveProductDocToAllPaths(docId: string, productData: Recor
   const rawPayload: Record<string, any> = {
     ...productData,
     id: cleanId,
+    storeId: productData.storeId || ACTIVE_STORE_ID,
     updatedAt: new Date().toISOString(),
   };
 
@@ -80,30 +82,37 @@ export async function saveProductDocToAllPaths(docId: string, productData: Recor
     for (const cacheKey of ['riskcart_fs_products', 'riskcart_cache_products']) {
       try {
         const raw = window.localStorage.getItem(cacheKey);
-        if (raw) {
-          const parsed = JSON.parse(raw);
-          if (Array.isArray(parsed)) {
-            let found = false;
-            const nextList = parsed.map((item: any) => {
-              if (item && (item.id === cleanId || (cleanSku && item.sku === cleanSku))) {
-                found = true;
-                return { ...item, ...payload, id: item.id || cleanId };
-              }
-              return item;
-            });
-            if (!found) {
-              nextList.push(payload);
-            }
-            window.localStorage.setItem(cacheKey, JSON.stringify(nextList));
+        const parsed = raw ? JSON.parse(raw) : [];
+        const baseList = Array.isArray(parsed) ? parsed : [];
+        let found = false;
+        const nextList = baseList.map((item: any) => {
+          if (item && (item.id === cleanId || (cleanSku && item.sku === cleanSku))) {
+            found = true;
+            return { ...item, ...payload, id: item.id || cleanId };
           }
+          return item;
+        });
+        if (!found) {
+          nextList.push(payload);
         }
+        window.localStorage.setItem(cacheKey, JSON.stringify(nextList));
       } catch (e) {}
     }
+
+    try {
+      window.dispatchEvent(
+        new CustomEvent('riskcart_products_updated', {
+          detail: { id: cleanId, product: payload },
+        })
+      );
+    } catch {}
   }
 
-  // Primary source of truth: root `products` collection + store subcollection (non-blocking in offline mode)
-  void Promise.all([
-    setDoc(doc(db, 'products', cleanId), payload, { merge: true }).catch(() => {}),
+  await ensureFirebaseSession().catch(() => {});
+
+  // Primary source of truth: root `products` collection + store subcollection + backend sync fallback
+  await Promise.allSettled([
+    setDoc(doc(db, 'products', cleanId), payload, { merge: true }),
     setDoc(
       doc(db, 'stores', ACTIVE_STORE_ID, 'products', cleanId),
       {
@@ -111,7 +120,9 @@ export async function saveProductDocToAllPaths(docId: string, productData: Recor
         storeId: ACTIVE_STORE_ID,
       },
       { merge: true }
-    ).catch(() => {}),
+    ),
+    syncDocToDatabase('products', cleanId, payload, { merge: true }),
+    syncDocToDatabase(`stores/${ACTIVE_STORE_ID}/products`, cleanId, { ...payload, storeId: ACTIVE_STORE_ID }, { merge: true }),
   ]);
 
   if (cleanSku) {
@@ -119,7 +130,7 @@ export async function saveProductDocToAllPaths(docId: string, productData: Recor
       .then((snapRoot) => {
         for (const d of snapRoot.docs) {
           if (d.id !== cleanId) {
-            void setDoc(doc(db, 'products', d.id), { ...payload, id: d.id }, { merge: true }).catch(() => {});
+            void setDoc(doc(db, 'products', d.id), { ...payload, id: d.id, storeId: ACTIVE_STORE_ID }, { merge: true }).catch(() => {});
           }
         }
       })

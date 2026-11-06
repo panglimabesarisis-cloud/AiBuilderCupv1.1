@@ -20,16 +20,20 @@ function stripBase64(val: any): any {
 
 export function safeSetCache(key: string, list: any[]): void {
   if (typeof window === 'undefined' || !window.localStorage) return;
-  const safeList = (Array.isArray(list) ? list : []).slice(0, 200).map(stripBase64);
+  const boundedList = (Array.isArray(list) ? list : []).slice(0, 200);
+  try {
+    window.localStorage.setItem(key, JSON.stringify(boundedList));
+    return;
+  } catch {
+    // Quota exceeded with full payload; retry after clearing key or stripping large base64 strings
+  }
+  const safeList = boundedList.map(stripBase64);
   const serialized = JSON.stringify(safeList);
   try {
+    window.localStorage.removeItem(key);
     window.localStorage.setItem(key, serialized);
   } catch {
-    try {
-      window.localStorage.removeItem(key);
-      window.localStorage.setItem(key, serialized);
-    } catch {
-      // Ignore secondary quota failure
-    }
+    // Ignore secondary quota failure
   }
 }
+

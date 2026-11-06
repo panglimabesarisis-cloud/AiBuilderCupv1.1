@@ -1707,14 +1707,9 @@ export const ProductReportDetailView: React.FC<ProductReportDetailViewProps> = (
   periodLabel,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
+  const { formatCurrency, currencyMode } = useLanguage();
 
-  const fmtIDR = (val: number) =>
-    new Intl.NumberFormat('id-ID', {
-      style: 'currency',
-      currency: 'IDR',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
-    }).format(val || 0);
+  const fmtIDR = (val: number) => formatCurrency(val || 0);
 
   const filteredOverall = useMemo(() => {
     if (!searchTerm.trim()) return data.overallRows;
@@ -1756,10 +1751,10 @@ export const ProductReportDetailView: React.FC<ProductReportDetailViewProps> = (
 
   const reportTitle =
     subReport === 'produk_keseluruhan'
-      ? 'Laporan Keseluruhan Produk'
+      ? 'Overall Product Report'
       : subReport === 'produk_masuk'
-      ? 'Rincian Produk Masuk'
-      : 'Rincian Produk Keluar';
+      ? 'Stock In Details'
+      : 'Stock Out Details';
 
   const totalAssetVal = useMemo(
     () => filteredOverall.reduce((s, r) => s + (r.nilaiAset || 0), 0),
@@ -1779,7 +1774,7 @@ export const ProductReportDetailView: React.FC<ProductReportDetailViewProps> = (
             <span>{reportTitle}</span>
           </h3>
           <p className="text-xs text-zinc-400 mt-0.5">
-            Periode Aktif: <span className="font-mono text-zinc-200">{periodLabel}</span> &bull; Sinkron Real-Time Database Firestore
+            Active Period: <span className="font-mono text-zinc-200">{periodLabel}</span> &bull; Real-Time Firestore Database Sync
           </p>
         </div>
 
@@ -1787,7 +1782,7 @@ export const ProductReportDetailView: React.FC<ProductReportDetailViewProps> = (
           <Search className="w-3.5 h-3.5 text-zinc-500 absolute left-3 top-2.5 pointer-events-none" />
           <input
             type="text"
-            placeholder="Cari produk, SKU, atau dokumen..."
+            placeholder="Search product, SKU, or document..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="w-full bg-zinc-950 border border-zinc-800 rounded-xl pl-8 pr-3 py-1.5 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-blue-500"
@@ -1799,39 +1794,39 @@ export const ProductReportDetailView: React.FC<ProductReportDetailViewProps> = (
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
         <div className="bg-zinc-950/70 border border-zinc-800 rounded-xl p-3">
           <span className="text-[10px] uppercase tracking-wider text-zinc-500 font-bold block">
-            Total SKU Produk DB
+            Total DB Product SKUs
           </span>
           <span className="text-base font-mono font-black text-white mt-0.5 block">
-            {data.overallRows.length.toLocaleString('id-ID')} SKU
+            {data.overallRows.length.toLocaleString('en-US')} SKU
           </span>
         </div>
         <div className="bg-zinc-950/70 border border-zinc-800 rounded-xl p-3">
           <span className="text-[10px] uppercase tracking-wider text-zinc-500 font-bold block">
-            Total Produk Masuk
+            Total Stock In
           </span>
           <span className="text-base font-mono font-black text-cyan-400 mt-0.5 block">
-            +{data.totalMasukUnits.toLocaleString('id-ID')} Karton
+            +{data.totalMasukUnits.toLocaleString('en-US')} Cartons
           </span>
         </div>
         <div className="bg-zinc-950/70 border border-zinc-800 rounded-xl p-3">
           <span className="text-[10px] uppercase tracking-wider text-zinc-500 font-bold block">
-            Total Terjual / Keluar
+            Total Sold / Out
           </span>
           <span className="text-base font-mono font-black text-amber-400 mt-0.5 block">
-            {data.totalPenjualanUnits.toLocaleString('id-ID')} Karton
+            {data.totalPenjualanUnits.toLocaleString('en-US')} Cartons
           </span>
         </div>
         <div className="bg-zinc-950/70 border border-zinc-800 rounded-xl p-3">
           <span className="text-[10px] uppercase tracking-wider text-zinc-500 font-bold block">
-            Stok Sistem Aktif
+            Active System Stock
           </span>
           <span className="text-base font-mono font-black text-emerald-400 mt-0.5 block">
-            {data.totalStokSistemUnits.toLocaleString('id-ID')} Karton
+            {data.totalStokSistemUnits.toLocaleString('en-US')} Cartons
           </span>
         </div>
         <div className="bg-zinc-950/70 border border-zinc-800 rounded-xl p-3 col-span-2 sm:col-span-1">
           <span className="text-[10px] uppercase tracking-wider text-zinc-500 font-bold block">
-            Nilai Aset Stok DB
+            DB Stock Asset Value
           </span>
           <span className="text-sm font-mono font-black text-purple-400 mt-0.5 block truncate">
             {fmtIDR(data.totalAssetValue || totalAssetVal)}
@@ -1839,29 +1834,29 @@ export const ProductReportDetailView: React.FC<ProductReportDetailViewProps> = (
         </div>
       </div>
 
-      {/* a. Sub-laporan 1: Laporan Keseluruhan Produk */}
+      {/* a. Sub-report 1: Overall Product Report */}
       {subReport === 'produk_keseluruhan' && (
         <div className="overflow-x-auto bg-zinc-950/60 border border-zinc-800 rounded-xl">
           <table className="w-full text-left text-xs">
             <thead className="bg-zinc-950 text-zinc-400 border-b border-zinc-800 uppercase font-semibold tracking-wider text-[11px]">
               <tr>
-                <th className="py-3 px-4">Produk &amp; SKU</th>
-                <th className="py-3 px-4">Kategori / Brand</th>
-                <th className="py-3 px-4 text-center">Isi / Karton</th>
-                <th className="py-3 px-4 text-right">Harga Modal</th>
-                <th className="py-3 px-4 text-right">Harga Jual</th>
-                <th className="py-3 px-4 text-center">Masuk</th>
-                <th className="py-3 px-4 text-center">Penjualan</th>
-                <th className="py-3 px-4 text-right">Stok Sistem</th>
-                <th className="py-3 px-4 text-right">Nilai Aset Stok</th>
-                <th className="py-3 px-4 text-right">Omzet Penjualan</th>
+                <th className="py-3 px-4">Product &amp; SKU</th>
+                <th className="py-3 px-4">Category / Brand</th>
+                <th className="py-3 px-4 text-center">Pcs / Carton</th>
+                <th className="py-3 px-4 text-right">Cost Price</th>
+                <th className="py-3 px-4 text-right">Selling Price</th>
+                <th className="py-3 px-4 text-center">Stock In</th>
+                <th className="py-3 px-4 text-center">Sold</th>
+                <th className="py-3 px-4 text-right">System Stock</th>
+                <th className="py-3 px-4 text-right">Stock Asset Value</th>
+                <th className="py-3 px-4 text-right">Sales Revenue</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-800/60 text-zinc-300">
               {filteredOverall.length === 0 ? (
                 <tr>
                   <td colSpan={10} className="py-8 text-center text-zinc-500">
-                    Belum ada data produk di database pada periode ini.
+                    No product data in the database for this period.
                   </td>
                 </tr>
               ) : (
@@ -1883,7 +1878,7 @@ export const ProductReportDetailView: React.FC<ProductReportDetailViewProps> = (
                         )}
                       </td>
                       <td className="py-3 px-4 text-center font-mono text-zinc-300">
-                        {ppc} Item
+                        {ppc} Items
                       </td>
                       <td className="py-3 px-4 text-right font-mono text-zinc-300">
                         {fmtIDR(row.costPrice || 0)}
@@ -1892,17 +1887,17 @@ export const ProductReportDetailView: React.FC<ProductReportDetailViewProps> = (
                         {fmtIDR(row.sellingPrice || 0)}
                       </td>
                       <td className="py-3 px-4 text-center font-mono font-bold text-cyan-400">
-                        {row.masuk.toLocaleString('id-ID')}
+                        {row.masuk.toLocaleString('en-US')}
                       </td>
                       <td className="py-3 px-4 text-center font-mono font-bold text-amber-400">
-                        {row.penjualan.toLocaleString('id-ID')}
+                        {row.penjualan.toLocaleString('en-US')}
                       </td>
                       <td className="py-3 px-4 text-right">
                         <div className="font-mono font-black text-emerald-400">
-                          {row.stokSistem.toLocaleString('id-ID')} Karton
+                          {row.stokSistem.toLocaleString('en-US')} Cartons
                         </div>
                         <div className="text-[10px] font-mono text-zinc-500">
-                          ({totalItems.toLocaleString('id-ID')} Item)
+                          ({totalItems.toLocaleString('en-US')} Items)
                         </div>
                       </td>
                       <td className="py-3 px-4 text-right font-mono font-semibold text-purple-400">
@@ -1919,16 +1914,16 @@ export const ProductReportDetailView: React.FC<ProductReportDetailViewProps> = (
             <tfoot className="bg-zinc-950 font-bold border-t-2 border-zinc-700 text-white">
               <tr>
                 <td colSpan={5} className="py-3 px-4 uppercase tracking-wider text-[11px]">
-                  TOTAL KESELURUHAN PRODUK ({filteredOverall.length} SKU Database)
+                  OVERALL PRODUCT TOTAL ({filteredOverall.length} Database SKUs)
                 </td>
                 <td className="py-3 px-4 text-center font-mono text-cyan-400">
-                  {filteredOverall.reduce((s, r) => s + r.masuk, 0).toLocaleString('id-ID')}
+                  {filteredOverall.reduce((s, r) => s + r.masuk, 0).toLocaleString('en-US')}
                 </td>
                 <td className="py-3 px-4 text-center font-mono text-amber-400">
-                  {filteredOverall.reduce((s, r) => s + r.penjualan, 0).toLocaleString('id-ID')}
+                  {filteredOverall.reduce((s, r) => s + r.penjualan, 0).toLocaleString('en-US')}
                 </td>
                 <td className="py-3 px-4 text-right font-mono text-emerald-400">
-                  {filteredOverall.reduce((s, r) => s + r.stokSistem, 0).toLocaleString('id-ID')} Karton
+                  {filteredOverall.reduce((s, r) => s + r.stokSistem, 0).toLocaleString('en-US')} Cartons
                 </td>
                 <td className="py-3 px-4 text-right font-mono text-purple-400">
                   {fmtIDR(totalAssetVal)}
@@ -1942,26 +1937,26 @@ export const ProductReportDetailView: React.FC<ProductReportDetailViewProps> = (
         </div>
       )}
 
-      {/* b. Sub-laporan 2: Rincian Produk Masuk */}
+      {/* b. Sub-report 2: Stock In Details */}
       {subReport === 'produk_masuk' && (
         <div className="overflow-x-auto bg-zinc-950/60 border border-zinc-800 rounded-xl">
           <table className="w-full text-left text-xs">
             <thead className="bg-zinc-950 text-zinc-400 border-b border-zinc-800 uppercase font-semibold tracking-wider text-[11px]">
               <tr>
-                <th className="py-3 px-4">Tanggal</th>
-                <th className="py-3 px-4">No. Dokumen &amp; Sumber</th>
-                <th className="py-3 px-4">Produk &amp; SKU</th>
-                <th className="py-3 px-4 text-center">Masuk</th>
-                <th className="py-3 px-4 text-right">Harga Beli / Modal</th>
-                <th className="py-3 px-4 text-right">Nilai Masuk</th>
-                <th className="py-3 px-4 text-right">Stok Sistem</th>
+                <th className="py-3 px-4">Date</th>
+                <th className="py-3 px-4">Document No. &amp; Source</th>
+                <th className="py-3 px-4">Product &amp; SKU</th>
+                <th className="py-3 px-4 text-center">Stock In</th>
+                <th className="py-3 px-4 text-right">Purchase / Cost Price</th>
+                <th className="py-3 px-4 text-right">Stock In Value</th>
+                <th className="py-3 px-4 text-right">System Stock</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-800/60 text-zinc-300">
               {filteredMasuk.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="py-8 text-center text-zinc-500">
-                    Belum ada riwayat barang masuk / pengadaan di database pada periode ini.
+                    No stock-in / procurement history in the database for this period.
                   </td>
                 </tr>
               ) : (
@@ -1973,7 +1968,7 @@ export const ProductReportDetailView: React.FC<ProductReportDetailViewProps> = (
                     <td className="py-3 px-4">
                       <div className="font-mono font-bold text-blue-400">{row.docNumber}</div>
                       <div className="text-[10px] text-zinc-400">
-                        {row.sourceLabel || 'Penerimaan Stok'}
+                        {row.sourceLabel || 'Stock Receipt'}
                       </div>
                     </td>
                     <td className="py-3 px-4">
@@ -1983,7 +1978,7 @@ export const ProductReportDetailView: React.FC<ProductReportDetailViewProps> = (
                       </div>
                     </td>
                     <td className="py-3 px-4 text-center font-mono font-bold text-cyan-400">
-                      +{row.masuk.toLocaleString('id-ID')}
+                      +{row.masuk.toLocaleString('en-US')}
                     </td>
                     <td className="py-3 px-4 text-right font-mono text-zinc-300">
                       {fmtIDR(row.unitPrice || 0)}
@@ -1992,7 +1987,7 @@ export const ProductReportDetailView: React.FC<ProductReportDetailViewProps> = (
                       {fmtIDR(row.totalValue || 0)}
                     </td>
                     <td className="py-3 px-4 text-right font-mono font-black text-emerald-400">
-                      {(row.sisaStok ?? row.totalStokMasuk).toLocaleString('id-ID')}
+                      {(row.sisaStok ?? row.totalStokMasuk).toLocaleString('en-US')}
                     </td>
                   </tr>
                 ))
@@ -2001,17 +1996,17 @@ export const ProductReportDetailView: React.FC<ProductReportDetailViewProps> = (
             <tfoot className="bg-zinc-950 font-bold border-t-2 border-zinc-700 text-white">
               <tr>
                 <td colSpan={3} className="py-3 px-4 uppercase tracking-wider text-[11px]">
-                  TOTAL RINCIAN PRODUK MASUK ({filteredMasuk.length} Catatan Database)
+                  TOTAL STOCK IN DETAILS ({filteredMasuk.length} Database Records)
                 </td>
                 <td className="py-3 px-4 text-center font-mono text-cyan-400">
-                  +{filteredMasuk.reduce((s, r) => s + r.masuk, 0).toLocaleString('id-ID')}
+                  +{filteredMasuk.reduce((s, r) => s + r.masuk, 0).toLocaleString('en-US')}
                 </td>
                 <td className="py-3 px-4 text-right font-mono text-zinc-400">-</td>
                 <td className="py-3 px-4 text-right font-mono text-white">
                   {fmtIDR(filteredMasuk.reduce((s, r) => s + (r.totalValue || 0), 0))}
                 </td>
                 <td className="py-3 px-4 text-right font-mono text-emerald-400">
-                  {data.totalStokSistemUnits.toLocaleString('id-ID')}
+                  {data.totalStokSistemUnits.toLocaleString('en-US')}
                 </td>
               </tr>
             </tfoot>
@@ -2019,26 +2014,26 @@ export const ProductReportDetailView: React.FC<ProductReportDetailViewProps> = (
         </div>
       )}
 
-      {/* c. Sub-laporan 3: Rincian Produk Keluar */}
+      {/* c. Sub-report 3: Stock Out Details */}
       {subReport === 'produk_keluar' && (
         <div className="overflow-x-auto bg-zinc-950/60 border border-zinc-800 rounded-xl">
           <table className="w-full text-left text-xs">
             <thead className="bg-zinc-950 text-zinc-400 border-b border-zinc-800 uppercase font-semibold tracking-wider text-[11px]">
               <tr>
-                <th className="py-3 px-4">Tanggal</th>
-                <th className="py-3 px-4">No. Struk / Dokumen</th>
-                <th className="py-3 px-4">Produk &amp; SKU</th>
-                <th className="py-3 px-4 text-center">Qty Keluar</th>
-                <th className="py-3 px-4 text-right">Harga Satuan</th>
-                <th className="py-3 px-4 text-right">Total Nilai (IDR)</th>
-                <th className="py-3 px-4 text-right">Sisa Stok Sistem</th>
+                <th className="py-3 px-4">Date</th>
+                <th className="py-3 px-4">Receipt / Document No.</th>
+                <th className="py-3 px-4">Product &amp; SKU</th>
+                <th className="py-3 px-4 text-center">Qty Out</th>
+                <th className="py-3 px-4 text-right">Unit Price</th>
+                <th className="py-3 px-4 text-right">Total Value ({currencyMode})</th>
+                <th className="py-3 px-4 text-right">Remaining System Stock</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-800/60 text-zinc-300">
               {filteredKeluar.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="py-8 text-center text-zinc-500">
-                    Belum ada riwayat barang keluar / penjualan di database pada periode ini.
+                    No stock-out / sales history in the database for this period.
                   </td>
                 </tr>
               ) : (
@@ -2050,7 +2045,7 @@ export const ProductReportDetailView: React.FC<ProductReportDetailViewProps> = (
                     <td className="py-3 px-4">
                       <div className="font-mono font-bold text-amber-400">{row.docNumber}</div>
                       <div className="text-[10px] text-zinc-400">
-                        {row.sourceLabel || 'Penjualan POS'}
+                        {row.sourceLabel || 'POS Sale'}
                       </div>
                     </td>
                     <td className="py-3 px-4">
@@ -2060,7 +2055,7 @@ export const ProductReportDetailView: React.FC<ProductReportDetailViewProps> = (
                       </div>
                     </td>
                     <td className="py-3 px-4 text-center font-mono font-bold text-rose-400">
-                      -{row.qty.toLocaleString('id-ID')}
+                      -{row.qty.toLocaleString('en-US')}
                     </td>
                     <td className="py-3 px-4 text-right font-mono text-zinc-300">
                       {fmtIDR(row.unitPrice || 0)}
@@ -2069,7 +2064,7 @@ export const ProductReportDetailView: React.FC<ProductReportDetailViewProps> = (
                       {fmtIDR(row.totalValue || 0)}
                     </td>
                     <td className="py-3 px-4 text-right font-mono font-black text-cyan-400">
-                      {(row.sisaStok ?? 0).toLocaleString('id-ID')}
+                      {(row.sisaStok ?? 0).toLocaleString('en-US')}
                     </td>
                   </tr>
                 ))
@@ -2078,17 +2073,17 @@ export const ProductReportDetailView: React.FC<ProductReportDetailViewProps> = (
             <tfoot className="bg-zinc-950 font-bold border-t-2 border-zinc-700 text-white">
               <tr>
                 <td colSpan={3} className="py-3 px-4 uppercase tracking-wider text-[11px]">
-                  TOTAL RINCIAN PRODUK KELUAR ({filteredKeluar.length} Transaksi / Log)
+                  TOTAL STOCK OUT DETAILS ({filteredKeluar.length} Transactions / Logs)
                 </td>
                 <td className="py-3 px-4 text-center font-mono text-rose-400">
-                  -{filteredKeluar.reduce((s, r) => s + r.qty, 0).toLocaleString('id-ID')}
+                  -{filteredKeluar.reduce((s, r) => s + r.qty, 0).toLocaleString('en-US')}
                 </td>
                 <td className="py-3 px-4 text-right font-mono text-zinc-400">-</td>
                 <td className="py-3 px-4 text-right font-mono text-emerald-400">
                   {fmtIDR(filteredKeluar.reduce((s, r) => s + (r.totalValue || 0), 0))}
                 </td>
                 <td className="py-3 px-4 text-right font-mono text-cyan-400">
-                  {data.totalStokSistemUnits.toLocaleString('id-ID')}
+                  {data.totalStokSistemUnits.toLocaleString('en-US')}
                 </td>
               </tr>
             </tfoot>

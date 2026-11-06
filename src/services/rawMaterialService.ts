@@ -1397,8 +1397,15 @@ export function ensureArabianFoodMasterSynced(): Promise<void> {
             const seedMatch = ARABIAN_FOOD_PRODUCTS.find((sp) => sp.id === ep.id);
             prodMap.set(
               ep.id,
-              seedMatch && (!Array.isArray(ep.rawMaterialRecipe) || ep.rawMaterialRecipe.length === 0)
-                ? { ...ep, ...seedMatch }
+              seedMatch
+                ? {
+                    ...seedMatch,
+                    ...ep,
+                    rawMaterialRecipe:
+                      Array.isArray(ep.rawMaterialRecipe) && ep.rawMaterialRecipe.length > 0
+                        ? ep.rawMaterialRecipe
+                        : seedMatch.rawMaterialRecipe,
+                  }
                 : ep
             );
           }

@@ -3,8 +3,6 @@ import {
   ArrowLeft,
   Check,
   Package,
-  Sun,
-  Moon,
   RotateCcw,
   Image as ImageIcon,
   Upload,
@@ -55,7 +53,6 @@ interface AddProductFormProps {
   isDark: boolean;
   onBack: () => void;
   onSubmit: (product: ProductGroupItem) => void;
-  onToggleTheme: (theme: 'dark' | 'light') => void;
   onSaveAndAddAnother?: (product: ProductGroupItem) => void;
   initialProduct?: any;
 }
@@ -191,7 +188,6 @@ export const AddProductForm: React.FC<AddProductFormProps> = ({
   isDark,
   onBack,
   onSubmit,
-  onToggleTheme,
   initialProduct,
 }) => {
   const { language, t, tr, currencyMode, translateCategory, translateVariant } = useLanguage();
@@ -1197,42 +1193,8 @@ export const AddProductForm: React.FC<AddProductFormProps> = ({
           </p>
         </div>
 
-        {/* Action Controls: Theme Switcher & Back Button */}
+        {/* Action Controls: Back Button */}
         <div className="flex flex-wrap items-center gap-3">
-          <div
-            className={`flex items-center p-1 rounded-xl border shadow-xs ${
-              isDark
-                ? 'bg-zinc-900 border-zinc-800'
-                : 'bg-white border-slate-200'
-            }`}
-          >
-            <button
-              type="button"
-              onClick={() => onToggleTheme('dark')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${
-                isDark
-                  ? 'bg-zinc-800 text-white shadow-xs font-bold border border-zinc-700/60'
-                  : 'text-zinc-400 hover:text-zinc-200'
-              }`}
-              title="Dark Theme"
-            >
-              <Moon className="w-3.5 h-3.5 text-blue-400" />
-              <span>Dark</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => onToggleTheme('light')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${
-                !isDark
-                  ? 'bg-slate-100 text-slate-900 shadow-xs font-bold border border-slate-200'
-                  : 'text-zinc-400 hover:text-zinc-200'
-              }`}
-              title="Light Theme"
-            >
-              <Sun className="w-3.5 h-3.5 text-amber-500" />
-              <span>Light</span>
-            </button>
-          </div>
 
           <button
             type="button"

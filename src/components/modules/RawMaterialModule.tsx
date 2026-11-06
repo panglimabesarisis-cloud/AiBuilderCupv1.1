@@ -26,8 +26,6 @@ import {
   X,
   Save,
   ArrowLeft,
-  Sun,
-  Moon,
   Send,
   Phone,
   MapPin,
@@ -123,7 +121,7 @@ export const RawMaterialModule: React.FC<RawMaterialModuleProps> = ({
   const masterBrands = useBrands();
   const masterStorages = useStorageLocations();
 
-  const [isDark, setIsDark] = useState<boolean>(true);
+  const isDark = true;
   const [flashMsg, setFlashMsg] = useState<{ text: string; type: 'success' | 'error' } | null>(
     null
   );
@@ -1165,31 +1163,6 @@ export const RawMaterialModule: React.FC<RawMaterialModuleProps> = ({
             <Plus className="w-4 h-4" />
             <span>{tr('+ Add Raw Material', '+ Tambah Bahan Baku')}</span>
           </AppLink>
-
-          <div
-            className={`flex items-center p-1 rounded-xl border ${
-              isDark ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-slate-200'
-            }`}
-          >
-            <button
-              type="button"
-              onClick={() => setIsDark(true)}
-              className={`px-2.5 py-1 rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer ${
-                isDark ? 'bg-zinc-800 text-white' : 'text-slate-500'
-              }`}
-            >
-              <Moon className="w-3.5 h-3.5 text-blue-400" />
-            </button>
-            <button
-              type="button"
-              onClick={() => setIsDark(false)}
-              className={`px-2.5 py-1 rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer ${
-                !isDark ? 'bg-slate-100 text-slate-900' : 'text-zinc-500'
-              }`}
-            >
-              <Sun className="w-3.5 h-3.5 text-amber-500" />
-            </button>
-          </div>
         </div>
       </div>
 

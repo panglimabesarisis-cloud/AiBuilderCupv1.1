@@ -820,9 +820,40 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
       const deletedProducts = getDeletedSet('products');
       const mergedMap = new Map<string, Product>();
 
+      if (typeof window !== 'undefined') {
+        for (const cacheKey of ['riskcart_cache_products', 'riskcart_fs_products']) {
+          try {
+            const raw = window.localStorage.getItem(cacheKey);
+            const list = raw ? JSON.parse(raw) : [];
+            if (Array.isArray(list)) {
+              for (const item of list) {
+                const id = String(item?.id || '').trim();
+                if (!id || deletedProducts.has(id) || deletedProducts.has(String(item?.sku || ''))) continue;
+                const mapped = mapDocToProduct(id, item);
+                if (!mapped) continue;
+                const existing = mergedMap.get(id);
+                if (!existing) {
+                  mergedMap.set(id, mapped);
+                } else {
+                  const prevTime = existing.updatedAt ? new Date(existing.updatedAt).getTime() || 0 : 0;
+                  const nextTime = mapped.updatedAt ? new Date(mapped.updatedAt).getTime() || 0 : 0;
+                  mergedMap.set(id, nextTime >= prevTime ? { ...existing, ...mapped } : { ...mapped, ...existing });
+                }
+              }
+            }
+          } catch {}
+        }
+      }
+
       storeProductsMap.forEach((p, id) => {
-        if (!deletedProducts.has(id) && !deletedProducts.has(String(p.sku || ''))) {
+        if (deletedProducts.has(id) || deletedProducts.has(String(p.sku || ''))) return;
+        const existing = mergedMap.get(id);
+        if (!existing) {
           mergedMap.set(id, p);
+        } else {
+          const prevTime = existing.updatedAt ? new Date(existing.updatedAt).getTime() || 0 : 0;
+          const storeTime = p.updatedAt ? new Date(p.updatedAt).getTime() || 0 : 0;
+          mergedMap.set(id, storeTime >= prevTime ? { ...existing, ...p } : { ...p, ...existing });
         }
       });
       rootProductsMap.forEach((p, id) => {
@@ -1337,11 +1368,17 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
     };
     window.addEventListener('riskcart_demo_mode_changed', handleDemoModeChanged);
 
+    const handleProductsUpdated = () => {
+      publishMergedProducts();
+    };
+    window.addEventListener('riskcart_products_updated', handleProductsUpdated);
+
     // Cleanup all listeners on unmount
     return () => {
       isListeningRef.current = false;
       window.removeEventListener('riskcart_clean_slate_wiped', handleCleanSlateWiped);
       window.removeEventListener('riskcart_demo_mode_changed', handleDemoModeChanged);
+      window.removeEventListener('riskcart_products_updated', handleProductsUpdated);
       unsubProducts();
       unsubStoreProducts();
       unsubTransactions();

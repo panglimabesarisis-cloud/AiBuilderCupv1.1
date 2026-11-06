@@ -48,7 +48,7 @@ export type { CurrencyMode };
 export const USD_TO_IDR_RATE = FALLBACK_IDR_RATE;
 export const LANGUAGE_STORAGE_KEY = 'riskcart_app_language';
 const LEGACY_LANGUAGE_STORAGE_KEY = 'riskcart-language';
-const EXPLICIT_LANG_PREF_KEY = 'riskcart_explicit_lang_v3';
+const EXPLICIT_LANG_PREF_KEY = 'riskcart_explicit_lang_v4';
 const GOOGLE_LANG_CODE_KEY = 'riskcart_google_lang_code';
 
 export function normalizeGoogleLangCode(raw: string): SupportedTranslateLang {
@@ -143,6 +143,12 @@ export function applyGoogleTranslateCookie(targetLang: string) {
       setTimeout(triggerCombo, 300);
       setTimeout(triggerCombo, 900);
     }
+    setTimeout(() => {
+      sanitizeGoogleTranslateDOM();
+    }, 60);
+    setTimeout(() => {
+      sanitizeGoogleTranslateDOM();
+    }, 350);
   } catch {
     // ignore cookie errors
   }
@@ -209,32 +215,29 @@ function resolveInitialLocaleState(): {
 } {
   try {
     if (typeof window !== 'undefined') {
+      const explicitChoice = localStorage.getItem(EXPLICIT_LANG_PREF_KEY);
       const savedAppLang =
         localStorage.getItem(LANGUAGE_STORAGE_KEY) ||
         localStorage.getItem(GOOGLE_LANG_CODE_KEY) ||
         localStorage.getItem(LEGACY_LANGUAGE_STORAGE_KEY);
-      const explicitChoice = localStorage.getItem(EXPLICIT_LANG_PREF_KEY);
-      if (savedAppLang) {
+      if (explicitChoice && savedAppLang) {
         const code = normalizeGoogleLangCode(savedAppLang);
         const baseLang: Language = code === 'id' || code === 'ms' ? 'id' : 'en';
         applyGoogleTranslateCookie(code);
         return { lang: baseLang, langCode: code, currency: getCurrencyMode() };
       }
-      if (explicitChoice === 'id') {
-        applyGoogleTranslateCookie('id');
-        return { lang: 'id', langCode: 'id', currency: getCurrencyMode() };
-      }
-      // Default to Indonesian ('id') or English ('en') cleanly
-      localStorage.setItem(LANGUAGE_STORAGE_KEY, 'id');
-      localStorage.setItem(LEGACY_LANGUAGE_STORAGE_KEY, 'id');
-      localStorage.setItem(GOOGLE_LANG_CODE_KEY, 'id');
-      applyGoogleTranslateCookie('id');
-      return { lang: 'id', langCode: 'id', currency: getCurrencyMode() };
+      // Default to English ('en') across all pages
+      localStorage.setItem(LANGUAGE_STORAGE_KEY, 'en');
+      localStorage.setItem(LEGACY_LANGUAGE_STORAGE_KEY, 'en');
+      localStorage.setItem(GOOGLE_LANG_CODE_KEY, 'en');
+      localStorage.setItem(EXPLICIT_LANG_PREF_KEY, 'en');
+      applyGoogleTranslateCookie('en');
+      return { lang: 'en', langCode: 'en', currency: getCurrencyMode() };
     }
   } catch {
     // ignore storage errors
   }
-  return { lang: 'id', langCode: 'id', currency: 'IDR' };
+  return { lang: 'en', langCode: 'en', currency: 'IDR' };
 }
 
 async function persistCurrencyToFirestore(
@@ -513,6 +516,10 @@ export const LanguageProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     if (typeof document !== 'undefined') {
       document.documentElement.lang = activeLangCode;
       sanitizeGoogleTranslateDOM();
+      const timer = setTimeout(() => {
+        sanitizeGoogleTranslateDOM();
+      }, 150);
+      return () => clearTimeout(timer);
     }
   }, [activeLangCode, language]);
 

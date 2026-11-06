@@ -216,7 +216,6 @@ export const POSSettingsModule: React.FC<POSSettingsModuleProps> = ({
   const [roundingEnabled, setRoundingEnabled] = useState(true);
   const [cashRoundingMode, setCashRoundingMode] = useState<'none' | 'floor_100' | 'ceil_500'>('floor_100');
   const [maxCashDrawerAlert, setMaxCashDrawerAlert] = useState(3000000); // 3jt warning
-  const [requireCashCountOnShiftClose, setRequireCashCountOnShiftClose] = useState(true);
 
   // ================= 4. PRINTER STRUK =================
   const [printerInterface, setPrinterInterface] = useState<'bluetooth' | 'usb' | 'network'>('usb');
@@ -301,7 +300,6 @@ export const POSSettingsModule: React.FC<POSSettingsModuleProps> = ({
       if (d.roundingEnabled !== undefined) setRoundingEnabled(Boolean(d.roundingEnabled));
       if (d.cashRoundingMode !== undefined) setCashRoundingMode(d.cashRoundingMode);
       if (d.maxCashDrawerAlert !== undefined) setMaxCashDrawerAlert(d.maxCashDrawerAlert);
-      if (d.requireCashCountOnShiftClose !== undefined) setRequireCashCountOnShiftClose(d.requireCashCountOnShiftClose);
       if (d.printerInterface !== undefined) setPrinterInterface(d.printerInterface);
       if (d.printerPaperSize !== undefined) setPrinterPaperSize(d.printerPaperSize);
       if (d.networkPrinterIp !== undefined) setNetworkPrinterIp(d.networkPrinterIp);
@@ -450,7 +448,6 @@ export const POSSettingsModule: React.FC<POSSettingsModuleProps> = ({
       roundingEnabled,
       cashRoundingMode,
       maxCashDrawerAlert,
-      requireCashCountOnShiftClose,
       printerInterface,
       printerPaperSize,
       networkPrinterIp,
@@ -1644,19 +1641,6 @@ export const POSSettingsModule: React.FC<POSSettingsModuleProps> = ({
                   />
                   <span className="text-[10px] text-zinc-500">Peringatan setor ke brankas jika uang di kasir menumpuk</span>
                 </div>
-
-                <label className="flex items-center justify-between p-3 rounded-xl bg-zinc-950 border border-zinc-800 cursor-pointer">
-                  <div>
-                    <div className="font-semibold text-white">Wajib Hitung Uang Fisik Saat Tutup Shift</div>
-                    <div className="text-[11px] text-zinc-400">Kasir harus input rincian lembaran uang sebelum cetak Z-Report</div>
-                  </div>
-                  <input
-                    type="checkbox"
-                    checked={requireCashCountOnShiftClose}
-                    onChange={(e) => setRequireCashCountOnShiftClose(e.target.checked)}
-                    className="w-4 h-4 rounded text-blue-600 focus:ring-0"
-                  />
-                </label>
               </div>
             </div>
           </div>

@@ -34,9 +34,10 @@ import {
 import { doc, setDoc, getDoc, deleteDoc } from 'firebase/firestore';
 import { useNavigate } from 'react-router-dom';
 import { db } from '../../firebase';
-import { getPosSettings, onPosSettings, logAudit } from '../../services/posRuntime';
+import { logAudit } from '../../services/posRuntime';
 import { useAppData } from '../../context/AppDataContext';
 import { useAccessControl } from '../../context/AccessControlContext';
+import { useLanguage } from '../../context/LanguageContext';
 import { formatRupiah, fmtMoney, toIdr, formatRibuanInput, parseRibuanInput } from '../../utils/money';
 import { StaffMemberItem } from './StaffModule';
 
@@ -116,6 +117,8 @@ export const EndShiftView: React.FC<EndShiftViewProps> = ({
 }) => {
   const { transactions: ctxTransactions, products: ctxProducts, purgeTodayShiftTransactions } = useAppData();
   const { activeCashier, setActiveCashier, currentUser, lockPosSession } = useAccessControl();
+  const { currencyMode } = useLanguage();
+  const currencyPrefix = currencyMode === 'USD' ? '$' : currencyMode === 'EUR' ? '€' : currencyMode === 'SGD' ? 'S$' : 'Rp';
   const navigate = useNavigate();
   const [isPurgingTodayTx, setIsPurgingTodayTx] = useState(false);
   const [purgeTodayFeedback, setPurgeTodayFeedback] = useState<string | null>(null);
@@ -152,17 +155,6 @@ export const EndShiftView: React.FC<EndShiftViewProps> = ({
   // Uang Laci, Kas Aktual, Bonus, Pemasukan Lain, Catatan Shift
   const [uangLaciInput, setUangLaciInput] = useState<string>('0');
   const [kasAktualInput, setKasAktualInput] = useState<string>('');
-  // Pengaturan > Pembayaran: wajib hitung uang fisik per pecahan saat tutup shift
-  const [requireCashCount, setRequireCashCount] = useState<boolean>(
-    () => getPosSettings().requireCashCountOnShiftClose !== false
-  );
-  useEffect(() => onPosSettings((st) => setRequireCashCount(st.requireCashCountOnShiftClose !== false)), []);
-  const DENOMS = [100000, 50000, 20000, 10000, 5000, 2000, 1000, 500, 200, 100];
-  const [denomCounts, setDenomCounts] = useState<Record<number, string>>({});
-  const denomTotal = useMemo(
-    () => DENOMS.reduce((sum, d) => sum + d * (parseInt(denomCounts[d] || '0', 10) || 0), 0),
-    [denomCounts]
-  );
   const [bonusInput, setBonusInput] = useState<string>('');
   const [pemasukanLainInput, setPemasukanLainInput] = useState<string>('');
   const [catatanShift, setCatatanShift] = useState<string>('');
@@ -614,10 +606,6 @@ export const EndShiftView: React.FC<EndShiftViewProps> = ({
       return;
     }
 
-    if (requireCashCount && denomTotal <= 0) {
-      setErrorMessage('⚠️ Wajib menghitung uang fisik per pecahan (Pengaturan POS > Pembayaran).');
-      return;
-    }
     if (!hasKasAktualInput) {
       setErrorMessage('⚠️ Harap isi kolom Kas Aktual dengan nominal uang fisik laci kasir');
       return;
@@ -654,9 +642,6 @@ export const EndShiftView: React.FC<EndShiftViewProps> = ({
       target: `Tutup shift ${shiftId} — kas aktual Rp ${kasAktualNum.toLocaleString('id-ID')}`,
     });
     const closedRecord = {
-      cashDenominations: requireCashCount
-        ? Object.fromEntries(DENOMS.map((d) => [String(d), parseInt(denomCounts[d] || '0', 10) || 0]))
-        : null,
       id: shiftId,
       status: 'closed',
       idempotencyKey,
@@ -1452,7 +1437,7 @@ export const EndShiftView: React.FC<EndShiftViewProps> = ({
                 Uang Laci
               </label>
               <div className="relative">
-                <span className="absolute left-3 top-2.5 text-zinc-400 font-bold font-mono">Rp</span>
+                <span className="absolute left-3 top-2.5 text-zinc-400 font-bold font-mono">{currencyPrefix}</span>
                 <input
                   type="text"
                   value={uangLaciInput}
@@ -1463,44 +1448,16 @@ export const EndShiftView: React.FC<EndShiftViewProps> = ({
               </div>
             </div>
 
-            {requireCashCount && (
-              <div className="p-3 rounded-xl bg-zinc-950 border border-amber-500/40 space-y-2">
-                <div className="text-xs font-bold text-amber-300">Hitung Uang Fisik per Pecahan (wajib)</div>
-                <div className="grid grid-cols-2 gap-1.5">
-                  {DENOMS.map((d) => (
-                    <label key={d} className="flex items-center justify-between gap-2 text-[11px] text-zinc-300">
-                      <span className="font-mono">Rp {d.toLocaleString('id-ID')} ×</span>
-                      <input
-                        type="number"
-                        min={0}
-                        value={denomCounts[d] || ''}
-                        onChange={(e) => {
-                          const next = { ...denomCounts, [d]: e.target.value };
-                          setDenomCounts(next);
-                          const sum = DENOMS.reduce((acc, x) => acc + x * (parseInt(next[x] || '0', 10) || 0), 0);
-                          setKasAktualInput(formatNumberWithDots(String(sum)));
-                          setErrorMessage(null);
-                        }}
-                        className="w-16 bg-zinc-900 border border-zinc-700 rounded px-1.5 py-0.5 text-right text-white font-mono"
-                      />
-                    </label>
-                  ))}
-                </div>
-                <div className="text-right text-xs font-bold text-white font-mono">Total: Rp {denomTotal.toLocaleString('id-ID')}</div>
-              </div>
-            )}
-
             {/* Input 2: Kas Aktual */}
             <div>
               <label className="block text-white font-bold mb-1.5 text-xs">
                 Kas Aktual <span className="text-rose-400">*</span>
               </label>
               <div className="relative">
-                <span className="absolute left-3 top-2.5 text-zinc-400 font-bold font-mono">Rp</span>
+                <span className="absolute left-3 top-2.5 text-zinc-400 font-bold font-mono">{currencyPrefix}</span>
                 <input
                   type="text"
                   value={kasAktualInput}
-                  readOnly={requireCashCount}
                   onChange={(e) => {
                     const formatted = formatNumberWithDots(e.target.value);
                     setKasAktualInput(formatted);
@@ -1520,7 +1477,7 @@ export const EndShiftView: React.FC<EndShiftViewProps> = ({
                 Bonus
               </label>
               <div className="relative">
-                <span className="absolute left-3 top-2.5 text-zinc-400 font-bold font-mono">Rp</span>
+                <span className="absolute left-3 top-2.5 text-zinc-400 font-bold font-mono">{currencyPrefix}</span>
                 <input
                   type="text"
                   value={bonusInput}

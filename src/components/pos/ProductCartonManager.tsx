@@ -20,8 +20,6 @@ import {
   X,
   Check,
   Sparkles,
-  Sun,
-  Moon,
   Activity,
   ArrowUpDown,
   Filter,
@@ -197,6 +195,82 @@ export const ProductCartonManager: React.FC<ProductCartonManagerProps> = ({
         }
       };
 
+      const buildBaseProductMap = (deletedSet: Set<string>): Map<string, Product> => {
+        const mergedMap = new Map<string, Product>();
+        for (const seedProd of ARABIAN_FOOD_PRODUCTS) {
+          if (!deletedSet.has(seedProd.id) && !deletedSet.has(seedProd.sku)) {
+            mergedMap.set(seedProd.id, seedProd as Product);
+          }
+        }
+        for (const cacheKey of ['riskcart_cache_products', 'riskcart_fs_products']) {
+          try {
+            const raw = localStorage.getItem(cacheKey);
+            const list = raw ? JSON.parse(raw) : [];
+            if (Array.isArray(list)) {
+              for (const item of list) {
+                const id = String(item?.id || '').trim();
+                const sku = String(item?.sku || '').trim();
+                if (!id || item?.deleted === true || isFictitiousDoc(id, item)) continue;
+                if (deletedSet.has(id) || (sku && deletedSet.has(sku))) continue;
+                const existing = mergedMap.get(id);
+                if (!existing) {
+                  mergedMap.set(id, { ...item, id } as Product);
+                } else {
+                  const prevTime = existing.updatedAt ? new Date(existing.updatedAt).getTime() || 0 : 0;
+                  const nextTime = item.updatedAt ? new Date(item.updatedAt).getTime() || 0 : 0;
+                  mergedMap.set(
+                    id,
+                    (nextTime >= prevTime
+                      ? { ...existing, ...item, id }
+                      : { ...item, ...existing, id }) as Product
+                  );
+                }
+              }
+            }
+          } catch {}
+        }
+        return mergedMap;
+      };
+
+      let latestFirestoreDocs: Array<{ id: string; data: Record<string, any> }> = [];
+
+      const recomputeProducts = () => {
+        if (!isMounted) return;
+        const deletedSet = getDeletedProdSet();
+        const mergedMap = buildBaseProductMap(deletedSet);
+
+        for (const { id, data: d } of latestFirestoreDocs) {
+          if (deletedSet.has(id) || deletedSet.has(String(d.sku || ''))) continue;
+          const existing = mergedMap.get(id);
+          if (!existing) {
+            mergedMap.set(id, { ...d, id } as Product);
+          } else {
+            const localTime = existing.updatedAt ? new Date(existing.updatedAt).getTime() || 0 : 0;
+            const fsTime = d.updatedAt ? new Date(d.updatedAt).getTime() || 0 : 0;
+            mergedMap.set(
+              id,
+              (fsTime >= localTime
+                ? { ...existing, ...d, id }
+                : { ...d, ...existing, id }) as Product
+            );
+          }
+        }
+
+        const firestoreProducts = Array.from(mergedMap.values());
+        setProducts(productsToGroups(firestoreProducts));
+        try {
+          if (firestoreProducts.length > 0) {
+            safeSetCache('riskcart_cache_products', firestoreProducts);
+          }
+        } catch (e) {}
+        setIsLoadingProducts(false);
+      };
+
+      const handleLocalProductsUpdated = () => {
+        recomputeProducts();
+      };
+      window.addEventListener('riskcart_products_updated', handleLocalProductsUpdated);
+
       const colRef = collection(db, 'products');
       unsubscribe = onSnapshot(
         colRef,
@@ -211,15 +285,7 @@ export const ProductCartonManager: React.FC<ProductCartonManagerProps> = ({
             return;
           }
           const deletedSet = getDeletedProdSet();
-          const mergedMap = new Map<string, Product>();
-
-          for (const seedProd of ARABIAN_FOOD_PRODUCTS) {
-            if (!deletedSet.has(seedProd.id) && !deletedSet.has(seedProd.sku)) {
-              mergedMap.set(seedProd.id, seedProd as Product);
-            }
-          }
-
-          snapshot.docs
+          latestFirestoreDocs = snapshot.docs
             .filter((docSnap) => {
               const d = docSnap.data();
               if (d.deleted === true || isFictitiousDoc(docSnap.id, d)) {
@@ -228,64 +294,30 @@ export const ProductCartonManager: React.FC<ProductCartonManagerProps> = ({
               }
               return !deletedSet.has(docSnap.id) && !deletedSet.has(String(d.sku || ''));
             })
-            .forEach((docSnap) => {
-              const d = docSnap.data();
-              const existing = mergedMap.get(docSnap.id);
-              mergedMap.set(docSnap.id, {
-                ...(existing || {}),
-                ...d,
-                id: docSnap.id,
-              } as Product);
-            });
+            .map((docSnap) => ({ id: docSnap.id, data: docSnap.data() }));
 
-          const firestoreProducts = Array.from(mergedMap.values());
-          setProducts(productsToGroups(firestoreProducts));
-          try {
-            if (firestoreProducts.length > 0) {
-              safeSetCache('riskcart_cache_products', firestoreProducts);
-            }
-          } catch (e) {}
-          setIsLoadingProducts(false);
+          recomputeProducts();
         },
         (error) => {
           console.warn('[ProductCartonManager] Products snapshot notice:', error);
-          if (isMounted) {
-            const deletedSet = getDeletedProdSet();
-            const fallbackList = ARABIAN_FOOD_PRODUCTS.filter(
-              (p) => !deletedSet.has(p.id) && !deletedSet.has(p.sku)
-            ) as Product[];
-            setProducts(productsToGroups(fallbackList));
-            setIsLoadingProducts(false);
-          }
+          recomputeProducts();
         }
       );
+
+      return () => {
+        window.removeEventListener('riskcart_products_updated', handleLocalProductsUpdated);
+      };
     };
 
-    initLiveCatalog();
+    const cleanupLocalListener = initLiveCatalog();
 
     return () => {
       isMounted = false;
       window.removeEventListener('riskcart_clean_slate_wiped', handleCleanSlate);
+      if (cleanupLocalListener) cleanupLocalListener();
       if (unsubscribe) unsubscribe();
     };
   }, []);
-
-  // Theme State: 'dark' or 'light'
-  const [tableTheme, setTableTheme] = useState<'dark' | 'light'>(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('riskcart_product_table_theme');
-      if (saved === 'light' || saved === 'dark') return saved;
-    }
-    return 'dark'; // Harmonizes with RiskCart POS dark styling
-  });
-
-  const handleSetTheme = (theme: 'dark' | 'light') => {
-    setTableTheme(theme);
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('riskcart_product_table_theme', theme);
-    }
-    showToast(`Switched to ${theme === 'dark' ? 'Dark' : 'Light'} theme`);
-  };
 
   // View Mode: 'table' or 'add_product' derived directly from URL
   const viewMode: 'table' | 'add_product' = route.productViewMode || initialViewMode || 'table';
@@ -1640,7 +1672,7 @@ export const ProductCartonManager: React.FC<ProductCartonManagerProps> = ({
   // Count total displayed products
   const totalCount = filteredProducts.reduce((acc, p) => acc + (p.hasVariants && p.variants ? p.variants.length : 1), 0);
 
-  const isDark = tableTheme === 'dark';
+  const isDark = true;
 
   const handleSaveAddProductForm = async (newProduct: ProductGroupItem, addAnother = false) => {
     try {
@@ -1702,7 +1734,6 @@ export const ProductCartonManager: React.FC<ProductCartonManagerProps> = ({
         <AddProductForm
           isDark={isDark}
           onBack={() => setViewMode('table')}
-          onToggleTheme={handleSetTheme}
           onSubmit={(newProduct) => handleSaveAddProductForm(newProduct, false)}
           onSaveAndAddAnother={(newProduct) => handleSaveAddProductForm(newProduct, true)}
         />
@@ -1739,7 +1770,6 @@ export const ProductCartonManager: React.FC<ProductCartonManagerProps> = ({
               navigateToPath('/produk');
             }
           }}
-          onToggleTheme={handleSetTheme}
           onSubmit={(updatedProduct) => handleSaveEditProductForm(updatedProduct)}
         />
       </div>
@@ -1780,37 +1810,8 @@ export const ProductCartonManager: React.FC<ProductCartonManagerProps> = ({
           </p>
         </div>
 
-        {/* Action Controls & Light/Dark Theme Switcher */}
+        {/* Action Controls */}
         <div className="flex flex-wrap items-center gap-2.5">
-          {/* Light / Dark Theme Switcher */}
-          <div className="flex items-center p-1 rounded-xl bg-zinc-900 border border-zinc-800 shadow-sm">
-            <button
-              onClick={() => handleSetTheme('dark')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${
-                isDark
-                  ? 'bg-zinc-800 text-white shadow-sm font-bold border border-zinc-700/60'
-                  : 'text-zinc-400 hover:text-zinc-200'
-              }`}
-              title="Dark Theme"
-              aria-label="Dark Theme"
-            >
-              <Moon className="w-3.5 h-3.5 text-blue-400" />
-              <span>Dark</span>
-            </button>
-            <button
-              onClick={() => handleSetTheme('light')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${
-                !isDark
-                  ? 'bg-white text-slate-900 shadow-sm font-bold border border-slate-200'
-                  : 'text-zinc-400 hover:text-zinc-200'
-              }`}
-              title="Light Theme"
-              aria-label="Light Theme"
-            >
-              <Sun className="w-3.5 h-3.5 text-amber-500" />
-              <span>Light</span>
-            </button>
-          </div>
 
           <button
             onClick={handleRefresh}

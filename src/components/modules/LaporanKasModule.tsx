@@ -68,43 +68,43 @@ interface ReportMenuItem {
 }
 
 const PRODUCT_REPORT_MENU_ITEMS: ReportMenuItem[] = [
-  { id: 'produk_keseluruhan', title: 'Laporan Keseluruhan Produk', category: 'Produk', badge: 'UTAMA' },
-  { id: 'produk_masuk', title: 'Rincian Produk Masuk', category: 'Produk', badge: 'IN' },
-  { id: 'produk_keluar', title: 'Rincian Produk Keluar', category: 'Produk', badge: 'OUT' },
-  { id: 'item_kategori', title: 'Item Penjualan berdasarkan Kategori', category: 'Produk' },
-  { id: 'item_brand', title: 'Item Penjualan berdasarkan Brand', category: 'Produk' },
-  { id: 'item_date', title: 'Item Penjualan berdasarkan Tanggal', category: 'Waktu & Tren' },
-  { id: 'laba_rugi', title: 'Laba / Rugi & Gross Margin', category: 'Kas & Keuangan', badge: 'PROFIT' },
+  { id: 'produk_keseluruhan', title: 'Overall Product Report', category: 'Produk', badge: 'MAIN' },
+  { id: 'produk_masuk', title: 'Stock In Details', category: 'Produk', badge: 'IN' },
+  { id: 'produk_keluar', title: 'Stock Out Details', category: 'Produk', badge: 'OUT' },
+  { id: 'item_kategori', title: 'Item Sales by Category', category: 'Produk' },
+  { id: 'item_brand', title: 'Item Sales by Brand', category: 'Produk' },
+  { id: 'item_date', title: 'Item Sales by Date', category: 'Waktu & Tren' },
+  { id: 'laba_rugi', title: 'Profit / Loss & Gross Margin', category: 'Kas & Keuangan', badge: 'PROFIT' },
 ];
 
 const REPORT_MENU_ITEMS: ReportMenuItem[] = [
-  // 0. Produk
-  { id: 'produk_keseluruhan', title: 'Laporan Keseluruhan Produk', category: 'Produk', badge: 'PRODUK' },
-  { id: 'produk_masuk', title: 'Rincian Produk Masuk', category: 'Produk', badge: 'IN' },
-  { id: 'produk_keluar', title: 'Rincian Produk Keluar', category: 'Produk', badge: 'OUT' },
-  // 1. Penjualan
-  { id: 'keseluruhan', title: 'Laporan Keseluruhan Penjualan', category: 'Penjualan', badge: 'UTAMA' },
-  { id: 'rincian', title: 'Rincian Penjualan', category: 'Penjualan' },
-  { id: 'backdate', title: 'Rincian Penjualan Backdate', category: 'Penjualan' },
-  { id: 'online_order', title: 'Rincian Penjualan - Online Order', category: 'Penjualan', badge: 'PWA' },
-  { id: 'pending_pos', title: 'Rincian Penjualan Pending POS', category: 'Penjualan' },
-  // 2. Waktu & Tren
-  { id: 'hourly', title: 'Rincian Penjualan berdasarkan Jam', category: 'Waktu & Tren', badge: 'PEAK' },
-  { id: 'item_date', title: 'Item Penjualan berdasarkan Tanggal', category: 'Waktu & Tren' },
-  // 3. Produk Kategori & Brand
-  { id: 'item_brand', title: 'Item Penjualan berdasarkan Brand', category: 'Produk' },
-  { id: 'item_kategori', title: 'Item Penjualan berdasarkan Kategori', category: 'Produk' },
-  // 4. Petugas & Pelanggan
-  { id: 'petugas', title: 'Penjualan berdasarkan Petugas / Kasir', category: 'Petugas & Pelanggan' },
-  { id: 'pelanggan', title: 'Penjualan berdasarkan Pelanggan', category: 'Petugas & Pelanggan' },
-  { id: 'loyalty_point', title: 'Rincian Penggunaan Loyalty Point', category: 'Petugas & Pelanggan' },
-  // 5. Kas & Keuangan
-  { id: 'diskon', title: 'Ringkasan Diskon & Promo', category: 'Kas & Keuangan' },
-  { id: 'pengeluaran', title: 'Pengeluaran berdasarkan Tanggal', category: 'Kas & Keuangan' },
-  { id: 'arus_kas', title: 'Laporan Arus Kas & Rekonsiliasi Laci', category: 'Kas & Keuangan', badge: 'KAS' },
-  { id: 'laba_rugi', title: 'Laba / Rugi & Gross Margin', category: 'Kas & Keuangan', badge: 'PROFIT' },
-  { id: 'pembatalan', title: 'Rincian Pembatalan / Void & Retur', category: 'Kas & Keuangan' },
-  { id: 'kas_selisih', title: 'Kas Selisih & Rekonsiliasi Kasir', category: 'Kas & Keuangan' },
+  // 0. Products
+  { id: 'produk_keseluruhan', title: 'Overall Product Report', category: 'Produk', badge: 'PRODUCT' },
+  { id: 'produk_masuk', title: 'Stock In Details', category: 'Produk', badge: 'IN' },
+  { id: 'produk_keluar', title: 'Stock Out Details', category: 'Produk', badge: 'OUT' },
+  // 1. Sales
+  { id: 'keseluruhan', title: 'Overall Sales Report', category: 'Penjualan', badge: 'MAIN' },
+  { id: 'rincian', title: 'Sales Details', category: 'Penjualan' },
+  { id: 'backdate', title: 'Backdated Sales Details', category: 'Penjualan' },
+  { id: 'online_order', title: 'Online Order Sales Details', category: 'Penjualan', badge: 'PWA' },
+  { id: 'pending_pos', title: 'Pending POS Sales Details', category: 'Penjualan' },
+  // 2. Time & Trends
+  { id: 'hourly', title: 'Hourly Sales Details', category: 'Waktu & Tren', badge: 'PEAK' },
+  { id: 'item_date', title: 'Item Sales by Date', category: 'Waktu & Tren' },
+  // 3. Product Category & Brand
+  { id: 'item_brand', title: 'Item Sales by Brand', category: 'Produk' },
+  { id: 'item_kategori', title: 'Item Sales by Category', category: 'Produk' },
+  // 4. Staff & Customers
+  { id: 'petugas', title: 'Sales by Cashier / Staff', category: 'Petugas & Pelanggan' },
+  { id: 'pelanggan', title: 'Sales by Customer', category: 'Petugas & Pelanggan' },
+  { id: 'loyalty_point', title: 'Loyalty Point Usage Details', category: 'Petugas & Pelanggan' },
+  // 5. Cash & Finance
+  { id: 'diskon', title: 'Discounts & Promotions Summary', category: 'Kas & Keuangan' },
+  { id: 'pengeluaran', title: 'Expenses by Date', category: 'Kas & Keuangan' },
+  { id: 'arus_kas', title: 'Cashflow & Drawer Reconciliation', category: 'Kas & Keuangan', badge: 'CASH' },
+  { id: 'laba_rugi', title: 'Profit / Loss & Gross Margin', category: 'Kas & Keuangan', badge: 'PROFIT' },
+  { id: 'pembatalan', title: 'Void / Cancelled & Returns Details', category: 'Kas & Keuangan' },
+  { id: 'kas_selisih', title: 'Cash Variance & Shift Reconciliation', category: 'Kas & Keuangan' },
 ];
 
 const ALL_REPORT_MENU_ITEMS: ReportMenuItem[] = REPORT_MENU_ITEMS;
@@ -1153,8 +1153,8 @@ export const LaporanKasModule: React.FC<LaporanKasModuleProps> = ({
   const dailyTrendData = useMemo(() => {
     const baseDate = endDate ? new Date(`${endDate}T12:00:00`) : new Date();
     const validBase = isNaN(baseDate.getTime()) ? new Date() : baseDate;
-    const dayNames = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'];
-    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+    const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
     const days: Array<{ key: string; day: string; revenue: number; trx: number }> = [];
     for (let i = 6; i >= 0; i--) {
@@ -1260,7 +1260,7 @@ export const LaporanKasModule: React.FC<LaporanKasModuleProps> = ({
                 : 'bg-zinc-900/90 text-zinc-300 hover:bg-zinc-800/80 hover:text-amber-200 font-semibold border-transparent'
             }`}
           >
-            Laporan Produk
+            Product Reports
           </button>
           <button
             type="button"
@@ -1274,7 +1274,7 @@ export const LaporanKasModule: React.FC<LaporanKasModuleProps> = ({
                 : 'bg-zinc-900/90 text-zinc-300 hover:bg-zinc-800/80 hover:text-amber-200 font-semibold border-transparent'
             }`}
           >
-            Laporan Pembelian
+            Purchase Reports
           </button>
           <button
             type="button"
@@ -1288,7 +1288,7 @@ export const LaporanKasModule: React.FC<LaporanKasModuleProps> = ({
                 : 'bg-zinc-900/90 text-zinc-300 hover:bg-zinc-800/80 hover:text-amber-200 font-semibold border-transparent'
             }`}
           >
-            Laporan Penjualan
+            Sales Reports
           </button>
           <button
             type="button"
@@ -1302,7 +1302,7 @@ export const LaporanKasModule: React.FC<LaporanKasModuleProps> = ({
                 : 'bg-zinc-900/90 text-zinc-300 hover:bg-zinc-800/80 hover:text-amber-200 font-semibold border-transparent'
             }`}
           >
-            Laporan Penjualan Per Shift
+            Shift Sales Reports
           </button>
           <button
             type="button"
@@ -1316,7 +1316,7 @@ export const LaporanKasModule: React.FC<LaporanKasModuleProps> = ({
                 : 'bg-zinc-900/90 text-zinc-300 hover:bg-zinc-800/80 hover:text-amber-200 font-semibold border-transparent'
             }`}
           >
-            Laporan Pembayaran
+            Payment Reports
           </button>
           <button
             type="button"
@@ -1334,20 +1334,20 @@ export const LaporanKasModule: React.FC<LaporanKasModuleProps> = ({
                 : 'bg-zinc-900/90 text-zinc-300 hover:bg-zinc-800/80 hover:text-amber-200 font-semibold border-transparent'
             }`}
           >
-            Laporan Multi Outlet
+            Multi-Outlet Reports
           </button>
         </div>
       </div>
 
-      {/* 2. MAIN 2-COLUMN FULLWIDTH LAYOUT: DAFTAR LAPORAN (Kiri) + KONTEN LAPORAN FULLWIDTH (Kanan) */}
+      {/* 2. MAIN 2-COLUMN FULLWIDTH LAYOUT */}
       <div className="flex flex-col lg:flex-row gap-4 items-start w-full max-w-none">
-        {/* KOLOM KIRI: DAFTAR LAPORAN / LAPORAN PRODUK */}
+        {/* LEFT COLUMN: REPORT MENU */}
         <div className="w-full lg:w-[250px] xl:w-[270px] shrink-0 bg-zinc-900/95 border border-amber-500/25 rounded-2xl p-4 space-y-4 shadow-xl print:hidden lg:sticky lg:top-4">
           <div className="flex items-center justify-between border-b border-zinc-800 pb-2.5">
             <h3 className="font-black text-white text-sm tracking-tight flex items-center gap-2">
               <FileText className="w-4 h-4 text-amber-400" />
               <span>
-                {activeTopTab === 'produk' ? 'Laporan Produk' : 'Daftar Laporan'}
+                {activeTopTab === 'produk' ? 'Product Reports' : 'Report Menu'}
               </span>
             </h3>
             <span className="text-[11px] font-mono text-amber-300 bg-amber-500/15 border border-amber-500/30 px-2 py-0.5 rounded-full">
@@ -1359,7 +1359,7 @@ export const LaporanKasModule: React.FC<LaporanKasModuleProps> = ({
             <Search className="w-3.5 h-3.5 text-zinc-500 absolute left-3 top-2.5" />
             <input
               type="text"
-              placeholder="Ketikkan keyword..."
+              placeholder="Search report..."
               value={searchReportKeyword}
               onChange={(e) => setSearchReportKeyword(e.target.value)}
               className="w-full bg-zinc-950 border border-zinc-800 rounded-xl pl-8 pr-3 py-1.5 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-amber-500/60 transition"
@@ -1397,7 +1397,7 @@ export const LaporanKasModule: React.FC<LaporanKasModuleProps> = ({
           </div>
         </div>
 
-        {/* KOLOM KANAN (FULLWIDTH): DETAIL LAPORAN, FILTER, CHARTS, & TABEL */}
+        {/* RIGHT COLUMN (FULLWIDTH): REPORT DETAILS, FILTERS, CHARTS, & TABLES */}
         <div className="flex-1 w-full min-w-0 max-w-none space-y-5">
           {/* HEADER ACTION BAR & FILTER */}
           <div className="w-full max-w-none bg-zinc-900/95 border border-amber-500/25 rounded-2xl p-4 sm:p-5 shadow-xl space-y-4">
@@ -1406,15 +1406,15 @@ export const LaporanKasModule: React.FC<LaporanKasModuleProps> = ({
                 <h2 className="text-xl font-black text-white tracking-tight flex items-center gap-2">
                   <span>
                     {ALL_REPORT_MENU_ITEMS.find((r) => r.id === selectedReport)?.title ||
-                      'Laporan Keseluruhan Penjualan'}
+                      'Overall Sales Report'}
                   </span>
                 </h2>
                 <p className="text-xs text-zinc-400 mt-0.5">
-                  Data dihitung 100% secara real-time dari koleksi Cloud Firestore (`products`, `transactions`, `orders`, `purchase_orders`, `cash_flows`).
+                  Computed 100% in real-time from Cloud Firestore collections (`products`, `transactions`, `orders`, `purchase_orders`, `cash_flows`).
                 </p>
               </div>
 
-              {/* DATE PICKER & ACTION BUTTONS (Sesuai layoutkanan.jpg dengan tema Dark & Gold) */}
+              {/* DATE PICKER & ACTION BUTTONS */}
               <div className="flex flex-wrap items-center gap-2">
                 <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-zinc-950 border border-amber-500/30 text-xs text-amber-100 shadow-inner">
                   <Calendar className="w-3.5 h-3.5 text-amber-400 shrink-0" />
@@ -1444,8 +1444,8 @@ export const LaporanKasModule: React.FC<LaporanKasModuleProps> = ({
                   onChange={(e) => setFilterSource(e.target.value)}
                   className="bg-zinc-950 border border-amber-500/30 rounded-lg px-3.5 py-2 text-xs font-semibold text-amber-100 focus:outline-none focus:border-amber-400 cursor-pointer"
                 >
-                  <option value="all">Penjualan</option>
-                  <option value="pos">Point of Sale (POS Toko)</option>
+                  <option value="all">All Sales Channels</option>
+                  <option value="pos">Point of Sale (Store POS)</option>
                   <option value="online">Online Order (Client PWA)</option>
                 </select>
 
@@ -1453,7 +1453,7 @@ export const LaporanKasModule: React.FC<LaporanKasModuleProps> = ({
                   type="button"
                   onClick={handlePrint}
                   className="px-4 py-2 rounded-lg bg-zinc-950 hover:bg-amber-500/15 text-amber-300 text-xs font-bold transition flex items-center gap-1.5 border border-amber-500/40 shadow-sm cursor-pointer"
-                  title="Cetak atau Unduh Laporan PDF"
+                  title="Print or Download PDF Report"
                 >
                   <Printer className="w-3.5 h-3.5 text-amber-400" />
                   <span>PDF</span>
@@ -1463,7 +1463,7 @@ export const LaporanKasModule: React.FC<LaporanKasModuleProps> = ({
                   type="button"
                   onClick={handleExportCSV}
                   className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition flex items-center gap-1.5 border border-emerald-400/40 shadow-sm cursor-pointer"
-                  title="Ekspor Data Laporan ke File Excel / CSV"
+                  title="Export Report Data to Excel / CSV"
                 >
                   <FileText className="w-3.5 h-3.5" />
                   <span>EXCEL</span>
@@ -1471,11 +1471,11 @@ export const LaporanKasModule: React.FC<LaporanKasModuleProps> = ({
               </div>
             </div>
 
-            {/* QUICK PRESET FILTER TANGGAL & DROPDOWN FILTER TAMBAHAN */}
+            {/* QUICK PRESET DATE FILTERS & ADDITIONAL DROPDOWNS */}
             <div className="flex flex-wrap items-center justify-between gap-3 text-xs pt-1">
               <div className="flex flex-wrap items-center gap-1.5">
                 <span className="text-zinc-500 text-[11px] font-bold uppercase tracking-wider mr-1">
-                  Periode:
+                  Period:
                 </span>
                 <button
                   onClick={() => handleDatePreset('today')}
@@ -1485,7 +1485,7 @@ export const LaporanKasModule: React.FC<LaporanKasModuleProps> = ({
                       : 'bg-zinc-800/80 text-zinc-400 hover:text-amber-200'
                   }`}
                 >
-                  Hari Ini
+                  Today
                 </button>
                 <button
                   onClick={() => handleDatePreset('yesterday')}
@@ -1495,7 +1495,7 @@ export const LaporanKasModule: React.FC<LaporanKasModuleProps> = ({
                       : 'bg-zinc-800/80 text-zinc-400 hover:text-amber-200'
                   }`}
                 >
-                  Kemarin
+                  Yesterday
                 </button>
                 <button
                   onClick={() => handleDatePreset('7days')}
@@ -1505,7 +1505,7 @@ export const LaporanKasModule: React.FC<LaporanKasModuleProps> = ({
                       : 'bg-zinc-800/80 text-zinc-400 hover:text-amber-200'
                   }`}
                 >
-                  7 Hari Terakhir
+                  Last 7 Days
                 </button>
                 <button
                   onClick={() => handleDatePreset('month')}
@@ -1515,7 +1515,7 @@ export const LaporanKasModule: React.FC<LaporanKasModuleProps> = ({
                       : 'bg-zinc-800/80 text-zinc-400 hover:text-amber-200'
                   }`}
                 >
-                  Bulan Ini
+                  This Month
                 </button>
                 <button
                   onClick={() => handleDatePreset('all')}
@@ -1525,7 +1525,7 @@ export const LaporanKasModule: React.FC<LaporanKasModuleProps> = ({
                       : 'bg-zinc-800/80 text-zinc-400 hover:text-amber-200'
                   }`}
                 >
-                  Semua Periode
+                  All Periods
                 </button>
               </div>
 
@@ -1535,7 +1535,7 @@ export const LaporanKasModule: React.FC<LaporanKasModuleProps> = ({
                   onChange={(e) => setFilterCashier(e.target.value)}
                   className="bg-zinc-950 border border-zinc-800 rounded-lg px-2.5 py-1 text-zinc-300 text-xs focus:outline-none"
                 >
-                  <option value="all">Semua Kasir</option>
+                  <option value="all">All Cashiers</option>
                   {availableCashiers.map((c) => (
                     <option key={c} value={c}>
                       {c}
@@ -1548,18 +1548,18 @@ export const LaporanKasModule: React.FC<LaporanKasModuleProps> = ({
                   onChange={(e) => setFilterPayment(e.target.value)}
                   className="bg-zinc-950 border border-zinc-800 rounded-lg px-2.5 py-1 text-zinc-300 text-xs focus:outline-none"
                 >
-                  <option value="all">Semua Pembayaran</option>
-                  <option value="cash">Tunai (Cash Laci)</option>
-                  <option value="qris">QRIS Statis/Dinamis</option>
-                  <option value="bank_transfer">Transfer Bank</option>
-                  <option value="card">Kartu Debit / Kredit</option>
+                  <option value="all">All Payment Methods</option>
+                  <option value="cash">Cash (Drawer)</option>
+                  <option value="qris">Static / Dynamic QRIS</option>
+                  <option value="bank_transfer">Bank Transfer</option>
+                  <option value="card">Debit / Credit Card</option>
                 </select>
 
                 <button
                   type="button"
                   onClick={() => refreshFirestore()}
                   className="px-2.5 py-1 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-bold transition flex items-center gap-1 border border-zinc-700 cursor-pointer"
-                  title="Sinkronkan Ulang dari Cloud Firestore"
+                  title="Resync from Cloud Firestore"
                 >
                   <RefreshCw className="w-3 h-3 text-cyan-400" />
                   <span>Sync Live</span>
@@ -1570,13 +1570,13 @@ export const LaporanKasModule: React.FC<LaporanKasModuleProps> = ({
                   onClick={() => navigateToPath('/dashboard/laporancashflow')}
                   className="px-3 py-1 rounded-lg bg-gradient-to-r from-amber-500 via-amber-400 to-amber-600 hover:brightness-110 text-black text-xs font-black transition flex items-center gap-1.5 shadow-sm border border-amber-300/60 cursor-pointer"
                 >
-                  <span>📊 Buka Laporan Cashflow &amp; Print 1 Halaman</span>
+                  <span>📊 Open Cashflow Report &amp; 1-Page Print</span>
                 </button>
               </div>
             </div>
           </div>
 
-          {/* 3A. KHUSUS SUB-LAPORAN PRODUK: TAMPILKAN TABEL SUB-LAPORAN PRODUK DI KOLOM KANAN */}
+          {/* 3A. PRODUCT SUB-REPORTS */}
           {(selectedReport === 'produk_keseluruhan' ||
             selectedReport === 'produk_masuk' ||
             selectedReport === 'produk_keluar') ? (
@@ -1584,16 +1584,16 @@ export const LaporanKasModule: React.FC<LaporanKasModuleProps> = ({
               subReport={selectedReport as ProductReportSubType}
               data={productReportData}
               periodLabel={
-                dateRangePreset === 'all' ? 'Semua Periode' : `${startDate} s/d ${endDate}`
+                dateRangePreset === 'all' ? 'All Periods' : `${startDate} to ${endDate}`
               }
             />
           ) : (
             <>
-              {/* 3. REAL-TIME KPI CARDS (100% dari Firestore, Rp 0 jika kosong) */}
+              {/* 3. REAL-TIME KPI CARDS */}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                 <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 space-y-1">
                   <span className="text-[11px] text-zinc-400 font-bold uppercase tracking-wider block">
-                    Total Omzet Penjualan
+                    Total Sales Revenue
                   </span>
                   <div className="text-lg md:text-xl font-mono font-black text-white">
                     {fmtShort(reportData.totalGrossSales)}
@@ -1606,13 +1606,13 @@ export const LaporanKasModule: React.FC<LaporanKasModuleProps> = ({
 
             <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 space-y-1">
               <span className="text-[11px] text-zinc-400 font-bold uppercase tracking-wider block">
-                Laba Kotor (Gross Profit)
+                Gross Profit
               </span>
               <div className="text-lg md:text-xl font-mono font-black text-emerald-400">
                 {fmtShort(reportData.grossProfit)}
               </div>
               <div className="text-[11px] text-zinc-400">
-                Margin Kotor:{' '}
+                Gross Margin:{' '}
                 <span className="font-bold text-white">
                   {reportData.grossMarginPct.toFixed(1)}%
                 </span>
@@ -1621,13 +1621,13 @@ export const LaporanKasModule: React.FC<LaporanKasModuleProps> = ({
 
             <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 space-y-1">
               <span className="text-[11px] text-zinc-400 font-bold uppercase tracking-wider block">
-                Pendapatan Kas Tunai Laci
+                Cash Drawer Revenue
               </span>
               <div className="text-lg md:text-xl font-mono font-black text-amber-400">
                 {fmtShort(reportData.pendapatanTunai)}
               </div>
               <div className="text-[11px] text-zinc-400">
-                Selisih Laci:{' '}
+                Drawer Variance:{' '}
                 <span
                   className={`font-bold font-mono ${
                     reportData.kasSelisih < 0 ? 'text-rose-400' : 'text-emerald-400'
@@ -1641,7 +1641,7 @@ export const LaporanKasModule: React.FC<LaporanKasModuleProps> = ({
 
             <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 space-y-1">
               <span className="text-[11px] text-zinc-400 font-bold uppercase tracking-wider block">
-                Total Transaksi &amp; Produk
+                Total Transactions &amp; Products
               </span>
               <div className="text-lg md:text-xl font-mono font-black text-cyan-400">
                 {reportData.trxCount}{' '}
@@ -1660,7 +1660,7 @@ export const LaporanKasModule: React.FC<LaporanKasModuleProps> = ({
               <div className="flex items-center gap-2">
                 <BarChart2 className="w-5 h-5 text-blue-400" />
                 <h3 className="font-bold text-white text-sm">
-                  Visualisasi Tren &amp; Analitik Penjualan POS (Real-Time Firestore)
+                  POS Sales Trend &amp; Analytics Visualization (Real-Time Firestore)
                 </h3>
               </div>
 
@@ -1671,7 +1671,7 @@ export const LaporanKasModule: React.FC<LaporanKasModuleProps> = ({
                     chartMode === 'sales' ? 'bg-blue-600 text-white' : 'text-zinc-400 hover:text-white'
                   }`}
                 >
-                  Tren 7 Hari
+                  7-Day Trend
                 </button>
                 <button
                   onClick={() => setChartMode('hourly')}
@@ -1679,7 +1679,7 @@ export const LaporanKasModule: React.FC<LaporanKasModuleProps> = ({
                     chartMode === 'hourly' ? 'bg-blue-600 text-white' : 'text-zinc-400 hover:text-white'
                   }`}
                 >
-                  Per Jam (Peak Hours)
+                  By Hour (Peak Hours)
                 </button>
                 <button
                   onClick={() => setChartMode('category')}
@@ -1687,12 +1687,12 @@ export const LaporanKasModule: React.FC<LaporanKasModuleProps> = ({
                     chartMode === 'category' ? 'bg-blue-600 text-white' : 'text-zinc-400 hover:text-white'
                   }`}
                 >
-                  Kategori
+                  Categories
                 </button>
               </div>
             </div>
 
-            {/* CHART VIEW 1: Tren 7 Hari */}
+            {/* CHART VIEW 1: 7-Day Trend */}
             {chartMode === 'sales' && (
               <div className="space-y-3">
                 <div className="h-44 w-full flex items-end gap-3 pt-6 px-2">
@@ -1720,17 +1720,17 @@ export const LaporanKasModule: React.FC<LaporanKasModuleProps> = ({
                   })}
                 </div>
                 <div className="flex items-center justify-between text-[11px] text-zinc-500 pt-2 border-t border-zinc-800/60">
-                  <span>Data penjualan 7 hari terakhir dari Cloud Firestore (`transactions` &amp; `orders`)</span>
+                  <span>Last 7 days sales data from Cloud Firestore (`transactions` &amp; `orders`)</span>
                   <span className="text-emerald-400 font-bold">
                     {highestDayInfo.revenue > 0
-                      ? `Tertinggi: ${highestDayInfo.day} (${fmtShort(highestDayInfo.revenue)} • ${highestDayInfo.trx} trx)`
-                      : 'Tertinggi: Rp 0 (Belum ada transaksi pada 7 hari ini)'}
+                      ? `Highest: ${highestDayInfo.day} (${fmtShort(highestDayInfo.revenue)} • ${highestDayInfo.trx} trx)`
+                      : 'Highest: Rp 0 (No transactions in these 7 days)'}
                   </span>
                 </div>
               </div>
             )}
 
-            {/* CHART VIEW 2: Per Jam */}
+            {/* CHART VIEW 2: By Hour */}
             {chartMode === 'hourly' && (
               <div className="space-y-3">
                 <div className="h-44 w-full flex items-end gap-1.5 pt-6 px-1">
@@ -1761,22 +1761,22 @@ export const LaporanKasModule: React.FC<LaporanKasModuleProps> = ({
                   })}
                 </div>
                 <div className="flex items-center justify-between text-[11px] text-zinc-500 pt-3 border-t border-zinc-800/60">
-                  <span>Distribusi transaksi per jam sesuai filter periode aktif</span>
+                  <span>Hourly transaction distribution for the active period filter</span>
                   <span className="text-amber-400 font-bold">
                     {peakHourInfo.sales > 0
-                      ? `Jam Tertinggi: ${peakHourInfo.hour} (${fmtShort(peakHourInfo.sales)} • ${peakHourInfo.trx} trx)`
-                      : 'Jam Tertinggi: Rp 0 (0 trx)'}
+                      ? `Peak Hour: ${peakHourInfo.hour} (${fmtShort(peakHourInfo.sales)} • ${peakHourInfo.trx} trx)`
+                      : 'Peak Hour: Rp 0 (0 trx)'}
                   </span>
                 </div>
               </div>
             )}
 
-            {/* CHART VIEW 3: Kategori Produk */}
+            {/* CHART VIEW 3: Product Categories */}
             {chartMode === 'category' && (
               <div className="space-y-2.5">
                 {reportData.categoryBreakdown.length === 0 ? (
                   <div className="text-center py-8 text-xs text-zinc-500">
-                    Belum ada transaksi penjualan kategori pada periode ini (Rp 0).
+                    No category sales transactions in this period (Rp 0).
                   </div>
                 ) : (
                   reportData.categoryBreakdown.slice(0, 8).map((cat, idx) => {
@@ -1789,7 +1789,7 @@ export const LaporanKasModule: React.FC<LaporanKasModuleProps> = ({
                         <div className="flex items-center justify-between text-xs">
                           <span className="text-zinc-200 font-bold flex items-center gap-2">
                             <span className={`w-2.5 h-2.5 rounded-full ${cat.color}`} />
-                            {cat.name} ({cat.qty} Karton • Stok DB: {cat.stockUnits ?? 0})
+                            {cat.name} ({cat.qty} Cartons • DB Stock: {cat.stockUnits ?? 0})
                           </span>
                           <div className="flex items-center gap-3">
                             <span className="text-zinc-400 font-mono">{pct}%</span>
@@ -1807,19 +1807,19 @@ export const LaporanKasModule: React.FC<LaporanKasModuleProps> = ({
             )}
           </div>
 
-          {/* 5. DYNAMIC SUB-REPORT TABLE (Semua Menu di Product Report / Laporan Produk Menampilkan Data Real Database) */}
+          {/* 5. DYNAMIC SUB-REPORT TABLE */}
           {selectedReport !== 'keseluruhan' && (
             <div className="bg-zinc-900 border border-blue-500/30 rounded-2xl p-5 shadow-xl space-y-3">
               <div className="flex items-center justify-between border-b border-zinc-800 pb-2">
                 <h3 className="font-bold text-blue-400 text-sm">
-                  Detail Laporan: {ALL_REPORT_MENU_ITEMS.find((r) => r.id === selectedReport)?.title}
+                  Report Details: {ALL_REPORT_MENU_ITEMS.find((r) => r.id === selectedReport)?.title}
                 </h3>
                 <span className="text-xs font-mono text-zinc-400">
-                  Periode: {dateRangePreset === 'all' ? 'Semua Periode' : `${startDate} s/d ${endDate}`} &bull; Real-Time Firestore
+                  Period: {dateRangePreset === 'all' ? 'All Periods' : `${startDate} to ${endDate}`} &bull; Real-Time Firestore
                 </span>
               </div>
 
-              {/* 5.1 RINCIAN PENJUALAN / BACKDATE / ONLINE ORDER / FOOD DELIVERY / MARKETPLACE / PENDING POS */}
+              {/* 5.1 SALES DETAILS / BACKDATE / ONLINE ORDER / FOOD DELIVERY / MARKETPLACE / PENDING POS */}
               {(selectedReport === 'rincian' ||
                 selectedReport === 'backdate' ||
                 selectedReport === 'online_order' ||
@@ -1843,20 +1843,20 @@ export const LaporanKasModule: React.FC<LaporanKasModuleProps> = ({
                     <table className="w-full text-left text-xs">
                       <thead className="bg-zinc-950 text-zinc-400 border-b border-zinc-800">
                         <tr>
-                          <th className="py-2.5 px-3">ID Transaksi</th>
-                          <th className="py-2.5 px-3">Waktu</th>
-                          <th className="py-2.5 px-3">Sumber</th>
-                          <th className="py-2.5 px-3">Kasir / Pelanggan</th>
-                          <th className="py-2.5 px-3">Item Produk</th>
-                          <th className="py-2.5 px-3">Metode Bayar</th>
-                          <th className="py-2.5 px-3 text-right">Nominal (IDR)</th>
+                          <th className="py-2.5 px-3">Transaction ID</th>
+                          <th className="py-2.5 px-3">Time</th>
+                          <th className="py-2.5 px-3">Channel</th>
+                          <th className="py-2.5 px-3">Cashier / Customer</th>
+                          <th className="py-2.5 px-3">Product Items</th>
+                          <th className="py-2.5 px-3">Payment Method</th>
+                          <th className="py-2.5 px-3 text-right">Amount (IDR)</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-zinc-800/50 text-zinc-300">
                         {scopedRows.length === 0 ? (
                           <tr>
                             <td colSpan={7} className="py-6 text-center text-zinc-500">
-                              Belum ada data transaksi kategori ini di database pada periode aktif (Rp 0).
+                              No transactions in this category for the active period (Rp 0).
                             </td>
                           </tr>
                         ) : (
@@ -1867,12 +1867,12 @@ export const LaporanKasModule: React.FC<LaporanKasModuleProps> = ({
                                 ? items
                                     .map(
                                       (it: any) =>
-                                        `${it.productName || it.name || 'Produk'} (x${
+                                        `${it.productName || it.name || 'Product'} (x${
                                           it.quantityOrdered ?? it.quantity ?? it.qty ?? 1
                                         })`
                                     )
                                     .join(', ')
-                                : tx.productName || 'Transaksi Kasir';
+                                : tx.productName || 'POS Transaction';
                             return (
                               <tr
                                 key={tx.id}
@@ -1890,10 +1890,10 @@ export const LaporanKasModule: React.FC<LaporanKasModuleProps> = ({
                                 </td>
                                 <td className="py-2 px-3">
                                   <div className="font-semibold text-white">
-                                    {tx.customerName || 'Pelanggan Umum'}
+                                    {tx.customerName || 'Walk-in Customer'}
                                   </div>
                                   <div className="text-[10px] text-zinc-500">
-                                    Kasir: {tx.cashierName || 'POS'}
+                                    Cashier: {tx.cashierName || 'POS'}
                                   </div>
                                 </td>
                                 <td className="py-2 px-3 text-zinc-300 max-w-xs truncate" title={itemSummary}>
@@ -1915,16 +1915,16 @@ export const LaporanKasModule: React.FC<LaporanKasModuleProps> = ({
                 );
               })()}
 
-              {/* 5.2 RINCIAN PENJUALAN BERDASARKAN JAM (HOURLY) */}
+              {/* 5.2 HOURLY SALES DETAILS (HOURLY) */}
               {selectedReport === 'hourly' && (
                 <div className="overflow-x-auto">
                   <table className="w-full text-left text-xs">
                     <thead className="bg-zinc-950 text-zinc-400 border-b border-zinc-800">
                       <tr>
-                        <th className="py-2.5 px-3">Jam Operasional</th>
-                        <th className="py-2.5 px-3 text-center">Jumlah Transaksi</th>
-                        <th className="py-2.5 px-3 text-right">Rata-rata / Trx</th>
-                        <th className="py-2.5 px-3 text-right">Total Penjualan (IDR)</th>
+                        <th className="py-2.5 px-3">Operating Hour</th>
+                        <th className="py-2.5 px-3 text-center">Transaction Count</th>
+                        <th className="py-2.5 px-3 text-right">Average / Trx</th>
+                        <th className="py-2.5 px-3 text-right">Total Sales (IDR)</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-zinc-800/50 text-zinc-300">
@@ -1945,19 +1945,19 @@ export const LaporanKasModule: React.FC<LaporanKasModuleProps> = ({
                 </div>
               )}
 
-              {/* 5.3 ITEM PENJUALAN BERDASARKAN TANGGAL (ITEM_DATE) */}
+              {/* 5.3 ITEM SALES BY DATE (ITEM_DATE) */}
               {selectedReport === 'item_date' && (
                 <div className="overflow-x-auto">
                   <table className="w-full text-left text-xs">
                     <thead className="bg-zinc-950 text-zinc-400 border-b border-zinc-800">
                       <tr>
-                        <th className="py-2.5 px-3">Tanggal</th>
-                        <th className="py-2.5 px-3">No. Struk</th>
-                        <th className="py-2.5 px-3">Produk &amp; SKU</th>
-                        <th className="py-2.5 px-3">Kategori / Brand</th>
+                        <th className="py-2.5 px-3">Date</th>
+                        <th className="py-2.5 px-3">Receipt No.</th>
+                        <th className="py-2.5 px-3">Product &amp; SKU</th>
+                        <th className="py-2.5 px-3">Category / Brand</th>
                         <th className="py-2.5 px-3 text-center">Qty</th>
-                        <th className="py-2.5 px-3 text-right">Harga Jual</th>
-                        <th className="py-2.5 px-3 text-right">Laba Kotor</th>
+                        <th className="py-2.5 px-3 text-right">Unit Price</th>
+                        <th className="py-2.5 px-3 text-right">Gross Profit</th>
                         <th className="py-2.5 px-3 text-right">Subtotal (IDR)</th>
                       </tr>
                     </thead>
@@ -1965,7 +1965,7 @@ export const LaporanKasModule: React.FC<LaporanKasModuleProps> = ({
                       {reportData.itemDateRows.length === 0 ? (
                         <tr>
                           <td colSpan={8} className="py-6 text-center text-zinc-500">
-                            Belum ada item produk terjual di database pada periode ini.
+                            No product items sold in the database for this period.
                           </td>
                         </tr>
                       ) : (
@@ -1998,23 +1998,23 @@ export const LaporanKasModule: React.FC<LaporanKasModuleProps> = ({
                 </div>
               )}
 
-              {/* 5.4 PENJUALAN BERDASARKAN PETUGAS / KASIR */}
+              {/* 5.4 SALES BY CASHIER / STAFF */}
               {selectedReport === 'petugas' && (
                 <div className="overflow-x-auto">
                   <table className="w-full text-left text-xs">
                     <thead className="bg-zinc-950 text-zinc-400 border-b border-zinc-800">
                       <tr>
-                        <th className="py-2.5 px-3">Nama Petugas / Kasir</th>
-                        <th className="py-2.5 px-3 text-center">Jumlah Transaksi</th>
-                        <th className="py-2.5 px-3 text-center">Total Qty Item</th>
-                        <th className="py-2.5 px-3 text-right">Total Penjualan (IDR)</th>
+                        <th className="py-2.5 px-3">Cashier / Staff Name</th>
+                        <th className="py-2.5 px-3 text-center">Transaction Count</th>
+                        <th className="py-2.5 px-3 text-center">Total Item Qty</th>
+                        <th className="py-2.5 px-3 text-right">Total Sales (IDR)</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-zinc-800/50 text-zinc-300">
                       {reportData.cashierBreakdown.length === 0 ? (
                         <tr>
                           <td colSpan={4} className="py-6 text-center text-zinc-500">
-                            Belum ada transaksi petugas/kasir pada periode ini (Rp 0).
+                            No cashier/staff transactions in this period (Rp 0).
                           </td>
                         </tr>
                       ) : (
@@ -2034,22 +2034,22 @@ export const LaporanKasModule: React.FC<LaporanKasModuleProps> = ({
                 </div>
               )}
 
-              {/* 5.5 PENJUALAN BERDASARKAN PELANGGAN */}
+              {/* 5.5 SALES BY CUSTOMER */}
               {selectedReport === 'pelanggan' && (
                 <div className="overflow-x-auto">
                   <table className="w-full text-left text-xs">
                     <thead className="bg-zinc-950 text-zinc-400 border-b border-zinc-800">
                       <tr>
-                        <th className="py-2.5 px-3">Nama Pelanggan</th>
-                        <th className="py-2.5 px-3 text-center">Jumlah Pesanan</th>
-                        <th className="py-2.5 px-3 text-right">Total Belanja (IDR)</th>
+                        <th className="py-2.5 px-3">Customer Name</th>
+                        <th className="py-2.5 px-3 text-center">Order Count</th>
+                        <th className="py-2.5 px-3 text-right">Total Spend (IDR)</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-zinc-800/50 text-zinc-300">
                       {reportData.customerBreakdown.length === 0 ? (
                         <tr>
                           <td colSpan={3} className="py-6 text-center text-zinc-500">
-                            Belum ada transaksi pelanggan pada periode ini (Rp 0).
+                            No customer transactions in this period (Rp 0).
                           </td>
                         </tr>
                       ) : (
@@ -2068,25 +2068,25 @@ export const LaporanKasModule: React.FC<LaporanKasModuleProps> = ({
                 </div>
               )}
 
-              {/* 5.6 ITEM PENJUALAN BERDASARKAN BRAND */}
+              {/* 5.6 ITEM SALES BY BRAND */}
               {selectedReport === 'item_brand' && (
                 <div className="overflow-x-auto">
                   <table className="w-full text-left text-xs">
                     <thead className="bg-zinc-950 text-zinc-400 border-b border-zinc-800">
                       <tr>
-                        <th className="py-2.5 px-3">Nama Brand</th>
-                        <th className="py-2.5 px-3 text-center">Jumlah SKU DB</th>
-                        <th className="py-2.5 px-3 text-center">Stok Sistem (Karton)</th>
-                        <th className="py-2.5 px-3 text-right">Nilai Aset Stok</th>
-                        <th className="py-2.5 px-3 text-center">Qty Terjual</th>
-                        <th className="py-2.5 px-3 text-right">Total Penjualan (IDR)</th>
+                        <th className="py-2.5 px-3">Brand Name</th>
+                        <th className="py-2.5 px-3 text-center">DB SKU Count</th>
+                        <th className="py-2.5 px-3 text-center">System Stock (Cartons)</th>
+                        <th className="py-2.5 px-3 text-right">Stock Asset Value</th>
+                        <th className="py-2.5 px-3 text-center">Qty Sold</th>
+                        <th className="py-2.5 px-3 text-right">Total Sales (IDR)</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-zinc-800/50 text-zinc-300">
                       {reportData.topBrands.length === 0 ? (
                         <tr>
                           <td colSpan={6} className="py-6 text-center text-zinc-500">
-                            Belum ada data brand di database pada periode ini (Rp 0).
+                            No brand data in the database for this period (Rp 0).
                           </td>
                         </tr>
                       ) : (
@@ -2097,7 +2097,7 @@ export const LaporanKasModule: React.FC<LaporanKasModuleProps> = ({
                               {b.skuCount ?? 0} SKU
                             </td>
                             <td className="py-2 px-3 text-center font-mono font-semibold text-cyan-400">
-                              {(b.stockUnits ?? 0).toLocaleString('id-ID')}
+                              {(b.stockUnits ?? 0).toLocaleString('en-US')}
                             </td>
                             <td className="py-2 px-3 text-right font-mono text-purple-400">
                               {fmt(b.assetValue ?? 0)}
@@ -2116,25 +2116,25 @@ export const LaporanKasModule: React.FC<LaporanKasModuleProps> = ({
                 </div>
               )}
 
-              {/* 5.7 ITEM PENJUALAN BERDASARKAN KATEGORI */}
+              {/* 5.7 ITEM SALES BY CATEGORY */}
               {selectedReport === 'item_kategori' && (
                 <div className="overflow-x-auto">
                   <table className="w-full text-left text-xs">
                     <thead className="bg-zinc-950 text-zinc-400 border-b border-zinc-800">
                       <tr>
-                        <th className="py-2.5 px-3">Nama Kategori</th>
-                        <th className="py-2.5 px-3 text-center">Jumlah SKU DB</th>
-                        <th className="py-2.5 px-3 text-center">Stok Sistem (Karton)</th>
-                        <th className="py-2.5 px-3 text-right">Nilai Aset Stok</th>
-                        <th className="py-2.5 px-3 text-center">Qty Terjual</th>
-                        <th className="py-2.5 px-3 text-right">Total Penjualan (IDR)</th>
+                        <th className="py-2.5 px-3">Category Name</th>
+                        <th className="py-2.5 px-3 text-center">DB SKU Count</th>
+                        <th className="py-2.5 px-3 text-center">System Stock (Cartons)</th>
+                        <th className="py-2.5 px-3 text-right">Stock Asset Value</th>
+                        <th className="py-2.5 px-3 text-center">Qty Sold</th>
+                        <th className="py-2.5 px-3 text-right">Total Sales (IDR)</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-zinc-800/50 text-zinc-300">
                       {reportData.categoryBreakdown.length === 0 ? (
                         <tr>
                           <td colSpan={6} className="py-6 text-center text-zinc-500">
-                            Belum ada data kategori produk di database pada periode ini.
+                            No product category data in the database for this period.
                           </td>
                         </tr>
                       ) : (
@@ -2148,7 +2148,7 @@ export const LaporanKasModule: React.FC<LaporanKasModuleProps> = ({
                               {cat.skuCount ?? 0} SKU
                             </td>
                             <td className="py-2 px-3 text-center font-mono font-semibold text-cyan-400">
-                              {(cat.stockUnits ?? 0).toLocaleString('id-ID')}
+                              {(cat.stockUnits ?? 0).toLocaleString('en-US')}
                             </td>
                             <td className="py-2 px-3 text-right font-mono text-purple-400">
                               {fmt(cat.assetValue ?? 0)}
@@ -2167,25 +2167,25 @@ export const LaporanKasModule: React.FC<LaporanKasModuleProps> = ({
                 </div>
               )}
 
-              {/* 5.8 RINCIAN PENGGUNAAN LOYALTY POINT & KLAIM HADIAH TARGET */}
+              {/* 5.8 LOYALTY POINT USAGE & TARGET REWARD CLAIMS */}
               {selectedReport === 'loyalty_point' && (
                 <div className="overflow-x-auto">
                   <table className="w-full text-left text-xs">
                     <thead className="bg-zinc-950 text-zinc-400 border-b border-zinc-800">
                       <tr>
-                        <th className="py-2.5 px-3">Tanggal</th>
-                        <th className="py-2.5 px-3">Pelanggan / Member</th>
-                        <th className="py-2.5 px-3">Tipe Aktivitas</th>
-                        <th className="py-2.5 px-3 text-center">Poin / Qty Target</th>
-                        <th className="py-2.5 px-3">Keterangan Program</th>
-                        <th className="py-2.5 px-3 text-right">Nilai Transaksi / Diskon</th>
+                        <th className="py-2.5 px-3">Date</th>
+                        <th className="py-2.5 px-3">Customer / Member</th>
+                        <th className="py-2.5 px-3">Activity Type</th>
+                        <th className="py-2.5 px-3 text-center">Points / Target Qty</th>
+                        <th className="py-2.5 px-3">Program Description</th>
+                        <th className="py-2.5 px-3 text-right">Transaction / Discount Value</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-zinc-800/50 text-zinc-300">
                       {reportData.loyaltyActivityRows.length === 0 ? (
                         <tr>
                           <td colSpan={6} className="py-6 text-center text-zinc-500">
-                            Belum ada riwayat penukaran poin atau klaim hadiah target di database pada periode ini.
+                            No point redemption or target reward claim history in the database for this period.
                           </td>
                         </tr>
                       ) : (
@@ -2211,18 +2211,18 @@ export const LaporanKasModule: React.FC<LaporanKasModuleProps> = ({
                 </div>
               )}
 
-              {/* 5.9 RINGKASAN DISKON & PROMO (DARI DATABASE VOUCHERS, TARGET PROMOS & TRANSAKSI) */}
+              {/* 5.9 DISCOUNTS & PROMOTIONS SUMMARY */}
               {selectedReport === 'diskon' && (
                 <div className="space-y-4">
                   <div className="overflow-x-auto">
                     <table className="w-full text-left text-xs">
                       <thead className="bg-zinc-950 text-zinc-400 border-b border-zinc-800">
                         <tr>
-                          <th className="py-2.5 px-3">Sumber / Program</th>
-                          <th className="py-2.5 px-3">Kode / Nama Promo</th>
-                          <th className="py-2.5 px-3">Detail Target / Potongan</th>
-                          <th className="py-2.5 px-3 text-center">Penggunaan / Target</th>
-                          <th className="py-2.5 px-3 text-right">Nilai Promo / Potongan</th>
+                          <th className="py-2.5 px-3">Source / Program</th>
+                          <th className="py-2.5 px-3">Promo Code / Name</th>
+                          <th className="py-2.5 px-3">Target / Discount Details</th>
+                          <th className="py-2.5 px-3 text-center">Usage / Target</th>
+                          <th className="py-2.5 px-3 text-right">Promo / Discount Value</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-zinc-800/50 text-zinc-300">
@@ -2239,16 +2239,16 @@ export const LaporanKasModule: React.FC<LaporanKasModuleProps> = ({
                         ))}
                         {rawTargetPromos.map((tp: any) => (
                           <tr key={`tp_${tp.id}`} className="hover:bg-zinc-800/30">
-                            <td className="py-2 px-3 font-bold text-cyan-400">HADIAH TARGET PWA</td>
+                            <td className="py-2 px-3 font-bold text-cyan-400">PWA TARGET REWARD</td>
                             <td className="py-2 px-3 font-bold text-white">
-                              {tp.title || tp.productName || 'Promo Target'}
+                              {tp.title || tp.productName || 'Target Promo'}
                             </td>
                             <td className="py-2 px-3 text-zinc-300">
-                              Beli {tp.targetQty || 0}x {tp.productName} &rarr; Gratis {tp.bonusQuantity || 1}x{' '}
+                              Buy {tp.targetQty || 0}x {tp.productName} &rarr; Free {tp.bonusQuantity || 1}x{' '}
                               {tp.bonusProductName}
                             </td>
                             <td className="py-2 px-3 text-center font-mono text-amber-400">
-                              Target: {tp.targetQty || 0} Karton
+                              Target: {tp.targetQty || 0} Cartons
                             </td>
                             <td className="py-2 px-3 text-right font-mono font-bold text-emerald-400">
                               {fmt(Number(tp.totalPurchase ?? (tp.promoPrice || 0) * (tp.targetQty || 0)))}
@@ -2257,13 +2257,13 @@ export const LaporanKasModule: React.FC<LaporanKasModuleProps> = ({
                         ))}
                         {rawVouchers.map((vc: any) => (
                           <tr key={`vc_${vc.id}`} className="hover:bg-zinc-800/30">
-                            <td className="py-2 px-3 font-bold text-purple-400">VOUCHER DATABASE</td>
+                            <td className="py-2 px-3 font-bold text-purple-400">DATABASE VOUCHER</td>
                             <td className="py-2 px-3 font-mono text-amber-400">
                               {vc.code || vc.id}
                             </td>
-                            <td className="py-2 px-3 text-zinc-300">{vc.title || vc.name || 'Voucher Diskon'}</td>
+                            <td className="py-2 px-3 text-zinc-300">{vc.title || vc.name || 'Discount Voucher'}</td>
                             <td className="py-2 px-3 text-center font-mono">
-                              Kuota: {vc.quota ?? vc.limit ?? '-'}
+                              Quota: {vc.quota ?? vc.limit ?? '-'}
                             </td>
                             <td className="py-2 px-3 text-right font-mono font-bold text-emerald-400">
                               {fmt(Number(vc.discountValue ?? vc.amount ?? 0))}
@@ -2275,7 +2275,7 @@ export const LaporanKasModule: React.FC<LaporanKasModuleProps> = ({
                           rawVouchers.length === 0 && (
                             <tr>
                               <td colSpan={5} className="py-6 text-center text-zinc-500">
-                                Belum ada diskon transaksi atau promo aktif di database pada periode ini.
+                                No transaction discounts or active promotions in the database for this period.
                               </td>
                             </tr>
                           )}
@@ -2285,24 +2285,24 @@ export const LaporanKasModule: React.FC<LaporanKasModuleProps> = ({
                 </div>
               )}
 
-              {/* 5.10 PENGELUARAN BERDASARKAN TANGGAL */}
+              {/* 5.10 EXPENSES BY DATE */}
               {selectedReport === 'pengeluaran' && (
                 <div className="overflow-x-auto">
                   <table className="w-full text-left text-xs">
                     <thead className="bg-zinc-950 text-zinc-400 border-b border-zinc-800">
                       <tr>
-                        <th className="py-2.5 px-3">Tanggal</th>
-                        <th className="py-2.5 px-3">Kategori Biaya</th>
-                        <th className="py-2.5 px-3">Keterangan</th>
-                        <th className="py-2.5 px-3">Petugas</th>
-                        <th className="py-2.5 px-3 text-right">Nominal Kas Keluar (IDR)</th>
+                        <th className="py-2.5 px-3">Date</th>
+                        <th className="py-2.5 px-3">Expense Category</th>
+                        <th className="py-2.5 px-3">Description</th>
+                        <th className="py-2.5 px-3">Staff / PIC</th>
+                        <th className="py-2.5 px-3 text-right">Cash Out Amount (IDR)</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-zinc-800/50 text-zinc-300">
                       {reportData.expenseRecords.length === 0 ? (
                         <tr>
                           <td colSpan={5} className="py-6 text-center text-zinc-500">
-                            Tidak ada pengeluaran kas pada periode ini (Rp 0).
+                            No cash expenses in this period (Rp 0).
                           </td>
                         </tr>
                       ) : (
@@ -2337,29 +2337,29 @@ export const LaporanKasModule: React.FC<LaporanKasModuleProps> = ({
                 </div>
               )}
 
-              {/* 5.11 LAPORAN ARUS KAS & REKONSILIASI LACI */}
+              {/* 5.11 CASHFLOW & DRAWER RECONCILIATION */}
               {selectedReport === 'arus_kas' && (
                 <div className="overflow-x-auto">
                   <table className="w-full text-left text-xs">
                     <thead className="bg-zinc-950 text-zinc-400 border-b border-zinc-800">
                       <tr>
-                        <th className="py-2.5 px-3">Tanggal</th>
-                        <th className="py-2.5 px-3">Tipe Arus Kas</th>
-                        <th className="py-2.5 px-3">Kategori</th>
-                        <th className="py-2.5 px-3">Keterangan</th>
-                        <th className="py-2.5 px-3">Petugas</th>
-                        <th className="py-2.5 px-3 text-right">Nominal (IDR)</th>
+                        <th className="py-2.5 px-3">Date</th>
+                        <th className="py-2.5 px-3">Cashflow Type</th>
+                        <th className="py-2.5 px-3">Category</th>
+                        <th className="py-2.5 px-3">Description</th>
+                        <th className="py-2.5 px-3">Staff / PIC</th>
+                        <th className="py-2.5 px-3 text-right">Amount (IDR)</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-zinc-800/50 text-zinc-300">
                       <tr className="bg-emerald-950/20">
                         <td className="py-2 px-3 font-mono">{endDate}</td>
-                        <td className="py-2 px-3 font-bold text-emerald-400">PENJUALAN TUNAI POS</td>
-                        <td className="py-2 px-3">Kas Laci Kasir</td>
+                        <td className="py-2 px-3 font-bold text-emerald-400">POS CASH SALES</td>
+                        <td className="py-2 px-3">Cashier Drawer</td>
                         <td className="py-2 px-3 text-zinc-300">
-                          Akumulasi penjualan tunai dari {reportData.posSalesCount} transaksi valid
+                          Accumulated cash sales from {reportData.posSalesCount} valid transactions
                         </td>
-                        <td className="py-2 px-3">Sistem POS</td>
+                        <td className="py-2 px-3">POS System</td>
                         <td className="py-2 px-3 text-right font-mono font-bold text-emerald-400">
                           +{fmt(reportData.cashSalesAmount)}
                         </td>
@@ -2372,7 +2372,7 @@ export const LaporanKasModule: React.FC<LaporanKasModuleProps> = ({
                               cf.type === 'MASUK' ? 'text-cyan-400' : 'text-rose-400'
                             }`}
                           >
-                            KAS {cf.type}
+                            {cf.type === 'MASUK' ? 'CASH IN' : 'CASH OUT'}
                           </td>
                           <td className="py-2 px-3 text-white font-medium">{cf.category}</td>
                           <td className="py-2 px-3 text-zinc-400">{cf.note}</td>
@@ -2392,19 +2392,19 @@ export const LaporanKasModule: React.FC<LaporanKasModuleProps> = ({
                 </div>
               )}
 
-              {/* 5.12 LABA / RUGI & GROSS MARGIN PER PRODUK */}
+              {/* 5.12 PROFIT / LOSS & GROSS MARGIN BY PRODUCT */}
               {selectedReport === 'laba_rugi' && (
                 <div className="overflow-x-auto">
                   <table className="w-full text-left text-xs">
                     <thead className="bg-zinc-950 text-zinc-400 border-b border-zinc-800">
                       <tr>
-                        <th className="py-2.5 px-3">Produk &amp; SKU</th>
-                        <th className="py-2.5 px-3">Kategori</th>
-                        <th className="py-2.5 px-3 text-right">Harga Modal (HPP)</th>
-                        <th className="py-2.5 px-3 text-right">Harga Jual POS</th>
-                        <th className="py-2.5 px-3 text-center">Terjual</th>
-                        <th className="py-2.5 px-3 text-right">Omzet Penjualan</th>
-                        <th className="py-2.5 px-3 text-right">Laba Kotor (IDR)</th>
+                        <th className="py-2.5 px-3">Product &amp; SKU</th>
+                        <th className="py-2.5 px-3">Category</th>
+                        <th className="py-2.5 px-3 text-right">Cost Price (COGS)</th>
+                        <th className="py-2.5 px-3 text-right">POS Selling Price</th>
+                        <th className="py-2.5 px-3 text-center">Sold</th>
+                        <th className="py-2.5 px-3 text-right">Sales Revenue</th>
+                        <th className="py-2.5 px-3 text-right">Gross Profit (IDR)</th>
                         <th className="py-2.5 px-3 text-center">Gross Margin</th>
                       </tr>
                     </thead>
@@ -2412,7 +2412,7 @@ export const LaporanKasModule: React.FC<LaporanKasModuleProps> = ({
                       {productReportData.overallRows.length === 0 ? (
                         <tr>
                           <td colSpan={8} className="py-6 text-center text-zinc-500">
-                            Belum ada data produk di database.
+                            No product data in the database.
                           </td>
                         </tr>
                       ) : (
@@ -2454,25 +2454,25 @@ export const LaporanKasModule: React.FC<LaporanKasModuleProps> = ({
                 </div>
               )}
 
-              {/* 5.13 RINCIAN PEMBATALAN / VOID & RETUR */}
+              {/* 5.13 VOID / CANCELLED & RETURNS DETAILS */}
               {selectedReport === 'pembatalan' && (
                 <div className="overflow-x-auto">
                   <table className="w-full text-left text-xs">
                     <thead className="bg-zinc-950 text-zinc-400 border-b border-zinc-800">
                       <tr>
-                        <th className="py-2.5 px-3">ID Transaksi</th>
-                        <th className="py-2.5 px-3">Tanggal</th>
-                        <th className="py-2.5 px-3">Kasir / Pelanggan</th>
-                        <th className="py-2.5 px-3">Status Batal</th>
-                        <th className="py-2.5 px-3">Metode Bayar</th>
-                        <th className="py-2.5 px-3 text-right">Nominal Void / Retur (IDR)</th>
+                        <th className="py-2.5 px-3">Transaction ID</th>
+                        <th className="py-2.5 px-3">Date</th>
+                        <th className="py-2.5 px-3">Cashier / Customer</th>
+                        <th className="py-2.5 px-3">Void Status</th>
+                        <th className="py-2.5 px-3">Payment Method</th>
+                        <th className="py-2.5 px-3 text-right">Void / Return Amount (IDR)</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-zinc-800/50 text-zinc-300">
                       {reportData.voidTrx.length === 0 ? (
                         <tr>
                           <td colSpan={6} className="py-6 text-center text-zinc-500">
-                            Tidak ada transaksi dibatalkan (Void / Retur) di database pada periode ini (Rp 0).
+                            No voided or returned transactions in the database for this period (Rp 0).
                           </td>
                         </tr>
                       ) : (
@@ -2487,7 +2487,7 @@ export const LaporanKasModule: React.FC<LaporanKasModuleProps> = ({
                               {toLocalDateKey(vt.createdAt || vt.timestamp || vt.date)}
                             </td>
                             <td className="py-2 px-3 text-white">
-                              {vt.customerName || vt.cashierName || 'Kasir POS'}
+                              {vt.customerName || vt.cashierName || 'POS Cashier'}
                             </td>
                             <td className="py-2 px-3 uppercase font-mono font-bold text-rose-400">
                               {vt.status || vt.fulfillmentStatus || 'VOID'}
@@ -2506,26 +2506,26 @@ export const LaporanKasModule: React.FC<LaporanKasModuleProps> = ({
                 </div>
               )}
 
-              {/* 5.14 KAS SELISIH & REKONSILIASI KASIR */}
+              {/* 5.14 CASH VARIANCE & SHIFT RECONCILIATION */}
               {selectedReport === 'kas_selisih' && (
                 <div className="overflow-x-auto">
                   <table className="w-full text-left text-xs">
                     <thead className="bg-zinc-950 text-zinc-400 border-b border-zinc-800">
                       <tr>
-                        <th className="py-2.5 px-3">Tanggal Shift</th>
-                        <th className="py-2.5 px-3">Petugas Kasir</th>
-                        <th className="py-2.5 px-3 text-center">Status Shift</th>
-                        <th className="py-2.5 px-3 text-right">Modal Awal</th>
-                        <th className="py-2.5 px-3 text-right">Kas Sistem</th>
-                        <th className="py-2.5 px-3 text-right">Kas Fisik Aktual</th>
-                        <th className="py-2.5 px-3 text-right">Selisih Kas (IDR)</th>
+                        <th className="py-2.5 px-3">Shift Date</th>
+                        <th className="py-2.5 px-3">Cashier Staff</th>
+                        <th className="py-2.5 px-3 text-center">Shift Status</th>
+                        <th className="py-2.5 px-3 text-right">Opening Cash</th>
+                        <th className="py-2.5 px-3 text-right">Expected Cash</th>
+                        <th className="py-2.5 px-3 text-right">Actual Physical Cash</th>
+                        <th className="py-2.5 px-3 text-right">Cash Variance (IDR)</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-zinc-800/50 text-zinc-300">
                       {reportData.shiftReconcileRows.length === 0 ? (
                         <tr>
                           <td colSpan={7} className="py-6 text-center text-zinc-500">
-                            Belum ada data rekonsiliasi shift kasir di database pada periode ini.
+                            No cashier shift reconciliation data in the database for this period.
                           </td>
                         </tr>
                       ) : (
@@ -2563,36 +2563,36 @@ export const LaporanKasModule: React.FC<LaporanKasModuleProps> = ({
             </div>
           )}
 
-          {/* 6. SEKSI LAPORAN KESELURUHAN LENGKAP (100% REAL-TIME DARI CLOUD FIRESTORE) */}
+          {/* 6. COMPLETE OVERALL REPORT SECTIONS (100% REAL-TIME FROM CLOUD FIRESTORE) */}
           <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 shadow-2xl space-y-8 print:border-none print:shadow-none print:bg-white print:text-black">
             <div className="hidden print:block border-b-2 border-black pb-3 text-center">
-              <h1 className="text-xl font-black uppercase tracking-wider">RISKCART RETAIL POS - LAPORAN KESELURUHAN</h1>
+              <h1 className="text-xl font-black uppercase tracking-wider">RISKCART RETAIL POS - OVERALL REPORT</h1>
               <p className="text-xs">
-                Periode: {dateRangePreset === 'all' ? 'Semua Periode' : `${startDate} s/d ${endDate}`} &bull; Dicetak:{' '}
-                {new Date().toLocaleString('id-ID')}
+                Period: {dateRangePreset === 'all' ? 'All Periods' : `${startDate} to ${endDate}`} &bull; Printed:{' '}
+                {new Date().toLocaleString('en-US')}
               </p>
             </div>
 
-            {/* A. RINGKASAN DISKON */}
+            {/* A. DISCOUNT SUMMARY */}
             <div className="space-y-3">
               <div className="flex items-center justify-between border-b border-zinc-800 pb-2">
                 <h3 className="font-bold text-white text-sm flex items-center gap-2">
                   <Percent className="w-4 h-4 text-amber-400" />
-                  <span>Ringkasan Diskon</span>
+                  <span>Discount Summary</span>
                 </h3>
                 <span className="text-xs text-zinc-500">
-                  Total Diskon: {fmt(reportData.totalDiscounts)}
+                  Total Discounts: {fmt(reportData.totalDiscounts)}
                 </span>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-xs">
                   <thead className="bg-zinc-950/80 text-zinc-400 border-b border-zinc-800 font-medium">
                     <tr>
-                      <th className="py-2.5 px-3">Sumber Penjualan</th>
-                      <th className="py-2.5 px-3">Kode Diskon</th>
-                      <th className="py-2.5 px-3">Nama Diskon</th>
-                      <th className="py-2.5 px-3 text-right">Jumlah Diskon</th>
-                      <th className="py-2.5 px-3 text-right">Qty Pesanan</th>
+                      <th className="py-2.5 px-3">Sales Source</th>
+                      <th className="py-2.5 px-3">Discount Code</th>
+                      <th className="py-2.5 px-3">Discount Name</th>
+                      <th className="py-2.5 px-3 text-right">Discount Amount</th>
+                      <th className="py-2.5 px-3 text-right">Order Qty</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-zinc-800/50 text-zinc-300">
@@ -2600,7 +2600,7 @@ export const LaporanKasModule: React.FC<LaporanKasModuleProps> = ({
                       <tr className="hover:bg-zinc-800/30">
                         <td className="py-2.5 px-3 font-semibold text-white">POINT OF SALE</td>
                         <td className="py-2.5 px-3 font-mono text-zinc-400">-</td>
-                        <td className="py-2.5 px-3 text-zinc-400">Tidak ada diskon pada periode ini</td>
+                        <td className="py-2.5 px-3 text-zinc-400">No discounts in this period</td>
                         <td className="py-2.5 px-3 text-right font-mono text-zinc-400">{fmt(0)}</td>
                         <td className="py-2.5 px-3 text-right font-mono">0</td>
                       </tr>
@@ -2622,30 +2622,30 @@ export const LaporanKasModule: React.FC<LaporanKasModuleProps> = ({
               </div>
             </div>
 
-            {/* B. RINGKASAN LOYALTY POINT */}
+            {/* B. LOYALTY POINT SUMMARY */}
             <div className="space-y-3">
               <div className="flex items-center justify-between border-b border-zinc-800 pb-2">
                 <h3 className="font-bold text-white text-sm flex items-center gap-2">
                   <Tag className="w-4 h-4 text-purple-400" />
-                  <span>Ringkasan Loyalty Point</span>
+                  <span>Loyalty Point Summary</span>
                 </h3>
-                <span className="text-xs text-zinc-500">Redeem poin &amp; reward pelanggan</span>
+                <span className="text-xs text-zinc-500">Customer point redemptions &amp; rewards</span>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-xs">
                   <thead className="bg-zinc-950/80 text-zinc-400 border-b border-zinc-800 font-medium">
                     <tr>
-                      <th className="py-2.5 px-3">Nama Loyalty Point</th>
-                      <th className="py-2.5 px-3 text-right">Tebus Point</th>
-                      <th className="py-2.5 px-3 text-right">Tebus Diskon</th>
-                      <th className="py-2.5 px-3 text-right">Tebus Item Gratis</th>
-                      <th className="py-2.5 px-3 text-right">Qty Item Gratis</th>
-                      <th className="py-2.5 px-3 text-right">Total Redeem</th>
+                      <th className="py-2.5 px-3">Loyalty Program Name</th>
+                      <th className="py-2.5 px-3 text-right">Points Redeemed</th>
+                      <th className="py-2.5 px-3 text-right">Discount Redeemed</th>
+                      <th className="py-2.5 px-3 text-right">Free Item Claims</th>
+                      <th className="py-2.5 px-3 text-right">Free Item Qty</th>
+                      <th className="py-2.5 px-3 text-right">Total Redeemed</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-zinc-800/50 text-zinc-300">
                     <tr className="hover:bg-zinc-800/30">
-                      <td className="py-2.5 px-3 font-semibold text-white">Program Poin Member</td>
+                      <td className="py-2.5 px-3 font-semibold text-white">Member Points Program</td>
                       <td className="py-2.5 px-3 text-right font-mono">
                         {reportData.totalLoyaltyPointsRedeemed}
                       </td>
@@ -2669,29 +2669,29 @@ export const LaporanKasModule: React.FC<LaporanKasModuleProps> = ({
               </div>
             </div>
 
-            {/* C. PESANAN DIBATALKAN & SUMBER PENJUALAN */}
+            {/* C. CANCELLED ORDERS & SALES CHANNELS */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {/* Pesanan Dibatalkan */}
+              {/* Cancelled Orders */}
               <div className="bg-zinc-950/60 border border-zinc-800/80 rounded-2xl p-4 space-y-3">
                 <h4 className="font-bold text-white text-xs uppercase tracking-wider flex items-center gap-2">
                   <ShieldAlert className="w-4 h-4 text-rose-400" />
-                  <span>Pesanan Dibatalkan (Void)</span>
+                  <span>Cancelled Orders (Void)</span>
                 </h4>
                 <div className="space-y-2 text-xs">
                   <div className="flex justify-between text-zinc-400">
-                    <span>Qty Pesanan Dibatalkan:</span>
+                    <span>Cancelled Order Qty:</span>
                     <span className="font-mono font-bold text-white">
-                      {reportData.voidTrx.length} Pesanan
+                      {reportData.voidTrx.length} Orders
                     </span>
                   </div>
                   <div className="flex justify-between text-zinc-400">
-                    <span>Jumlah Diskon Void (IDR):</span>
+                    <span>Void Discount Amount (IDR):</span>
                     <span className="font-mono text-zinc-400">
                       {fmt(reportData.totalVoidDiscount)}
                     </span>
                   </div>
                   <div className="flex justify-between text-zinc-400">
-                    <span>Total Nominal Void:</span>
+                    <span>Total Void Amount:</span>
                     <span className="font-mono font-bold text-rose-400">
                       {fmt(reportData.totalVoidAmount)}
                     </span>
@@ -2699,21 +2699,21 @@ export const LaporanKasModule: React.FC<LaporanKasModuleProps> = ({
                 </div>
               </div>
 
-              {/* Sumber Penjualan */}
+              {/* Sales Channels */}
               <div className="bg-zinc-950/60 border border-zinc-800/80 rounded-2xl p-4 space-y-3">
                 <h4 className="font-bold text-white text-xs uppercase tracking-wider flex items-center gap-2">
                   <Store className="w-4 h-4 text-blue-400" />
-                  <span>Sumber Penjualan</span>
+                  <span>Sales Channels</span>
                 </h4>
                 <div className="space-y-2 text-xs">
                   <div className="flex justify-between items-center py-1 border-b border-zinc-800/50">
-                    <span className="font-bold text-white">POINT OF SALE (Kasir Toko)</span>
+                    <span className="font-bold text-white">POINT OF SALE (Store Cashier)</span>
                     <span className="font-mono font-black text-emerald-400">
                       {fmt(reportData.posSalesAmount)}
                     </span>
                   </div>
                   <div className="flex justify-between text-zinc-400">
-                    <span>Qty Pesanan Kasir POS:</span>
+                    <span>POS Cashier Order Qty:</span>
                     <span className="font-mono font-bold text-white">
                       {reportData.posSalesCount} Trx
                     </span>
@@ -2728,31 +2728,31 @@ export const LaporanKasModule: React.FC<LaporanKasModuleProps> = ({
               </div>
             </div>
 
-            {/* D. TOP GRUP PRODUK & TOP PRODUK */}
+            {/* D. TOP PRODUCT GROUPS & TOP PRODUCTS */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {/* Top Grup Produk */}
+              {/* Top Product Groups */}
               <div className="space-y-3">
                 <div className="flex items-center justify-between border-b border-zinc-800 pb-2">
                   <h4 className="font-bold text-white text-xs uppercase tracking-wider flex items-center gap-1.5">
                     <Layers className="w-4 h-4 text-cyan-400" />
-                    <span>Top Grup Produk</span>
+                    <span>Top Product Groups</span>
                   </h4>
-                  <span className="text-[11px] text-zinc-500">Kategori Teratas</span>
+                  <span className="text-[11px] text-zinc-500">Top Categories</span>
                 </div>
                 <div className="bg-zinc-950/50 border border-zinc-800 rounded-xl overflow-hidden">
                   <table className="w-full text-left text-xs">
                     <thead className="bg-zinc-950 text-zinc-400 border-b border-zinc-800">
                       <tr>
-                        <th className="py-2 px-3">Nama Kategori</th>
+                        <th className="py-2 px-3">Category Name</th>
                         <th className="py-2 px-3 text-center">Qty</th>
-                        <th className="py-2 px-3 text-right">Jumlah</th>
+                        <th className="py-2 px-3 text-right">Amount</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-zinc-800/50 text-zinc-300">
                       {reportData.topGrupProduk.length === 0 ? (
                         <tr>
                           <td colSpan={3} className="py-4 px-3 text-center text-zinc-500">
-                            Belum ada penjualan grup produk pada periode ini (Rp 0)
+                            No product group sales in this period (Rp 0)
                           </td>
                         </tr>
                       ) : (
@@ -2771,29 +2771,29 @@ export const LaporanKasModule: React.FC<LaporanKasModuleProps> = ({
                 </div>
               </div>
 
-              {/* Top Produk Terlaris */}
+              {/* Top Best-Selling Products */}
               <div className="space-y-3">
                 <div className="flex items-center justify-between border-b border-zinc-800 pb-2">
                   <h4 className="font-bold text-white text-xs uppercase tracking-wider flex items-center gap-1.5">
                     <ShoppingCart className="w-4 h-4 text-emerald-400" />
-                    <span>Top Produk</span>
+                    <span>Top Products</span>
                   </h4>
-                  <span className="text-[11px] text-zinc-500">Produk Terlaris</span>
+                  <span className="text-[11px] text-zinc-500">Best-Selling Products</span>
                 </div>
                 <div className="bg-zinc-950/50 border border-zinc-800 rounded-xl overflow-hidden">
                   <table className="w-full text-left text-xs">
                     <thead className="bg-zinc-950 text-zinc-400 border-b border-zinc-800">
                       <tr>
-                        <th className="py-2 px-3">Nama Produk</th>
+                        <th className="py-2 px-3">Product Name</th>
                         <th className="py-2 px-3 text-center">Qty</th>
-                        <th className="py-2 px-3 text-right">Jumlah</th>
+                        <th className="py-2 px-3 text-right">Amount</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-zinc-800/50 text-zinc-300">
                       {reportData.topProducts.length === 0 ? (
                         <tr>
                           <td colSpan={3} className="py-4 px-3 text-center text-zinc-500">
-                            Belum ada produk terjual pada periode ini (Rp 0)
+                            No products sold in this period (Rp 0)
                           </td>
                         </tr>
                       ) : (
@@ -2813,72 +2813,72 @@ export const LaporanKasModule: React.FC<LaporanKasModuleProps> = ({
               </div>
             </div>
 
-            {/* E, F, G, H: REKAPITULASI KEUANGAN, STOK, LABA BERSIH, KOMISI */}
+            {/* E, F, G, H: FINANCIAL, STOCK, NET PROFIT & COMMISSION RECAP */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 p-4 rounded-2xl bg-zinc-950/70 border border-zinc-800">
-              {/* E. Stok */}
+              {/* E. Stock */}
               <div className="space-y-1.5 border-r border-zinc-800/60 pr-2">
-                <span className="text-xs font-black text-white uppercase block tracking-wider">E. Stok</span>
+                <span className="text-xs font-black text-white uppercase block tracking-wider">E. Stock</span>
                 <div className="flex justify-between text-xs text-zinc-400">
-                  <span>Stok Keluar:</span>
+                  <span>Stock Out Value:</span>
                   <span className="font-mono text-zinc-300">{fmtShort(reportData.stokKeluarValue)}</span>
                 </div>
                 <div className="flex justify-between text-xs text-zinc-400">
-                  <span>Opname Stok:</span>
+                  <span>Stock Valuation:</span>
                   <span className="font-mono text-zinc-300">{fmtShort(reportData.opnameStokValue)}</span>
                 </div>
               </div>
 
-              {/* F. Pembelian */}
+              {/* F. Purchases */}
               <div className="space-y-1.5 border-r border-zinc-800/60 pr-2">
-                <span className="text-xs font-black text-white uppercase block tracking-wider">F. Pembelian</span>
+                <span className="text-xs font-black text-white uppercase block tracking-wider">F. Purchases</span>
                 <div className="flex justify-between text-xs text-zinc-400">
-                  <span>Diskon PO:</span>
+                  <span>PO Discount:</span>
                   <span className="font-mono text-zinc-300">{fmt(reportData.poDiscount)}</span>
                 </div>
                 <div className="flex justify-between text-xs text-zinc-400">
-                  <span>Pengiriman:</span>
+                  <span>Shipping:</span>
                   <span className="font-mono text-zinc-300">{fmt(reportData.poShipping)}</span>
                 </div>
                 <div className="flex justify-between text-xs text-zinc-400">
-                  <span>Pajak:</span>
+                  <span>Tax:</span>
                   <span className="font-mono text-zinc-300">{fmt(reportData.poTax)}</span>
                 </div>
               </div>
 
-              {/* G. Laba Bersih */}
+              {/* G. Net Profit */}
               <div className="space-y-1.5 border-r border-zinc-800/60 pr-2">
-                <span className="text-xs font-black text-white uppercase block tracking-wider">G. Laba Bersih</span>
+                <span className="text-xs font-black text-white uppercase block tracking-wider">G. Net Profit</span>
                 <div className="text-base font-mono font-black text-emerald-400 pt-1">
                   {fmt(reportData.netProfit)}
                 </div>
                 <span className="text-[10px] text-zinc-500 block">
-                  Laba Kotor ({fmtShort(reportData.grossProfit)}) - Kas Keluar ({fmtShort(reportData.totalKasKeluar)})
+                  Gross Profit ({fmtShort(reportData.grossProfit)}) - Cash Out ({fmtShort(reportData.totalKasKeluar)})
                 </span>
               </div>
 
-              {/* H. Komisi Pelanggan */}
+              {/* H. Customer Commissions */}
               <div className="space-y-1.5">
-                <span className="text-xs font-black text-white uppercase block tracking-wider">H. Komisi Pelanggan</span>
+                <span className="text-xs font-black text-white uppercase block tracking-wider">H. Customer Commissions</span>
                 <div className="flex justify-between text-xs text-zinc-400">
-                  <span>Total Komisi Dicairkan:</span>
+                  <span>Total Disbursed:</span>
                   <span className="font-mono text-zinc-300">{fmt(reportData.totalCommissionDisbursed)}</span>
                 </div>
                 <div className="flex justify-between text-xs text-zinc-400">
-                  <span>Komisi Tersedia:</span>
+                  <span>Available Commission:</span>
                   <span className="font-mono text-zinc-300">{fmt(reportData.totalCommissionAvailable)}</span>
                 </div>
               </div>
             </div>
 
-            {/* I. PENJUALAN BERDASARKAN KATEGORI */}
+            {/* I. SALES BY CATEGORY */}
             <div className="space-y-3">
               <div className="flex items-center justify-between border-b border-zinc-800 pb-2">
                 <h3 className="font-bold text-white text-sm flex items-center gap-2">
                   <Layers className="w-4 h-4 text-amber-400" />
-                  <span>Penjualan berdasarkan Kategori</span>
+                  <span>Sales by Category</span>
                 </h3>
                 <span className="text-xs text-zinc-500">
-                  {reportData.categoryBreakdown.length} Kategori Terjual pada Periode Ini
+                  {reportData.categoryBreakdown.length} Categories Sold in This Period
                 </span>
               </div>
 
@@ -2886,10 +2886,10 @@ export const LaporanKasModule: React.FC<LaporanKasModuleProps> = ({
                 <table className="w-full text-left text-xs">
                   <thead className="bg-zinc-950 text-zinc-400 border-b border-zinc-800 font-semibold uppercase tracking-wider text-[11px]">
                     <tr>
-                      <th className="py-3 px-4">Nama Kategori</th>
+                      <th className="py-3 px-4">Category Name</th>
                       <th className="py-3 px-4 text-center">Qty</th>
-                      <th className="py-3 px-4 text-right">Jumlah Total (IDR)</th>
-                      <th className="py-3 px-4 text-center">Kontribusi</th>
+                      <th className="py-3 px-4 text-right">Total Amount (IDR)</th>
+                      <th className="py-3 px-4 text-center">Contribution</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-zinc-800/60 text-zinc-300">
@@ -2917,7 +2917,7 @@ export const LaporanKasModule: React.FC<LaporanKasModuleProps> = ({
                       ) : (
                         <tr>
                           <td colSpan={4} className="py-6 text-center text-zinc-500">
-                            Belum ada transaksi penjualan kategori pada periode ini (Rp 0).
+                            No category sales transactions in this period (Rp 0).
                           </td>
                         </tr>
                       )
@@ -2953,7 +2953,7 @@ export const LaporanKasModule: React.FC<LaporanKasModuleProps> = ({
                   </tbody>
                   <tfoot className="bg-zinc-950 font-bold border-t-2 border-zinc-700 text-white">
                     <tr>
-                      <td className="py-3 px-4 uppercase tracking-wider text-[11px]">TOTAL KATEGORI</td>
+                      <td className="py-3 px-4 uppercase tracking-wider text-[11px]">TOTAL CATEGORIES</td>
                       <td className="py-3 px-4 text-center font-mono text-cyan-400">
                         {reportData.categoryBreakdown.reduce((a, b) => a + b.qty, 0)}
                       </td>
@@ -2969,38 +2969,38 @@ export const LaporanKasModule: React.FC<LaporanKasModuleProps> = ({
               </div>
             </div>
 
-            {/* J. RINGKASAN METODE PEMBAYARAN & REKONSILIASI KAS */}
+            {/* J. PAYMENT METHOD SUMMARY & CASH RECONCILIATION */}
             <div className="space-y-4">
               <div className="flex items-center justify-between border-b border-zinc-800 pb-2">
                 <h3 className="font-bold text-white text-sm flex items-center gap-2">
                   <CreditCard className="w-4 h-4 text-emerald-400" />
-                  <span>Ringkasan Metode Pembayaran</span>
+                  <span>Payment Method Summary</span>
                 </h3>
                 <span className="text-xs text-zinc-500">
-                  Kas Masuk: {fmtShort(reportData.totalKasMasuk)} &bull; Kas Keluar: {fmtShort(reportData.totalKasKeluar)}
+                  Cash In: {fmtShort(reportData.totalKasMasuk)} &bull; Cash Out: {fmtShort(reportData.totalKasKeluar)}
                 </span>
               </div>
 
-              {/* Transaksi Tunai Card */}
+              {/* Cash Transactions Card */}
               <div className="bg-zinc-950/80 border border-zinc-800 rounded-2xl p-4 space-y-3">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-black uppercase tracking-wider text-emerald-400 flex items-center gap-1.5">
                     <Wallet className="w-4 h-4" />
-                    <span>Transaksi Tunai (Cash Drawer)</span>
+                    <span>Cash Transactions (Cash Drawer)</span>
                   </span>
-                  <span className="text-[11px] text-zinc-500 font-mono">Rekonsiliasi Laci Toko</span>
+                  <span className="text-[11px] text-zinc-500 font-mono">Store Drawer Reconciliation</span>
                 </div>
 
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 pt-2">
                   <div className="space-y-1">
-                    <span className="text-[11px] text-zinc-400 block">Void Tunai</span>
+                    <span className="text-[11px] text-zinc-400 block">Cash Void</span>
                     <span className="text-xs font-mono font-bold text-zinc-300">
                       {fmt(reportData.voidCashAmount)}
                     </span>
                   </div>
 
                   <div className="space-y-1">
-                    <span className="text-[11px] text-zinc-400 block">Kas Selisih</span>
+                    <span className="text-[11px] text-zinc-400 block">Cash Variance</span>
                     <span
                       className={`text-xs font-mono font-bold ${
                         reportData.kasSelisih < 0 ? 'text-rose-400' : 'text-emerald-400'
@@ -3011,14 +3011,14 @@ export const LaporanKasModule: React.FC<LaporanKasModuleProps> = ({
                   </div>
 
                   <div className="space-y-1">
-                    <span className="text-[11px] text-zinc-400 block">Pengembalian Tunai</span>
+                    <span className="text-[11px] text-zinc-400 block">Cash Refunds</span>
                     <span className="text-xs font-mono font-bold text-zinc-300">
                       {fmt(reportData.refundCashAmount)}
                     </span>
                   </div>
 
                   <div className="space-y-1">
-                    <span className="text-[11px] text-zinc-400 block">Pendapatan Tunai</span>
+                    <span className="text-[11px] text-zinc-400 block">Net Cash Revenue</span>
                     <span className="text-sm font-mono font-black text-emerald-400">
                       {fmt(reportData.pendapatanTunai)}
                     </span>
@@ -3026,37 +3026,37 @@ export const LaporanKasModule: React.FC<LaporanKasModuleProps> = ({
                 </div>
               </div>
 
-              {/* Transaksi Non-Tunai Digital */}
+              {/* Digital Non-Cash Transactions */}
               <div className="bg-zinc-950/80 border border-zinc-800 rounded-2xl p-4 space-y-3">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-black uppercase tracking-wider text-blue-400 flex items-center gap-1.5">
                     <CreditCard className="w-4 h-4" />
-                    <span>Transaksi Non-Tunai / Digital</span>
+                    <span>Non-Cash / Digital Transactions</span>
                   </span>
-                  <span className="text-[11px] text-zinc-500 font-mono">QRIS, EDC, Transfer Bank</span>
+                  <span className="text-[11px] text-zinc-500 font-mono">QRIS, EDC, Bank Transfer</span>
                 </div>
 
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 pt-2 text-xs">
                   <div className="space-y-1">
-                    <span className="text-[11px] text-zinc-400 block">QRIS Statis &amp; Dinamis</span>
+                    <span className="text-[11px] text-zinc-400 block">Static &amp; Dynamic QRIS</span>
                     <span className="font-mono font-bold text-cyan-400">
                       {fmt(reportData.qrisSalesAmount)}
                     </span>
                   </div>
                   <div className="space-y-1">
-                    <span className="text-[11px] text-zinc-400 block">Transfer Bank</span>
+                    <span className="text-[11px] text-zinc-400 block">Bank Transfer</span>
                     <span className="font-mono font-bold text-blue-400">
                       {fmt(reportData.transferSalesAmount)}
                     </span>
                   </div>
                   <div className="space-y-1">
-                    <span className="text-[11px] text-zinc-400 block">Kartu Debit / EDC</span>
+                    <span className="text-[11px] text-zinc-400 block">Debit Card / EDC</span>
                     <span className="font-mono font-bold text-purple-400">
                       {fmt(reportData.cardSalesAmount)}
                     </span>
                   </div>
                   <div className="space-y-1">
-                    <span className="text-[11px] text-zinc-400 block">Total Pendapatan Digital</span>
+                    <span className="text-[11px] text-zinc-400 block">Total Digital Revenue</span>
                     <span className="text-sm font-mono font-black text-blue-400">
                       {fmt(reportData.totalDigitalSales)}
                     </span>
